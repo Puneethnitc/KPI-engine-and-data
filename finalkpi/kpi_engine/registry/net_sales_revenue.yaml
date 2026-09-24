@@ -1,0 +1,29 @@
+kpi_id: net_sales_revenue
+version: 1
+definition: Daily net sales revenue as recorded in sales_daily; use the source value, not a recomputed rounded product.
+value_column: net_sales_revenue
+aggregation: sum
+formula: net_sales_revenue # Authoritative source value; displayed AOV may be rounded.
+unit: INR
+grain: daily
+source: sales_daily
+dimensions: [region, category]
+materiality:
+  z_threshold: 2.5
+  abs_threshold: 500.0
+seasonal_period: 7
+min_history_periods: 60
+owner: regional_manager
+access_tags: [region_scoped]
+decomposition:
+  quantity_column: units_sold
+  reference_rate_column: aov # Exact bridge derives rate as revenue / units_sold.
+reconciliation:
+  finance_column: net_sales_revenue
+  comparison: same_slice_closed_month_only
+candidate_drivers:
+  - {id: checkout_latency_spike, column: checkout_latency_ms, source: sales_daily, grain: daily, aggregation: mean}
+  - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}
+  - {id: ad_spend_drop, column: marketing_spend, source: marketing_weekly, grain: weekly, aggregation: sum}
+  - {id: stockout, column: lost_units_stockout, source: sales_daily, grain: daily, aggregation: sum}
+  - {id: traffic_drop, column: traffic_online, source: sales_daily, grain: daily, aggregation: sum}

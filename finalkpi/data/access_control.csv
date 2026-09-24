@@ -1,0 +1,6 @@
+region,owner_role,can_view_categories
+North,regional_manager_north,ALL
+South,regional_manager_south,ALL
+East,regional_manager_east,ALL
+West,regional_manager_west,ALL
+ALL,cfo,ALL

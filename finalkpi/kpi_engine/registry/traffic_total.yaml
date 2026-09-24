@@ -1,0 +1,22 @@
+kpi_id: traffic_total
+version: 1
+definition: Daily total traffic from the sales operational source, summed across the requested slice.
+value_column: traffic_total
+aggregation: sum
+formula: traffic_total
+unit: visits
+grain: daily
+source: sales_daily
+dimensions: [region, category]
+materiality:
+  z_threshold: 2.5
+  abs_threshold: 100.0
+seasonal_period: 7
+min_history_periods: 60
+owner: growth_lead
+access_tags: [region_scoped]
+decomposition: null
+reconciliation: null
+candidate_drivers:
+  - {id: ad_spend_drop, column: marketing_spend, source: marketing_weekly, grain: weekly, aggregation: sum}
+  - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}

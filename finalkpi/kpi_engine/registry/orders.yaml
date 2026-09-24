@@ -1,0 +1,27 @@
+kpi_id: orders
+version: 1
+definition: Daily orders as recorded in sales_daily; synthetic source values may be fractional.
+value_column: orders
+aggregation: sum
+formula: orders # Authoritative source value; displayed conversion_rate may be rounded.
+unit: count
+grain: daily
+source: sales_daily
+dimensions: [region, category]
+materiality:
+  z_threshold: 2.5
+  abs_threshold: 5.0
+seasonal_period: 7
+min_history_periods: 30
+owner: ops_lead
+access_tags: [region_scoped]
+decomposition:
+  quantity_column: traffic_total
+  reference_rate_column: conversion_rate # Exact bridge derives rate as orders / traffic_total.
+reconciliation: null # Finance has no comparable orders posting.
+candidate_drivers:
+  - {id: checkout_latency_spike, column: checkout_latency_ms, source: sales_daily, grain: daily, aggregation: mean}
+  - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}
+  - {id: ad_spend_drop, column: marketing_spend, source: marketing_weekly, grain: weekly, aggregation: sum}
+  - {id: stockout, column: lost_units_stockout, source: sales_daily, grain: daily, aggregation: sum}
+  - {id: traffic_drop, column: traffic_online, source: sales_daily, grain: daily, aggregation: sum}

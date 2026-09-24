@@ -1,0 +1,13 @@
+# Exploratory design for a real sample window, not an authoritative event label.
+# Run with --date 2023-08-06 --persona CFO; expected result is INCONCLUSIVE.
+driver_id: traffic_drop
+treated_slice: {region: North, category: Electronics}
+control_slice: {region: South, category: Electronics}
+pre_start: '2023-06-20'
+treatment_start: '2023-07-20'
+post_end: '2023-08-06'
+quiet_windows:
+  - ['2023-04-01', '2023-04-14']
+  - ['2023-05-01', '2023-05-14']
+expected_driver_direction: -1
+expected_outcome_direction: -1

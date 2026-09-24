@@ -1,0 +1,12 @@
+# Provisional review contexts copied from data/fix_dataset.py comments.
+# These are NOT independently reviewed ground-truth labels.
+label_status: PROVISIONAL_GENERATOR_NOTES
+cases:
+  - {id: EVT01, context: documented_event, date: '2023-07-24', slice: {region: North, category: Electronics}}
+  - {id: EVT02, context: documented_event, date: '2023-10-30', slice: {category: Home}}
+  - {id: EVT03, context: documented_event, date: '2024-02-08', slice: {region: South, category: Apparel}}
+  - {id: EVT04, context: documented_event, date: '2024-05-16', slice: {}}
+  - {id: EVT05, context: documented_event, date: '2024-07-20', slice: {region: East, category: Electronics}}
+  - {id: EVT06, context: documented_event, date: '2023-04-15', slice: {category: Apparel}}
+  - {id: REF01, context: reference_window, date: '2023-03-08', slice: {region: North, category: Electronics}}
+  - {id: REF02, context: reference_window, date: '2024-01-10', slice: {region: South, category: Apparel}}
