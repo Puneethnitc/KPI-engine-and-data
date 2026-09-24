@@ -37,6 +37,8 @@ type Result = {
   narrative_method?: string; llm_status?: string;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8000'
+
 const KPIS = [
   { id: 'net_sales_revenue', label: 'Net sales revenue', unit: 'INR', icon: TrendingDown },
   { id: 'orders', label: 'Orders', unit: 'count', icon: BarChart3 },
@@ -89,6 +91,10 @@ export default function Page() {
   const [category, setCategory] = useState('Electronics')
   const [date, setDate] = useState('2023-07-24')
   const [results, setResults] = useState<Record<string, Result>>({})
+  const [availableKpis, setAvailableKpis] = useState<Array<{ kpi_id: string; label?: string; unit?: string; definition?: string }>>([])
+  const [availableRegions, setAvailableRegions] = useState<string[]>(['North', 'South', 'East', 'West'])
+  const [availableCategories, setAvailableCategories] = useState<string[]>(['Electronics', 'Apparel', 'Home'])
+  const [availableDates, setAvailableDates] = useState<string[]>(['2023-07-24'])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
@@ -104,18 +110,52 @@ export default function Page() {
   }, [])
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('kpi-demo-theme', theme) }, [theme])
 
+  async function loadMetadata() {
+    try {
+      const [kpisResponse, filtersResponse] = await Promise.all([
+        fetch(`${API_BASE}/api/kpis`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/filters`, { cache: 'no-store' }),
+      ])
+      const kpisPayload = kpisResponse.ok ? await kpisResponse.json() : { items: [] }
+      const filtersPayload = filtersResponse.ok ? await filtersResponse.json() : { regions: ['North', 'South', 'East', 'West'], categories: ['Electronics', 'Apparel', 'Home'], dates: ['2023-07-24'] }
+      const items = Array.isArray(kpisPayload.items) ? kpisPayload.items : []
+      setAvailableKpis(items)
+      setAvailableRegions(filtersPayload.regions ?? ['North', 'South', 'East', 'West'])
+      setAvailableCategories(filtersPayload.categories ?? ['Electronics', 'Apparel', 'Home'])
+      setAvailableDates(filtersPayload.dates ?? ['2023-07-24'])
+      if (filtersPayload.default) {
+        if (filtersPayload.default.region) setRegion(filtersPayload.default.region)
+        if (filtersPayload.default.category) setCategory(filtersPayload.default.category)
+        if (filtersPayload.default.date) setDate(filtersPayload.default.date)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load backend metadata')
+    }
+  }
+
   async function diagnose() {
     setLoading(true); setError('')
     try {
-      const params = new URLSearchParams({ kpi: 'all', date, region, category })
-      const response = await fetch(`/api/diagnose?${params.toString()}`, { cache: 'no-store' })
+      const response = await fetch(`${API_BASE}/api/diagnoses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kpis: ['all'],
+          target_date: date,
+          region,
+          category,
+          persona: 'CFO',
+        }),
+      })
       const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error ?? 'Diagnosis failed')
+      if (!response.ok) throw new Error(payload.detail ?? payload.error ?? 'Diagnosis failed')
       setResults(payload.results)
-    } catch (err) { setError(err instanceof Error ? err.message : 'Could not reach the engine') }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not reach the backend') }
     finally { setLoading(false) }
   }
-  useEffect(() => { void diagnose() }, [])
+
+  useEffect(() => { void loadMetadata(); }, [])
+  useEffect(() => { if (availableRegions.length && availableCategories.length && availableDates.length) { void diagnose() } }, [availableRegions, availableCategories, availableDates])
 
   const result = results[selected]
   const kpi = KPIS.find(k => k.id === selected)!
@@ -124,18 +164,36 @@ export default function Page() {
   const scale = Math.max(1, Math.abs(result?.decomposition?.volume_effect ?? 0), Math.abs(result?.decomposition?.price_effect ?? 0), Math.abs(result?.decomposition?.mix_effect ?? 0))
   const materialCount = useMemo(() => Object.values(results).filter(r => r.movement_assessment?.is_material).length, [results])
 
-  function ask(text: string) {
+  async function ask(text: string) {
     setQuestion(text); setChatOpen(true)
     if (!result) { setAnswer('Run the diagnosis first so I can use its evidence.'); return }
-    const q = text.toLowerCase()
-    if (q.includes('cause') || q.includes('why')) {
-      setAnswer(`The engine reports ${result.causal_verdict ?? 'no causal verdict'}. ${result.causal_verification?.reason ?? 'It has not established a cause.'} The candidate drivers below are correlations, not proof.`)
-    } else if (q.includes('source') || q.includes('evidence')) {
-      setAnswer(`Source status: ${sourceStatus}. ${result.reconciliation_verdict?.details?.reason ?? ''} The engine narrative is ${result.grounding_passed ? 'grounded in its evidence object' : 'not fully grounded'}.`)
-    } else if (q.includes('next') || q.includes('action')) {
-      setAnswer(result.decision_cards[0]?.recommendation ?? 'No action is supported yet. Review the evidence and source status.')
-    } else {
-      setAnswer(`${labelFor(selected)} moved ${signedNumber(movement?.delta, kpi.unit)} versus the engine baseline on ${date}. ${movement?.is_material ? 'It passed both materiality checks.' : 'It did not pass both materiality checks.'} ${result.correlational_candidates.length ? `${driverLabels[result.correlational_candidates[0].driver_id] ?? result.correlational_candidates[0].driver_id} is a correlational candidate, not a proven cause.` : 'No driver candidate was established.'}`)
+
+    try {
+      setAnswer('Loading grounded answer...')
+      const response = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run_id: result.run_id,
+          question: text,
+          user_id: 'demo-user',
+          persona: 'CFO',
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.detail ?? payload.error ?? 'Chat failed')
+      setAnswer(payload.answer ?? 'No grounded answer returned.')
+    } catch (err) {
+      const q = text.toLowerCase()
+      if (q.includes('cause') || q.includes('why')) {
+        setAnswer(`The engine reports ${result.causal_verdict ?? 'no causal verdict'}. ${result.causal_verification?.reason ?? 'It has not established a cause.'} The candidate drivers below are correlations, not proof.`)
+      } else if (q.includes('source') || q.includes('evidence')) {
+        setAnswer(`Source status: ${sourceStatus}. ${result.reconciliation_verdict?.details?.reason ?? ''} The engine narrative is ${result.grounding_passed ? 'grounded in its evidence object' : 'not fully grounded'}.`)
+      } else if (q.includes('next') || q.includes('action')) {
+        setAnswer(result.decision_cards[0]?.recommendation ?? 'No action is supported yet. Review the evidence and source status.')
+      } else {
+        setAnswer(`${labelFor(selected)} moved ${signedNumber(movement?.delta, kpi.unit)} versus the engine baseline on ${date}. ${movement?.is_material ? 'It passed both materiality checks.' : 'It did not pass both materiality checks.'} ${result.correlational_candidates.length ? `${driverLabels[result.correlational_candidates[0].driver_id] ?? result.correlational_candidates[0].driver_id} is a correlational candidate, not a proven cause.` : 'No driver candidate was established.'}`)
+      }
     }
   }
 
@@ -155,9 +213,10 @@ export default function Page() {
         <div className="demo-heading"><div><div className="demo-eyebrow">INTELLIGENCE WORKSPACE <ChevronRight size={12} /> {view === 'overview' ? 'OVERVIEW' : kpi.label.toUpperCase()}</div><h1>{view === 'overview' ? 'KPI overview' : kpi.label}</h1><p>{view === 'overview' ? 'Spot material movements, then open the underlying evidence.' : 'Observed movement, accounting effects, and evidence limits—kept separate.'}</p></div><div className="demo-run-id">{result?.run_id ?? 'Awaiting engine'}</div></div>
 
         <div className="demo-filters">
-          <label>Target date<input type="date" min="2023-03-01" max="2024-12-30" value={date} onChange={e => setDate(e.target.value)} /></label>
-          <label>Region<select value={region} onChange={e => setRegion(e.target.value)}>{['North', 'South', 'East', 'West'].map(x => <option key={x}>{x}</option>)}</select></label>
-          <label>Category<select value={category} onChange={e => setCategory(e.target.value)}>{['Electronics', 'Apparel', 'Home'].map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Target date<input type="date" min="2023-03-01" max="2024-12-30" value={date} onChange={e => setDate(e.target.value)} list="date-options" /></label>
+          <datalist id="date-options">{availableDates.map(x => <option key={x} value={x} />)}</datalist>
+          <label>Region<select value={region} onChange={e => setRegion(e.target.value)}>{availableRegions.map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Category<select value={category} onChange={e => setCategory(e.target.value)}>{availableCategories.map(x => <option key={x}>{x}</option>)}</select></label>
           <button className="demo-primary" disabled={loading} onClick={() => void diagnose()}><RefreshCw size={15} className={loading ? 'demo-spin' : ''} /> {loading ? 'Running engine…' : 'Run diagnosis'}</button>
           <span className="demo-asof">{result ? `As of ${new Date(result.as_of).toLocaleString('en-IN')}` : 'Supplied historical dataset'}</span>
         </div>

@@ -1,5 +1,10 @@
 # KPI engine mentor demo
 
+Architecture and operational limitations are recorded in
+[`../docs/ENGINE_FRONTEND_REVIEW.md`](../docs/ENGINE_FRONTEND_REVIEW.md). Folder
+guides alongside the source explain the UI, API adapter, shared components,
+and static assets without changing their behavior.
+
 This frontend calls the existing Python KPI engine through a local Next.js route.
 It displays **real engine output**, not the hard-coded claims from the original
 v0 export. The chat is deliberately a scripted evidence explainer, not a live LLM.

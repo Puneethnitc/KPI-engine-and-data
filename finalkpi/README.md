@@ -1,5 +1,10 @@
 # KPI engine: reviewed working copy
 
+Start with [`docs/METRIC_COVERAGE.md`](docs/METRIC_COVERAGE.md) for the five
+installed KPI diagnosis paths versus the wider set of numeric source fields,
+and [`docs/ENGINE_FRONTEND_REVIEW.md`](docs/ENGINE_FRONTEND_REVIEW.md) for the
+verified baseline and known engine/frontend limitations.
+
 For a layer-by-layer explanation of formulas, choices, dataset behavior, and
 limits suitable for a jury presentation, see
 [`docs/METHODOLOGY_AND_DATASET.md`](docs/METHODOLOGY_AND_DATASET.md).
