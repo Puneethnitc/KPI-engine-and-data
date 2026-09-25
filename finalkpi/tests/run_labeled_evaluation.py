@@ -9,7 +9,7 @@ from kpi_engine.evaluation import ReviewedCase, evaluate_alerts
 from kpi_engine.pipeline import KPIEnginePipeline
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(labels_csv: str) -> dict:

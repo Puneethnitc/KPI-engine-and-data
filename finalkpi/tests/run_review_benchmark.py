@@ -9,7 +9,7 @@ import yaml
 from kpi_engine.pipeline import KPIEnginePipeline
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(manifest_path: str | None = None, kpi_ids: list[str] | None = None) -> dict:

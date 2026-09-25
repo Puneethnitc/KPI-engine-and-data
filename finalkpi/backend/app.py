@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.chat import grounded_chat
+from backend.config import CORS_ORIGINS
 from backend.ingest import ingest_kb
 from backend.rag_pipeline import DynamicRAGPipeline
 from backend.query_router import DynamicQueryRouter
@@ -18,14 +19,14 @@ from backend.storage import append_message, create_conversation, get_conversatio
 app = FastAPI(title="KPI Engine Backend", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 router = DynamicQueryRouter()
-context_builder = ContextBuilder(vector_db_path="./backend/data/chroma")
+context_builder = ContextBuilder()
 pipeline = DynamicRAGPipeline(router=router, context_builder=context_builder)
 
 

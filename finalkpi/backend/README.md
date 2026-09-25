@@ -23,7 +23,13 @@ This folder contains the staged prototype backend for the KPI engine.
 
 ```bash
 cd finalkpi
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
 .venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8000
 ```
+
+Install `.[rag]` instead of the base package when Chroma retrieval and the
+optional model provider are required. Generated SQLite and Chroma state is
+stored under `backend/runtime/` by default and is not committed.
 
 The prototype intentionally keeps the demo identity server-side and does not allow arbitrary persona selection.

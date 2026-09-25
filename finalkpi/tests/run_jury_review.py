@@ -7,7 +7,7 @@ from pathlib import Path
 from kpi_engine.pipeline import KPIEnginePipeline
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _safe(value) -> str:

@@ -11,7 +11,7 @@ from kpi_engine.pipeline import KPIEnginePipeline
 from kpi_engine.verification import VerificationDesign
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(

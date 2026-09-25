@@ -11,16 +11,17 @@ except Exception:  # pragma: no cover
     chromadb = None
     embedding_functions = None
 
-from backend.config import EVIDENCE_CSV, ROOT
+from backend.config import CHROMA_DIR, EVIDENCE_CSV, ROOT
 from backend.schemas import ChatRequest, QueryIntent, RouterAnalysis
 
 
 class ContextBuilder:
-    def __init__(self, vector_db_path: str = "./backend/data/chroma"):
+    def __init__(self, vector_db_path: str | None = None):
         self.client = None
         self.collection = None
         if chromadb is not None:
-            self.client = chromadb.PersistentClient(path=vector_db_path)
+            CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+            self.client = chromadb.PersistentClient(path=vector_db_path or str(CHROMA_DIR))
             self.collection = self.client.get_or_create_collection(
                 name="kpi_knowledge_base",
                 embedding_function=(embedding_functions.DefaultEmbeddingFunction() if embedding_functions is not None else None),
@@ -127,7 +128,8 @@ def _client():
     if chromadb is None:
         return None
     try:
-        return chromadb.PersistentClient(path=str(ROOT / "backend" / "data" / "chroma"))
+        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        return chromadb.PersistentClient(path=str(CHROMA_DIR))
     except Exception:
         return None
 
