@@ -423,6 +423,24 @@ def build_marketing_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, A
         movement_summary = summary
         material_labels = [item["label"].lower() for item in stages if item["material"]]
         summary = (f"Financial review: {movement_summary} Material KPI movements: {', '.join(material_labels) if material_labels else 'none identified'}. Treat contribution, reconciliation and source-quality checks as separate evidence; no causal attribution is established.")
+    stories = []
+    if len(declines) > 1:
+        revenue_stage = next((item for item in stages if item["kpi_id"] == "net_sales_revenue"), None)
+        stories.append({
+            "id": "FUNNEL_SLOWDOWN",
+            "title": "Funnel slowdown",
+            "what_changed": summary,
+            "affected_kpis": [item["kpi_id"] for item in declines],
+            "business_impact": f"Net sales movement: {revenue_stage['delta']}" if revenue_stage and revenue_stage["delta"] is not None else "Revenue impact unavailable",
+            "evidence_strength": "material movement" if material_declines else "observed movement",
+            "confidence_status": (results.get("net_sales_revenue", {}).get("confidence") or {}).get("status", "NOT_ASSESSED"),
+            "recommended_action": action,
+            "causal_boundary": "Connected movement is not additive causal contribution.",
+        })
+    for item in positive:
+        stories.append({"id": "POSITIVE_SIGNAL", "title": "Positive signal", "what_changed": f"{item['label']} moved up by {item['delta']} in its declared unit.", "affected_kpis": [item["kpi_id"]], "business_impact": "Directional opportunity; no incremental impact estimated.", "evidence_strength": "material movement" if item["material"] else "observed movement", "confidence_status": (results.get(item["kpi_id"], {}).get("confidence") or {}).get("status", "NOT_ASSESSED"), "recommended_action": None, "causal_boundary": "Observed improvement does not establish marketing attribution."})
+    if uncertainty or any((result.get("reconciliation_verdict") or {}).get("status") != "RECONCILED" for result in results.values()):
+        stories.append({"id": "VERIFICATION_REQUIRED", "title": "Verification required", "what_changed": "Review source reconciliation, availability and comparison design before assigning a cause.", "affected_kpis": [item["kpi_id"] for item in material_declines], "business_impact": "Decision risk; impact not quantified.", "evidence_strength": "limited or conflicting", "confidence_status": "NOT_ASSESSED", "recommended_action": action, "causal_boundary": "Do not infer causality from correlation."})
     return {
         "persona": persona,
         "scope": {key: scope.get(key) for key in ("region", "category", "target_date", "as_of") if scope.get(key) is not None},
@@ -430,6 +448,8 @@ def build_marketing_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, A
         "first_weak_stage": weakest,
         "funnel": stages,
         "ranked_insights": insights,
+        "stories": stories[:5],
+        "positive_opportunity": bool(positive),
         "recommended_action": action,
         "uncertainty": list(dict.fromkeys(uncertainty))[:5],
         "method": "deterministic movement ordering; statistical materiality from the KPI engine; correlated indicators remain non-causal",

@@ -1,5 +1,8 @@
 # KPI engine: reviewed working copy
 
+For cloning, local setup, frontend/backend startup, validation, and the safe
+team branching workflow, read [`docs/TEAM_HANDOFF.md`](docs/TEAM_HANDOFF.md).
+
 Start with [`docs/METRIC_COVERAGE.md`](docs/METRIC_COVERAGE.md) for the five
 installed KPI diagnosis paths versus the wider set of numeric source fields,
 and [`docs/ENGINE_FRONTEND_REVIEW.md`](docs/ENGINE_FRONTEND_REVIEW.md) for the

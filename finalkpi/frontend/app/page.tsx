@@ -2,13 +2,12 @@
 
 import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, ArrowDownRight, ArrowRight, BarChart3, Bot, CheckCircle2,
-  ChevronDown, CircleHelp, Database, GripVertical, LayoutDashboard,
-  Maximize2, Minimize2, Moon, RefreshCw, Send, ShieldAlert, Sparkles,
-  Sun, TrendingDown, X,
+  Activity, ArrowDownRight, ArrowRight, BarChart3, Bot, CheckCircle2, ChevronDown, CircleHelp,
+  Database, GripVertical, LayoutDashboard, Maximize2, Minimize2, RefreshCw, Send,
+  ShieldAlert, Sparkles, TrendingDown, X,
 } from 'lucide-react'
-import Link from 'next/link'
-import { identityForPersona, useDemoContext } from '../components/app-shell'
+import { AppHeader, identityForPersona, useDemoContext } from '../components/app-shell'
+import { statusLabel } from '../lib/presentation'
 
 type Movement = {
   actual_value: number
@@ -42,6 +41,7 @@ type Candidate = {
 type Result = {
   run_id: string
   kpi_id: string
+  persona: string
   target_date: string
   as_of: string
   verdict: string
@@ -59,6 +59,7 @@ type Result = {
   narrative: string
   grounding_passed: boolean
   narrative_method?: string
+  telemetry?: { model_call_count?: number; total_latency_ms?: number; estimated_cost?: number }
 }
 
 type MarketingBrief = {
@@ -66,6 +67,8 @@ type MarketingBrief = {
   first_weak_stage?: { label: string; stage: string; direction: string; material: boolean } | null
   funnel: { kpi_id: string; label: string; stage: string; actual: number | null; expected: number | null; delta: number | null; direction: string; material: boolean; status: string }[]
   ranked_insights: { kpi_id: string; label: string; stage: string; actual: number | null; delta: number | null; direction: string; material: boolean; confidence_status: string; source_freshness: string; narrative: string }[]
+  stories?: { id: string; title: string; what_changed: string; affected_kpis: string[]; business_impact: string; evidence_strength: string; confidence_status: string; recommended_action?: { recommendation: string; owner: string; expected_impact: number | null } | null; causal_boundary: string; technical_details?: string[] }[]
+  positive_opportunity?: boolean
   uncertainty: string[]
   method: string
 }
@@ -87,6 +90,14 @@ type KpiId = string
 function kpiLabel(id: string) { return id.replaceAll('_', ' ').replace(/(^|\s)\S/g, character => character.toUpperCase()) }
 function kpiIcon(id: string) { return id.includes('revenue') ? TrendingDown : id === 'orders' || id.includes('units') ? BarChart3 : Activity }
 function isRatioUnit(unit: string) { return unit === 'ratio' || unit === 'orders_per_visit' || unit.endsWith('_rate') }
+function statusLabelForBrief(value?: string | null) {
+  if (!value) return 'Confidence not assessed'
+  const state = value.toUpperCase()
+  if (state === 'NOT_ASSESSED') return 'Confidence not assessed'
+  if (state === 'INSUFFICIENT_EVIDENCE' || state === 'LOW') return 'Insufficient evidence'
+  if (state === 'CONTRADICTED' || state === 'CONFLICTING_EVIDENCE') return 'Conflicting evidence'
+  return statusLabel(state)
+}
 
 const driverLabels: Record<string, string> = {
   traffic_drop: 'Traffic movement',
@@ -156,12 +167,9 @@ function Composer({ value, setValue, submit, panel = false, disabled = false }: 
 }
 
 export default function Page() {
-  const { ready, persona, setPersona, region, setRegion, category, setCategory, date, setDate, theme, setTheme } = useDemoContext()
+  const { ready, persona, region, setRegion, category, setCategory, date, setDate, theme, options } = useDemoContext()
   const [registeredKpis, setRegisteredKpis] = useState<RegisteredKpi[]>([])
   const [selected, setSelected] = useState<KpiId>('net_sales_revenue')
-  const [regions, setRegions] = useState<string[]>([])
-  const [categories, setCategories] = useState<string[]>([])
-  const [dates, setDates] = useState<string[]>([])
   const [results, setResults] = useState<Record<string, Result>>({})
   const [marketingBrief, setMarketingBrief] = useState<MarketingBrief | null>(null)
   const [loading, setLoading] = useState(true)
@@ -182,46 +190,31 @@ export default function Page() {
   const isAssistantOpen = assistantMode === 'opening' || assistantMode === 'open'
 
   useEffect(() => { conversationEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, asking])
-  useEffect(() => {
-    const runId = new URLSearchParams(window.location.search).get('runId')
-    if (!runId) return
-    fetch(`${API_BASE}/api/diagnoses/${encodeURIComponent(runId)}?user_id=${identityForPersona(persona)}`)
-      .then(response => response.ok ? response.json() : Promise.reject(new Error('The selected insight is unavailable to this identity.')))
-      .then(payload => {
-        const loaded = payload.result ?? payload
-        setSelected(loaded.kpi_id)
-        setResults(current => ({ ...current, [loaded.kpi_id]: loaded }))
-        setAssistantMode('open')
-      })
-      .catch(requestError => setError(requestError instanceof Error ? requestError.message : 'The selected insight is unavailable.'))
-  }, [persona])
-
   async function loadMetadata() {
     try {
-      const [filterResponse, kpiResponse] = await Promise.all([fetch(`${API_BASE}/api/filters`, { cache: 'no-store' }), fetch(`${API_BASE}/api/kpis`, { cache: 'no-store' })])
-      if (!filterResponse.ok || !kpiResponse.ok) throw new Error('Could not load KPI metadata')
-      const [payload, kpiPayload] = await Promise.all([filterResponse.json(), kpiResponse.json()])
-      const values = payload.allowed_values ?? {}
+      const kpiResponse = await fetch(`${API_BASE}/api/kpis`, { cache: 'no-store' })
+      if (!kpiResponse.ok) throw new Error('Could not load KPI metadata')
+      const kpiPayload = await kpiResponse.json()
       const nextKpis: RegisteredKpi[] = kpiPayload.items ?? []
       setRegisteredKpis(nextKpis)
-      setRegions(values.region ?? payload.regions ?? [])
-      setCategories(values.category ?? payload.categories ?? [])
-      setDates(payload.dates ?? [])
       if (nextKpis.length && !nextKpis.some(item => item.kpi_id === selected)) setSelected(nextKpis[0].kpi_id)
-      if (payload.default) {
-        const params = new URLSearchParams(window.location.search)
-        setRegion(params.get('region') ?? payload.default.region ?? region)
-        setCategory(params.get('category') ?? payload.default.category ?? category)
-        setDate(params.get('date') ?? payload.default.date ?? date)
-      }
     } catch {
-      // The diagnosis request below displays the actionable connectivity error.
+      setError('KPI metadata is unavailable. Filter choices may be incomplete.')
     }
   }
 
   async function diagnose() {
+    if (!ready) return
     setLoading(true)
     setError('')
+    const requestScope = { persona, region, category, target_date: date }
+    if (process.env.NODE_ENV !== 'production' && (!options.regions.includes(region) || !options.categories.includes(category) || !options.dates.includes(date))) {
+      const message = 'Visible filter scope is not present in backend filter metadata.'
+      console.error(message, { requestScope, options })
+      setError(message)
+      setLoading(false)
+      return
+    }
     try {
       const response = await fetch(`${API_BASE}/api/diagnoses`, {
         method: 'POST',
@@ -230,6 +223,19 @@ export default function Page() {
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.detail ?? 'Diagnosis failed')
+      const responseScope = payload.marketing_brief?.scope
+      if (responseScope && (responseScope.region !== region || responseScope.category !== category || responseScope.target_date !== date)) {
+        const message = 'Returned diagnosis scope does not match the visible filters.'
+        console.error(message, { requestScope, responseScope })
+        throw new Error(message)
+      }
+      const firstResult = Object.values(payload.results ?? {})[0] as Result | undefined
+      const resultScope = firstResult ? { persona: firstResult.persona, region: firstResult.segment?.region, category: firstResult.segment?.category, target_date: firstResult.target_date } : undefined
+      if (resultScope && (resultScope.persona !== persona || resultScope.region !== region || resultScope.category !== category || resultScope.target_date !== date)) {
+        const message = 'Returned diagnosis does not match the visible filter scope.'
+        console.error(message, { requestScope, resultScope })
+        throw new Error(message)
+      }
       setResults(payload.results ?? {})
       setMarketingBrief(payload.marketing_brief ?? null)
       setMessages([])
@@ -317,22 +323,31 @@ export default function Page() {
   }, [decomposition, selected])
   const contributionTotal = contributionRows.reduce((total, item) => total + Math.abs(item.value), 0) || 1
   const materialCount = Object.values(results).filter(item => item.movement_assessment?.is_material).length
+  const briefStories = marketingBrief ? (marketingBrief.stories ?? marketingBrief.ranked_insights.map(insight => ({
+    id: `KPI_${insight.kpi_id}`,
+    title: `${insight.label} ${insight.direction === 'up' ? 'improved' : insight.direction === 'down' ? 'declined' : 'moved'}`,
+    what_changed: insight.narrative || `${insight.label} moved in the selected scope.`,
+    affected_kpis: [insight.kpi_id],
+    business_impact: insight.material ? 'Material business movement.' : 'Observed movement did not meet both materiality checks.',
+    evidence_strength: insight.material ? 'Material movement' : 'Observed movement',
+    confidence_status: insight.confidence_status,
+    recommended_action: null,
+    causal_boundary: 'Observed movement does not establish causal attribution.',
+    technical_details: [insight.narrative, insight.confidence_status, insight.kpi_id],
+  }))) : []
+  const hasPositiveOpportunity = marketingBrief?.positive_opportunity ?? marketingBrief?.ranked_insights.some(insight => insight.direction === 'up') ?? false
 
   return <div className={`app-shell ${theme}`} style={{ '--assistant-width': `${panelWidth}px` } as React.CSSProperties}>
-    <header className="topbar">
-      <div className="brand"><span className="brand-mark"><BarChart3 size={17} /></span><span>KPI <strong>Intelligence</strong></span></div>
-      <nav className="main-nav" aria-label="Primary navigation"><Link className="active" href="/">Overview</Link><Link href="/performance">Performance</Link><Link href="/campaigns">Campaigns</Link><Link href="/insights">Insights</Link></nav>
-      <div className="top-actions"><span className="freshness"><i /> Engine data</span><label className="persona-control">Demo persona<select value={persona} onChange={event => { setMessages([]); setConversationId(undefined); setPersona(event.target.value) }}><option value="marketing_manager">Marketing Manager</option><option value="CFO">CFO</option></select></label><button className="theme-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button><span className="avatar">{persona === 'CFO' ? 'CF' : 'MM'}</span></div>
-    </header>
+    <AppHeader active="Overview" />
 
     <main className="workspace" data-ai={isAssistantOpen ? 'open' : assistantMode}>
       <section className="dashboard-column">
         <div className="page-heading">
           <div><span className="eyebrow"><LayoutDashboard size={14} /> {persona === 'CFO' ? 'Financial reviewer workspace' : 'Marketing manager workspace'}</span><h1>Performance overview</h1><p>What changed, what may explain it, and what to verify next.</p></div>
           <div className="filter-row">
-            <label>Region<select value={region} onChange={event => setRegion(event.target.value)}>{regions.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
-            <label>Category<select value={category} onChange={event => setCategory(event.target.value)}>{categories.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
-            <label>Date<select value={date} onChange={event => setDate(event.target.value)}>{dates.slice(-120).map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
+            <label>Region<select value={region} onChange={event => setRegion(event.target.value)}>{options.regions.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
+            <label>Category<select value={category} onChange={event => setCategory(event.target.value)}>{options.categories.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
+            <label>Date<select value={date} onChange={event => setDate(event.target.value)}>{options.dates.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
             <button className="run-button" disabled={!ready || loading} onClick={() => void diagnose()}><RefreshCw size={15} className={loading ? 'spin' : ''} /> Run</button>
           </div>
         </div>
@@ -342,17 +357,17 @@ export default function Page() {
         {loading && <div className="alert"><Activity className="spin" size={18} /><span>Running the governed KPI engine across daily, weekly, and monthly sources…</span></div>}
 
         {marketingBrief && <section className="marketing-brief" aria-labelledby="briefing-title">
-          <div className="briefing-lead"><div><span className="eyebrow">Marketing manager briefing</span><h2 id="briefing-title">What you need to know today</h2><p>{marketingBrief.summary}</p><small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
+          <div className="briefing-lead"><div><span className="eyebrow">{persona === 'CFO' ? 'Financial reviewer briefing' : 'Marketing manager briefing'}</span><h2 id="briefing-title">What you need to know today</h2><p>{marketingBrief.summary}</p><small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
           <div className="funnel-strip" aria-label="Connected marketing funnel">{marketingBrief.funnel.map((stage, index) => {
             const unit = registeredKpis.find(item => item.kpi_id === stage.kpi_id)?.unit ?? 'count'
             return <article className={`funnel-stage ${stage.direction}`} key={stage.kpi_id}><small>{stage.stage}</small><strong>{formatValue(stage.actual, unit)}</strong><span>{formatDelta(stage.delta, unit)} · {stage.material ? 'material' : stage.status === 'OK' ? 'not material' : titleCase(stage.status)}</span><b>{stage.label}</b>{index < marketingBrief.funnel.length - 1 && <ArrowRight className="funnel-arrow" size={15} />}</article>
           })}</div>
-          <div className="brief-insights">{marketingBrief.ranked_insights.slice(0, 5).map((insight, index) => <article className="brief-insight" key={insight.kpi_id}><span className="brief-rank">{String(index + 1).padStart(2, '0')}</span><div><strong>{insight.label}: {insight.direction === 'up' ? 'improved' : insight.direction === 'down' ? 'declined' : 'moved'}</strong><p>{insight.narrative || `${formatDelta(insight.delta, registeredKpis.find(item => item.kpi_id === insight.kpi_id)?.unit ?? 'count')} observed in ${insight.stage}.`}</p><small>{insight.material ? 'Material' : 'Not material'} · {titleCase(insight.confidence_status)} · as of {insight.source_freshness}</small></div><button onClick={() => { setSelected(insight.kpi_id as KpiId); setDraft(`Explain the ${insight.label} movement and supporting evidence.`); setAssistantMode('open') }} aria-label={`Investigate ${insight.label}`}><ArrowRight size={15} /></button></article>)}</div>
-          {marketingBrief.uncertainty.length > 0 && <p className="brief-limits">Evidence limits: {marketingBrief.uncertainty.join(' · ')}</p>}
-          <small className="method-note">{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</small>
+          <div className="brief-insights">{briefStories.slice(0, 5).map((story, index) => <article className="brief-insight story-card" key={story.id}><span className="brief-rank">{String(index + 1).padStart(2, '0')}</span><div><strong>{story.title}</strong><p>{story.what_changed}</p><small>{story.affected_kpis.map(kpiLabel).join(' · ')} · {story.evidence_strength} · {statusLabelForBrief(story.confidence_status)}</small><p className="story-impact">{story.business_impact}</p>{story.recommended_action && <p>Next: {story.recommended_action.recommendation} · Owner {statusLabel(story.recommended_action.owner)}</p>}<small>{story.causal_boundary}</small>{story.technical_details?.filter(Boolean).length ? <details className="technical-details"><summary>View evidence details</summary>{story.technical_details.filter(Boolean).map((detail, detailIndex) => <p key={`${story.id}-detail-${detailIndex}`}>{detail}</p>)}</details> : null}</div><button onClick={() => { setSelected((story.affected_kpis[0] ?? selected) as KpiId); setDraft(`Explain the ${story.title.toLowerCase()} story and supporting evidence.`); setAssistantMode('open') }} aria-label={`Investigate ${story.title}`}><ArrowRight size={17} /></button></article>)}{!hasPositiveOpportunity && <p className="brief-no-positive">No verified positive opportunity was identified in this scope.</p>}</div>
+          {marketingBrief.uncertainty.length > 0 && <details className="brief-limits"><summary>Evidence limitations ({marketingBrief.uncertainty.length})</summary><p>{marketingBrief.uncertainty.map(statusLabelForBrief).join(' · ')}</p></details>}
+          <details className="brief-method"><summary>Method and evidence details</summary><p>{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</p><small>Raw assessment: {result?.verdict} · {result?.confidence?.status ?? 'NOT_ASSESSED'} · {result?.causal_verdict ?? 'UNTESTABLE'}</small></details>
         </section>}
 
-        <section className="kpi-selector" aria-label="Registered KPIs">
+        <section className="kpi-selector supporting-kpis" aria-label="Registered KPIs">
           {registeredKpis.map(item => {
             const itemResult = results[item.kpi_id]
             const itemMovement = itemResult?.movement_assessment
@@ -374,9 +389,9 @@ export default function Page() {
           <article className="card driver-card"><div className="card-heading"><div><span className="eyebrow">Diagnostic drivers</span><h3>Ranked indicators</h3></div><span className="evidence-pill limited">Not attribution</span></div>{result?.correlational_candidates?.length ? <div className="driver-list">{result.correlational_candidates.slice(0, 4).map(candidate => <div key={candidate.driver_id} className="driver-row"><div><strong>{driverLabels[candidate.driver_id] ?? titleCase(candidate.driver_id)}</strong><span>Correlation {candidate.max_correlation.toFixed(2)} · lag {candidate.optimal_lag_days}d · n={candidate.sample_size}</span></div><div className="association"><i style={{ width: `${Math.min(100, Math.abs(candidate.max_correlation) * 100)}%` }} /></div><small>{titleCase(candidate.claim_type)}</small></div>)}</div> : <div className="empty-state">No diagnostic driver passed the ranking checks for this run.</div>}<p className="method-note">Indicators help decide what to investigate. Their association is not a monetary contribution or a causal claim.</p></article>
         </section>
 
-        <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Evidence-bound narrative</span><h3>{result?.verdict ? titleCase(result.verdict) : 'Awaiting analysis'}</h3><p>{result?.narrative ?? 'Run the engine to generate a traceable explanation.'}</p><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></article><article className="card confidence-card"><div className="card-heading"><div><span className="eyebrow">Confidence and limits</span><h3>{titleCase(result?.confidence?.status)}</h3></div><span className={`evidence-pill ${evidenceTone(result?.confidence?.status)}`}>{titleCase(result?.confidence?.claim_type)}</span></div><p>{result?.causal_verification?.reason ?? result?.confidence?.reasons?.[0] ?? 'No causal confidence has been established.'}</p><div className="confidence-checks"><span className={movement?.is_statistically_significant ? 'pass' : ''}>Statistical materiality</span><span className={movement?.is_business_material ? 'pass' : ''}>Business materiality</span><span className={result?.grounding_passed ? 'pass' : ''}>Narrative grounding</span></div></article></section>
+        <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Executive conclusion</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{marketingBrief?.summary ?? 'Run the engine to generate a traceable explanation.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><p>{result?.narrative ?? 'Narrative unavailable.'}</p><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article><article className="card confidence-card"><div className="card-heading"><div><span className="eyebrow">Confidence and limits</span><h3>{statusLabel(result?.confidence?.status)}</h3></div><span className={`evidence-pill ${evidenceTone(result?.confidence?.status)}`}>{statusLabel(result?.confidence?.claim_type)}</span></div><p>{result?.causal_verification?.reason ?? result?.confidence?.reasons?.[0] ?? 'Confidence not assessed; no causal comparison design is available.'}</p><details className="technical-details"><summary>Method details</summary><div className="confidence-checks"><span className={movement?.is_statistically_significant ? 'pass' : ''}>Statistical materiality</span><span className={movement?.is_business_material ? 'pass' : ''}>Business materiality</span><span className={result?.grounding_passed ? 'pass' : ''}>Narrative grounding</span></div><p>Data as of {result?.as_of ?? 'unavailable'} · method {result?.narrative_method ?? 'not instrumented'} · model calls {result?.telemetry?.model_call_count ?? 'Not instrumented'} · latency {result?.telemetry?.total_latency_ms ?? 'Not instrumented'} · cost {result?.telemetry?.estimated_cost ?? 'Not instrumented'}</p></details></article></section>
 
-        <section className="card action-card"><div className="section-heading compact"><div><span className="eyebrow">Recommended next step</span><h2>Action within marketing decision rights</h2></div></div>{result?.decision_cards?.length ? <div className="action-list">{result.decision_cards.slice(0, 3).map((action, index) => <article key={`${action.kind}-${index}`}><span>0{index + 1}</span><div><h3>{titleCase(action.kind)}</h3><p>{action.recommendation}</p><small>Owner: {action.owner} · Status: {titleCase(action.status)} · Expected impact: {action.expected_impact == null ? 'not estimated' : formatValue(action.expected_impact, kpi.unit)}</small></div><button onClick={() => void askQuestion(`Explain the evidence and constraints for this action: ${action.recommendation}`)}><ArrowRight size={16} /></button></article>)}</div> : <div className="empty-state">The engine is abstaining from action until the evidence is sufficient.</div>}</section>
+        <section className="card action-card" id="recommended-action"><div className="section-heading compact"><div><span className="eyebrow">Recommended next step</span><h2>Action within marketing decision rights</h2></div></div>{result?.decision_cards?.length ? <div className="action-list">{result.decision_cards.slice(0, 3).map((action, index) => <article key={`${action.kind}-${index}`}><span>{String(index + 1).padStart(2, '0')}</span><div><h3>{statusLabel(action.kind)}</h3><p><strong>Signal:</strong> {marketingBrief?.first_weak_stage?.label ?? selectedKpiLabel}</p><p><strong>Recommended next check:</strong> {action.recommendation}</p><p><strong>Monitor:</strong> traffic, conversion rate, orders and revenue</p><small>Owner: {statusLabel(action.owner)} · Evidence: {statusLabel(result?.confidence?.status)} · Expected impact {action.expected_impact == null ? 'not estimated with available evidence' : formatValue(action.expected_impact, kpi.unit)} · Review after source validation</small></div><button onClick={() => void askQuestion(`What evidence supports this next check: ${action.recommendation}`)} aria-label="Ask AI about recommended check"><ArrowRight size={18} /></button></article>)}</div> : <div className="empty-state">The engine is abstaining from action until the evidence is sufficient.</div>}</section>
 
         <footer className="source-footer"><span>Run {result?.run_id ?? '—'}</span><span>Source status: {titleCase(result?.reconciliation_verdict?.status)}</span><span>Persona: {persona === 'CFO' ? 'CFO' : 'Marketing manager'}</span></footer>
       </section>
