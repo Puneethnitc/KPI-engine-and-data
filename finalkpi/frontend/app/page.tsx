@@ -1,46 +1,78 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Database,
-  LayoutDashboard, MessageSquare, Moon, RefreshCw, Send, ShieldAlert,
-  Sparkles, Sun, TrendingDown, X,
+  Activity, ArrowDownRight, ArrowRight, BarChart3, Bot, CheckCircle2,
+  ChevronDown, CircleHelp, Database, GripVertical, LayoutDashboard,
+  Maximize2, Minimize2, Moon, RefreshCw, Send, ShieldAlert, Sparkles,
+  Sun, TrendingDown, X,
 } from 'lucide-react'
 
 type Movement = {
-  actual_value: number; expected_value: number; delta: number;
-  is_material: boolean; is_statistically_significant: boolean;
-  is_business_material: boolean; detector_agreement?: string;
-  status: string; z_score?: number;
+  actual_value: number
+  expected_value: number
+  delta: number
+  is_material: boolean
+  is_statistically_significant: boolean
+  is_business_material: boolean
+  detector_agreement?: string
+  status: string
 }
+
 type Decomposition = {
-  total_delta: number; volume_effect: number; price_effect: number;
-  mix_effect: number; residual: number; is_identity_held: boolean;
+  total_delta: number
+  volume_effect: number
+  price_effect: number
+  mix_effect: number
+  residual: number
+  is_identity_held: boolean
 }
+
 type Candidate = {
-  driver_id: string; max_correlation: number; optimal_lag_days: number;
-  sample_size: number; driver_change_pct: number; claim_type: string;
+  driver_id: string
+  max_correlation: number
+  optimal_lag_days: number
+  sample_size: number
+  driver_change_pct: number
+  claim_type: string
 }
-type Decision = { kind: string; recommendation: string; owner: string; status: string; expected_impact: number | null }
+
 type Result = {
-  run_id: string; kpi_id: string; target_date: string; as_of: string;
-  verdict: string; segment: { region: string; category: string };
-  movement_assessment?: Movement | null;
-  reconciliation_verdict?: { status: string; details?: { reason?: string }; gap_pct?: number | null } | null;
-  decomposition_status: string; decomposition?: Decomposition | null;
-  correlational_candidates: Candidate[];
-  driver_exclusions?: { driver_id: string; reason: string }[];
-  causal_verdict?: string | null;
-  causal_verification?: { reason?: string; confidence_interval?: [number, number] | null; did_effect?: number | null } | null;
-  confidence?: { status: string; claim_type: string; reasons?: string[]; calibrated_probability?: number | null } | null;
-  decision_cards: Decision[]; narrative: string; grounding_passed: boolean;
-  narrative_method?: string; llm_status?: string;
+  run_id: string
+  kpi_id: string
+  target_date: string
+  as_of: string
+  verdict: string
+  segment: { region: string; category: string }
+  movement_assessment?: Movement | null
+  reconciliation_verdict?: { status: string; details?: { reason?: string }; gap_pct?: number | null } | null
+  decomposition_status: string
+  decomposition?: Decomposition | null
+  correlational_candidates: Candidate[]
+  driver_exclusions?: { driver_id: string; reason: string }[]
+  causal_verdict?: string | null
+  causal_verification?: { reason?: string } | null
+  confidence?: { status: string; claim_type: string; reasons?: string[]; calibrated_probability?: number | null } | null
+  decision_cards: { kind: string; recommendation: string; owner: string; status: string; expected_impact: number | null }[]
+  narrative: string
+  grounding_passed: boolean
+  narrative_method?: string
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8000'
+type ChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  citations?: { source_path: string; evidence_type: string; line_or_row_ref?: string }[]
+  limitations?: string[]
+}
 
+type AssistantMode = 'closed' | 'opening' | 'open' | 'minimized'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api/backend'
+const PERSONA = 'marketing_manager'
 const KPIS = [
-  { id: 'net_sales_revenue', label: 'Net sales revenue', unit: 'INR', icon: TrendingDown },
+  { id: 'net_sales_revenue', label: 'Revenue', unit: 'INR', icon: TrendingDown },
   { id: 'orders', label: 'Orders', unit: 'count', icon: BarChart3 },
   { id: 'units_sold', label: 'Units sold', unit: 'count', icon: BarChart3 },
   { id: 'traffic_total', label: 'Traffic', unit: 'count', icon: Activity },
@@ -49,198 +81,263 @@ const KPIS = [
 type KpiId = typeof KPIS[number]['id']
 
 const driverLabels: Record<string, string> = {
-  traffic_drop: 'Traffic movement', ad_spend_drop: 'Ad-spend movement',
-  checkout_latency_spike: 'Checkout latency', competitor_price_cut: 'Competitor pricing',
+  traffic_drop: 'Traffic movement',
+  ad_spend_drop: 'Ad-spend movement',
+  checkout_latency_spike: 'Checkout latency',
+  competitor_price_cut: 'Competitor pricing',
   stockout: 'Stock availability',
 }
 
-function number(value: number | null | undefined, unit: string, signed = false) {
+function formatValue(value: number | null | undefined, unit: string) {
   if (value == null || !Number.isFinite(value)) return '—'
-  const v = unit === 'ratio' ? value * 100 : value
-  const sign = signed && v > 0 ? '+' : ''
-  if (unit === 'INR') return `${sign}₹${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}${v < 0 ? ' decrease' : ''}`
-  if (unit === 'ratio') return `${sign}${v.toFixed(2)}%`
-  return `${sign}${v.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-}
-function signedNumber(value: number | null | undefined, unit: string) {
-  if (value == null) return '—'
-  if (unit === 'INR') return `${value < 0 ? '−' : '+'}₹${Math.abs(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  const scaled = unit === 'ratio' ? value * 100 : value
-  return `${scaled < 0 ? '−' : '+'}${Math.abs(scaled).toLocaleString('en-IN', { maximumFractionDigits: 3 })}${unit === 'ratio' ? ' pp' : ''}`
-}
-function labelFor(id: string) { return KPIS.find(k => k.id === id)?.label ?? id.replaceAll('_', ' ') }
-function statusFor(result?: Result) {
-  if (!result) return 'Loading'
-  if (result.verdict === 'CONTRADICTED') return 'Sources conflict'
-  if (!result.movement_assessment) return result.verdict.replaceAll('_', ' ')
-  return result.movement_assessment.is_material ? 'Material movement' : 'Not material'
+  if (unit === 'ratio') return `${(value * 100).toFixed(2)}%`
+  if (unit === 'INR') return `₹${Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  return value.toLocaleString('en-IN', { maximumFractionDigits: 2 })
 }
 
-function ImpactBar({ name, value, scale, unit }: { name: string; value: number; scale: number; unit: string }) {
-  return <div className="demo-impact-row">
-    <span>{name}</span>
-    <div className="demo-impact-track"><i className={value < 0 ? 'negative' : 'positive'} style={{ width: `${Math.max(4, Math.min(100, Math.abs(value) / scale * 100))}%` }} /></div>
-    <strong className={value < 0 ? 'demo-negative' : 'demo-positive'}>{signedNumber(value, unit)}</strong>
+function formatDelta(value: number | null | undefined, unit: string) {
+  if (value == null || !Number.isFinite(value)) return '—'
+  const scaled = unit === 'ratio' ? value * 100 : value
+  const amount = Math.abs(scaled).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+  return `${scaled < 0 ? '−' : '+'}${unit === 'INR' ? '₹' : ''}${amount}${unit === 'ratio' ? ' pp' : ''}`
+}
+
+function titleCase(value?: string | null) {
+  return value ? value.toLowerCase().replaceAll('_', ' ').replace(/(^|\s)\S/g, letter => letter.toUpperCase()) : 'Not assessed'
+}
+
+function evidenceTone(status?: string | null) {
+  if (!status || status.includes('INSUFFICIENT') || status.includes('NOT_')) return 'limited'
+  if (status.includes('CONTRADICTED') || status.includes('INCONCLUSIVE')) return 'warning'
+  return 'good'
+}
+
+function Composer({ value, setValue, submit, panel = false, disabled = false }: {
+  value: string
+  setValue: (value: string) => void
+  submit: () => void
+  panel?: boolean
+  disabled?: boolean
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    if (!ref.current) return
+    ref.current.style.height = 'auto'
+    ref.current.style.height = `${Math.min(ref.current.scrollHeight, 120)}px`
+  }, [value])
+
+  return <div className={panel ? 'assistant-composer-wrap' : 'floating-composer-wrap'}>
+    {!panel && <div className="prompt-chips">
+      <button onClick={() => setValue('Why did revenue move?')}>Why did revenue move?</button>
+      <button onClick={() => setValue('Which marketing lever should I review next?')}>Which lever should I review?</button>
+    </div>}
+    <form className="composer" onSubmit={(event: FormEvent) => { event.preventDefault(); submit() }}>
+      <Sparkles size={19} />
+      <textarea ref={ref} rows={1} value={value} onChange={event => setValue(event.target.value)}
+        placeholder="Ask about your marketing performance…" aria-label="Ask the KPI assistant"
+        onKeyDown={event => {
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault()
+            submit()
+          }
+        }} />
+      <button type="submit" disabled={disabled || !value.trim()} aria-label="Send question"><Send size={17} /></button>
+    </form>
+    {!panel && <small>Answers are grounded in the selected engine run and its available evidence.</small>}
   </div>
 }
 
 export default function Page() {
-  const [view, setView] = useState<'overview' | 'detail'>('overview')
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const [selected, setSelected] = useState<KpiId>('net_sales_revenue')
   const [region, setRegion] = useState('North')
   const [category, setCategory] = useState('Electronics')
   const [date, setDate] = useState('2023-07-24')
+  const [regions, setRegions] = useState(['North', 'South', 'East', 'West'])
+  const [categories, setCategories] = useState(['Electronics', 'Apparel', 'Home'])
+  const [dates, setDates] = useState(['2023-07-24'])
   const [results, setResults] = useState<Record<string, Result>>({})
-  const [availableKpis, setAvailableKpis] = useState<Array<{ kpi_id: string; label?: string; unit?: string; definition?: string }>>([])
-  const [availableRegions, setAvailableRegions] = useState<string[]>(['North', 'South', 'East', 'West'])
-  const [availableCategories, setAvailableCategories] = useState<string[]>(['Electronics', 'Apparel', 'Home'])
-  const [availableDates, setAvailableDates] = useState<string[]>(['2023-07-24'])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [chatOpen, setChatOpen] = useState(false)
-  const [chatDraft, setChatDraft] = useState('')
-  const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>('closed')
+  const [panelWidth, setPanelWidth] = useState(410)
+  const [draft, setDraft] = useState('')
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [conversationId, setConversationId] = useState<string | undefined>()
+  const [asking, setAsking] = useState(false)
+  const conversationEnd = useRef<HTMLDivElement>(null)
+
+  const result = results[selected]
+  const kpi = KPIS.find(item => item.id === selected) ?? KPIS[0]
+  const movement = result?.movement_assessment
+  const decomposition = result?.decomposition
+  const isAssistantOpen = assistantMode === 'opening' || assistantMode === 'open'
 
   useEffect(() => {
-    const saved = localStorage.getItem('kpi-demo-theme')
-    const mode = saved === 'light' || saved === 'dark' ? saved : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-    setTheme(mode)
+    const stored = localStorage.getItem('kpi-theme')
+    setTheme(stored === 'light' ? 'light' : 'dark')
   }, [])
-  useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('kpi-demo-theme', theme) }, [theme])
+  useEffect(() => { localStorage.setItem('kpi-theme', theme) }, [theme])
+  useEffect(() => { conversationEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, asking])
 
   async function loadMetadata() {
     try {
-      const [kpisResponse, filtersResponse] = await Promise.all([
-        fetch(`${API_BASE}/api/kpis`, { cache: 'no-store' }),
-        fetch(`${API_BASE}/api/filters`, { cache: 'no-store' }),
-      ])
-      const kpisPayload = kpisResponse.ok ? await kpisResponse.json() : { items: [] }
-      const filtersPayload = filtersResponse.ok ? await filtersResponse.json() : { regions: ['North', 'South', 'East', 'West'], categories: ['Electronics', 'Apparel', 'Home'], dates: ['2023-07-24'] }
-      const items = Array.isArray(kpisPayload.items) ? kpisPayload.items : []
-      setAvailableKpis(items)
-      setAvailableRegions(filtersPayload.regions ?? ['North', 'South', 'East', 'West'])
-      setAvailableCategories(filtersPayload.categories ?? ['Electronics', 'Apparel', 'Home'])
-      setAvailableDates(filtersPayload.dates ?? ['2023-07-24'])
-      if (filtersPayload.default) {
-        if (filtersPayload.default.region) setRegion(filtersPayload.default.region)
-        if (filtersPayload.default.category) setCategory(filtersPayload.default.category)
-        if (filtersPayload.default.date) setDate(filtersPayload.default.date)
+      const response = await fetch(`${API_BASE}/api/filters`, { cache: 'no-store' })
+      if (!response.ok) return
+      const payload = await response.json()
+      setRegions(payload.regions ?? regions)
+      setCategories(payload.categories ?? categories)
+      setDates(payload.dates ?? dates)
+      if (payload.default) {
+        setRegion(payload.default.region ?? region)
+        setCategory(payload.default.category ?? category)
+        setDate(payload.default.date ?? date)
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load backend metadata')
+    } catch {
+      // The diagnosis request below displays the actionable connectivity error.
     }
   }
 
   async function diagnose() {
-    setLoading(true); setError('')
+    setLoading(true)
+    setError('')
     try {
       const response = await fetch(`${API_BASE}/api/diagnoses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kpis: ['all'],
-          target_date: date,
-          region,
-          category,
-          persona: 'CFO',
-        }),
+        body: JSON.stringify({ kpis: ['all'], target_date: date, region, category, persona: PERSONA }),
       })
       const payload = await response.json()
-      if (!response.ok) throw new Error(payload.detail ?? payload.error ?? 'Diagnosis failed')
-      setResults(payload.results)
-    } catch (err) { setError(err instanceof Error ? err.message : 'Could not reach the backend') }
-    finally { setLoading(false) }
-  }
-
-  useEffect(() => { void loadMetadata(); }, [])
-  useEffect(() => { if (availableRegions.length && availableCategories.length && availableDates.length) { void diagnose() } }, [availableRegions, availableCategories, availableDates])
-
-  const result = results[selected]
-  const kpi = KPIS.find(k => k.id === selected)!
-  const movement = result?.movement_assessment
-  const sourceStatus = result?.reconciliation_verdict?.status ?? 'NOT_EVALUATED'
-  const scale = Math.max(1, Math.abs(result?.decomposition?.volume_effect ?? 0), Math.abs(result?.decomposition?.price_effect ?? 0), Math.abs(result?.decomposition?.mix_effect ?? 0))
-  const materialCount = useMemo(() => Object.values(results).filter(r => r.movement_assessment?.is_material).length, [results])
-
-  async function ask(text: string) {
-    setQuestion(text); setChatOpen(true)
-    if (!result) { setAnswer('Run the diagnosis first so I can use its evidence.'); return }
-
-    try {
-      setAnswer('Loading grounded answer...')
-      const response = await fetch(`${API_BASE}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          run_id: result.run_id,
-          question: text,
-          user_id: 'demo-user',
-          persona: 'CFO',
-        }),
-      })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.detail ?? payload.error ?? 'Chat failed')
-      setAnswer(payload.answer ?? 'No grounded answer returned.')
-    } catch (err) {
-      const q = text.toLowerCase()
-      if (q.includes('cause') || q.includes('why')) {
-        setAnswer(`The engine reports ${result.causal_verdict ?? 'no causal verdict'}. ${result.causal_verification?.reason ?? 'It has not established a cause.'} The candidate drivers below are correlations, not proof.`)
-      } else if (q.includes('source') || q.includes('evidence')) {
-        setAnswer(`Source status: ${sourceStatus}. ${result.reconciliation_verdict?.details?.reason ?? ''} The engine narrative is ${result.grounding_passed ? 'grounded in its evidence object' : 'not fully grounded'}.`)
-      } else if (q.includes('next') || q.includes('action')) {
-        setAnswer(result.decision_cards[0]?.recommendation ?? 'No action is supported yet. Review the evidence and source status.')
-      } else {
-        setAnswer(`${labelFor(selected)} moved ${signedNumber(movement?.delta, kpi.unit)} versus the engine baseline on ${date}. ${movement?.is_material ? 'It passed both materiality checks.' : 'It did not pass both materiality checks.'} ${result.correlational_candidates.length ? `${driverLabels[result.correlational_candidates[0].driver_id] ?? result.correlational_candidates[0].driver_id} is a correlational candidate, not a proven cause.` : 'No driver candidate was established.'}`)
-      }
+      if (!response.ok) throw new Error(payload.detail ?? 'Diagnosis failed')
+      setResults(payload.results ?? {})
+      setMessages([])
+      setConversationId(undefined)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not reach the KPI backend')
+    } finally {
+      setLoading(false)
     }
   }
 
-  return <div className="demo-shell">
-    <aside className="demo-sidebar">
-      <div className="demo-brand"><span className="demo-brand-mark"><Sparkles size={18} /></span><div><strong>signalcraft</strong><small>KPI intelligence</small></div></div>
-      <div className="demo-side-label">WORKSPACE</div>
-      <button className={view === 'overview' ? 'demo-nav active' : 'demo-nav'} onClick={() => setView('overview')}><LayoutDashboard size={17} /> Overview</button>
-      <div className="demo-side-label">REGISTERED KPIS</div>
-      {KPIS.map(item => <button key={item.id} className={view === 'detail' && selected === item.id ? 'demo-nav active' : 'demo-nav'} onClick={() => { setSelected(item.id); setView('detail'); setQuestion(''); setAnswer('') }}><item.icon size={16} /> {item.label}</button>)}
-      <div className="demo-side-bottom"><span className="demo-live-dot" /> Engine-backed demo <small>CSV sources · 2023–24</small></div>
-    </aside>
+  useEffect(() => { void loadMetadata() }, [])
+  useEffect(() => { void diagnose() }, [region, category, date])
 
-    <div className="demo-main">
-      <header className="demo-topbar"><div className="demo-top-title">Northstar / KPI investigation <span>MENTOR DEMO</span></div><div className="demo-top-actions"><span className="demo-source-mini"><Database size={14} /> Sales daily · finance monthly</span><button aria-label="Toggle light and dark mode" className="demo-icon-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button><button className="demo-ask-button" onClick={() => setChatOpen(true)}><MessageSquare size={15} /> Ask about this KPI</button></div></header>
-      <main className="demo-content">
-        <div className="demo-heading"><div><div className="demo-eyebrow">INTELLIGENCE WORKSPACE <ChevronRight size={12} /> {view === 'overview' ? 'OVERVIEW' : kpi.label.toUpperCase()}</div><h1>{view === 'overview' ? 'KPI overview' : kpi.label}</h1><p>{view === 'overview' ? 'Spot material movements, then open the underlying evidence.' : 'Observed movement, accounting effects, and evidence limits—kept separate.'}</p></div><div className="demo-run-id">{result?.run_id ?? 'Awaiting engine'}</div></div>
+  async function askQuestion(prefill?: string) {
+    const question = (prefill ?? draft).trim()
+    if (!question || asking) return
+    if (!result) {
+      setError('Run a diagnosis before asking the assistant.')
+      return
+    }
+    if (assistantMode === 'closed' || assistantMode === 'minimized') {
+      setAssistantMode('opening')
+      window.setTimeout(() => setAssistantMode('open'), 420)
+    }
+    setDraft('')
+    setMessages(current => [...current, { id: crypto.randomUUID(), role: 'user', text: question }])
+    setAsking(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: result.run_id, conversation_id: conversationId, question, persona: PERSONA }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.detail ?? 'Grounded chat failed')
+      setConversationId(payload.conversation_id ?? conversationId)
+      setMessages(current => [...current, {
+        id: crypto.randomUUID(), role: 'assistant', text: payload.answer,
+        citations: payload.citations, limitations: payload.limitations,
+      }])
+    } catch (requestError) {
+      setMessages(current => [...current, {
+        id: crypto.randomUUID(), role: 'assistant',
+        text: requestError instanceof Error ? requestError.message : 'The assistant could not answer this question.',
+      }])
+    } finally {
+      setAsking(false)
+    }
+  }
 
-        <div className="demo-filters">
-          <label>Target date<input type="date" min="2023-03-01" max="2024-12-30" value={date} onChange={e => setDate(e.target.value)} list="date-options" /></label>
-          <datalist id="date-options">{availableDates.map(x => <option key={x} value={x} />)}</datalist>
-          <label>Region<select value={region} onChange={e => setRegion(e.target.value)}>{availableRegions.map(x => <option key={x}>{x}</option>)}</select></label>
-          <label>Category<select value={category} onChange={e => setCategory(e.target.value)}>{availableCategories.map(x => <option key={x}>{x}</option>)}</select></label>
-          <button className="demo-primary" disabled={loading} onClick={() => void diagnose()}><RefreshCw size={15} className={loading ? 'demo-spin' : ''} /> {loading ? 'Running engine…' : 'Run diagnosis'}</button>
-          <span className="demo-asof">{result ? `As of ${new Date(result.as_of).toLocaleString('en-IN')}` : 'Supplied historical dataset'}</span>
+  function beginResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const startX = event.clientX
+    const startWidth = panelWidth
+    const move = (pointerEvent: PointerEvent) => setPanelWidth(Math.max(340, Math.min(600, startWidth + startX - pointerEvent.clientX)))
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
+  const contributionRows = useMemo(() => {
+    if (!decomposition?.is_identity_held) return []
+    return [
+      { label: selected === 'orders' ? 'Traffic effect' : 'Volume effect', value: decomposition.volume_effect },
+      { label: selected === 'orders' ? 'Conversion effect' : 'Rate / price effect', value: decomposition.price_effect },
+      ...(decomposition.mix_effect ? [{ label: 'Mix effect', value: decomposition.mix_effect }] : []),
+    ]
+  }, [decomposition, selected])
+  const contributionTotal = contributionRows.reduce((total, item) => total + Math.abs(item.value), 0) || 1
+  const materialCount = Object.values(results).filter(item => item.movement_assessment?.is_material).length
+
+  return <div className={`app-shell ${theme}`} style={{ '--assistant-width': `${panelWidth}px` } as React.CSSProperties}>
+    <header className="topbar">
+      <div className="brand"><span className="brand-mark"><BarChart3 size={17} /></span><span>KPI <strong>Intelligence</strong></span></div>
+      <nav className="main-nav" aria-label="Primary navigation"><button className="active">Overview</button><button>Performance</button><button>Campaigns</button><button>Insights</button></nav>
+      <div className="top-actions"><span className="freshness"><i /> Engine data</span><button className="theme-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button><span className="avatar">MM</span></div>
+    </header>
+
+    <main className="workspace" data-ai={isAssistantOpen ? 'open' : assistantMode}>
+      <section className="dashboard-column">
+        <div className="page-heading">
+          <div><span className="eyebrow"><LayoutDashboard size={14} /> Marketing manager workspace</span><h1>Performance overview</h1><p>What changed, what may explain it, and what to verify next.</p></div>
+          <div className="filter-row">
+            <label>Region<select value={region} onChange={event => setRegion(event.target.value)}>{regions.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
+            <label>Category<select value={category} onChange={event => setCategory(event.target.value)}>{categories.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
+            <label>Date<select value={date} onChange={event => setDate(event.target.value)}>{dates.slice(-120).map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
+            <button className="run-button" disabled={loading} onClick={() => void diagnose()}><RefreshCw size={15} className={loading ? 'spin' : ''} /> Run</button>
+          </div>
         </div>
-        {error && <div className="demo-alert error"><ShieldAlert size={17} /> {error}</div>}
-        {loading && <div className="demo-alert"><Activity size={17} /> Running the five registered KPIs on the supplied source files. This can take a few seconds.</div>}
 
-        {view === 'overview' ? <>
-          <div className="demo-section-head"><div><span className="demo-eyebrow">PORTFOLIO HEALTH</span><h2>Five registered KPIs</h2></div><span>{materialCount} material movements · {region} / {category}</span></div>
-          <div className="demo-kpi-grid">{KPIS.map(item => { const itemResult = results[item.id]; const assessment = itemResult?.movement_assessment; return <button key={item.id} className="demo-kpi-card" onClick={() => { setSelected(item.id); setView('detail') }}><div className="demo-card-top"><item.icon size={17} /><span className={assessment?.is_material ? 'demo-pill amber' : 'demo-pill'}>{statusFor(itemResult)}</span></div><span className="demo-card-label">{item.label}</span><strong>{assessment ? number(assessment.actual_value, item.unit) : '—'}</strong><small className={assessment?.delta && assessment.delta < 0 ? 'demo-negative' : 'demo-positive'}>{assessment ? `${signedNumber(assessment.delta, item.unit)} vs baseline` : 'Awaiting result'}</small></button> })}</div>
-          <div className="demo-two-col"><section className="demo-panel"><div className="demo-section-head"><div><span className="demo-eyebrow">PRIORITIZED QUEUE</span><h2>Investigations to review</h2></div></div><div className="demo-queue">{KPIS.map(item => { const itemResult = results[item.id]; return <button key={item.id} onClick={() => { setSelected(item.id); setView('detail') }}><span><strong>{item.label}</strong><small>{statusFor(itemResult)}</small></span><span>{signedNumber(itemResult?.movement_assessment?.delta, item.unit)}</span><span className="demo-pill">{itemResult?.reconciliation_verdict?.status?.replaceAll('_', ' ') ?? '—'}</span><ArrowRight size={15} /></button> })}</div></section>
-          <section className="demo-panel demo-source-panel"><span className="demo-eyebrow">DATA TRUST</span><h2>Source status is part of the answer</h2><p>Sales is daily, marketing is weekly, and finance is monthly. A missing finance snapshot is displayed as <strong>NOT_RECONCILED</strong>—never silently treated as agreement.</p><div className="demo-source-line"><Database size={17} /> Revenue source check <span className="demo-pill amber">{results.net_sales_revenue?.reconciliation_verdict?.status?.replaceAll('_', ' ') ?? 'Awaiting result'}</span></div><button className="demo-text-button" onClick={() => { setSelected('net_sales_revenue'); setView('detail') }}>Inspect revenue evidence <ArrowRight size={14} /></button></section></div>
-        </> : <>
-          <button className="demo-back" onClick={() => setView('overview')}>← Back to overview</button>
-          <div className={sourceStatus === 'CONTRADICTED' ? 'demo-alert error' : 'demo-alert amber'}><ShieldAlert size={18} /><div><strong>Sources: {sourceStatus.replaceAll('_', ' ')}</strong><span>{result?.reconciliation_verdict?.details?.reason ?? 'No second-source comparison is available for this KPI.'}</span></div></div>
-          <div className="demo-section-head"><div><span className="demo-eyebrow">OBSERVED MOVEMENT</span><h2>Actual versus engine baseline</h2></div><span className="demo-pill amber">{statusFor(result)}</span></div>
-          <div className="demo-stat-grid"><div className="demo-stat"><small>ACTUAL</small><strong>{number(movement?.actual_value, kpi.unit)}</strong></div><div className="demo-stat"><small>EXPECTED BASELINE</small><strong>{number(movement?.expected_value, kpi.unit)}</strong></div><div className="demo-stat"><small>DELTA</small><strong className={movement?.delta && movement.delta < 0 ? 'demo-negative' : 'demo-positive'}>{signedNumber(movement?.delta, kpi.unit)}</strong></div></div>
-          <div className="demo-two-col"><section className="demo-panel"><span className="demo-eyebrow">WHAT CHANGED · EXACT ACCOUNTING</span><h2>Accounting bridge</h2>{result?.decomposition?.is_identity_held ? <><p>These effects add to the observed KPI movement. They do not establish a cause.</p><div className="demo-impact-list"><ImpactBar name="Units sold effect" value={result.decomposition.volume_effect} scale={scale} unit={kpi.unit} /><ImpactBar name="Rate effect" value={result.decomposition.price_effect} scale={scale} unit={kpi.unit} />{result.decomposition.mix_effect !== 0 && <ImpactBar name="Mix effect" value={result.decomposition.mix_effect} scale={scale} unit={kpi.unit} />}</div><div className="demo-bridge-total"><span>Reconciled total</span><strong>{signedNumber(result.decomposition.total_delta, kpi.unit)}</strong></div></> : <p>No exact bridge is available for this KPI. Status: {result?.decomposition_status ?? 'Not evaluated'}.</p>}</section>
-          <section className="demo-panel"><span className="demo-eyebrow">POSSIBLE DRIVERS · CORRELATIONAL</span><h2>Ranked candidates</h2>{result?.correlational_candidates?.length ? result.correlational_candidates.map(candidate => <div className="demo-candidate" key={candidate.driver_id}><div><strong>{driverLabels[candidate.driver_id] ?? candidate.driver_id}</strong><span className="demo-pill">CORRELATIONAL</span></div><p>Association {candidate.max_correlation.toFixed(2)} · lag {candidate.optimal_lag_days} day(s) · {candidate.sample_size} paired observations</p><div className="demo-association" aria-label={`Absolute association ${Math.abs(candidate.max_correlation).toFixed(2)} of 1`}><i style={{ width: `${Math.min(100, Math.abs(candidate.max_correlation) * 100)}%` }} /></div><small>Driver movement: {candidate.driver_change_pct.toFixed(2)}%. This is not a ₹ causal effect.</small></div>) : <p>No driver candidate passed the current ranking checks.</p>}</section></div>
-          <div className="demo-two-col"><section className="demo-panel"><span className="demo-eyebrow">OBSERVATIONAL CHECK</span><h2>Cause: {result?.causal_verdict ?? 'not assessed'}</h2><p>{result?.causal_verification?.reason ?? 'The engine has not established a causal estimate.'}</p><div className="demo-pill">Confidence: {result?.confidence?.status ?? 'NOT_ASSESSED'}</div><p className="demo-small-note">A correlation or accounting identity is not proof of causation.</p></section><section className="demo-panel"><span className="demo-eyebrow">HUMAN REVIEW</span><h2>Next useful check</h2><p>{result?.decision_cards?.[0]?.recommendation ?? 'Review the source and movement evidence before taking action.'}</p><div className="demo-pill">{result?.decision_cards?.[0]?.status ?? 'AWAITING_REVIEW'}</div><p className="demo-small-note">No operational action has been executed.</p></section></div>
-          <section className="demo-panel demo-narrative"><div className="demo-section-head"><div><span className="demo-eyebrow">EVIDENCE-BOUND NARRATIVE</span><h2>Engine explanation</h2></div><span className="demo-pill">{result?.narrative_method?.replaceAll('_', ' ') ?? '—'}</span></div><p>{result?.narrative ?? 'Run a diagnosis to see an explanation.'}</p><details><summary>View run and evidence details</summary><div className="demo-evidence-meta">Run {result?.run_id} · Grounding {result?.grounding_passed ? 'passed' : 'not passed'} · Detector {movement?.detector_agreement ?? '—'} · Statistical check {movement?.is_statistically_significant ? 'passed' : 'not passed'} · Business threshold {movement?.is_business_material ? 'passed' : 'not passed'}</div>{result?.driver_exclusions?.map(x => <p key={x.driver_id}><strong>{driverLabels[x.driver_id] ?? x.driver_id}:</strong> {x.reason}</p>)}</details></section>
-        </>}
-      </main>
-    </div>
+        <div className="context-strip"><strong>{region} · {category} · {date}</strong><span>{materialCount} of {KPIS.length} KPIs are material</span></div>
+        {error && <div className="alert error"><ShieldAlert size={18} /><span>{error}</span></div>}
+        {loading && <div className="alert"><Activity className="spin" size={18} /><span>Running the governed KPI engine across daily, weekly, and monthly sources…</span></div>}
 
-    {chatOpen && <aside className="demo-chat"><div className="demo-chat-head"><div><span className="demo-eyebrow">EVIDENCE ASSISTANT</span><h2>Ask about this KPI</h2></div><button className="demo-icon-button" onClick={() => setChatOpen(false)} aria-label="Close chat"><X size={17} /></button></div><div className="demo-chat-context">Context: {labelFor(selected)} · {region}/{category} · {date}</div><div className="demo-chat-body"><div className="demo-chat-bubble"><Sparkles size={16} /><p>I can summarize this engine run and point to its evidence. This is a scripted demo assistant, not a live LLM.</p></div>{question && <div className="demo-chat-question">{question}</div>}{answer && <div className="demo-chat-bubble"><CheckCircle2 size={16} /><p>{answer}</p></div>}</div><div className="demo-suggestions">{['What changed?', 'What evidence supports this?', 'Is the cause proven?', 'What should I check next?'].map(x => <button key={x} onClick={() => ask(x)}>{x}</button>)}</div><form className="demo-chat-form" onSubmit={e => { e.preventDefault(); if (chatDraft.trim()) { ask(chatDraft.trim()); setChatDraft('') } }}><input value={chatDraft} onChange={e => setChatDraft(e.target.value)} placeholder="Ask about this result…" aria-label="Ask a question" /><button aria-label="Send question"><Send size={16} /></button></form></aside>}
+        <section className="kpi-selector" aria-label="Registered KPIs">
+          {KPIS.map(item => {
+            const itemResult = results[item.id]
+            const itemMovement = itemResult?.movement_assessment
+            return <button key={item.id} className={selected === item.id ? 'kpi-tile active' : 'kpi-tile'} onClick={() => setSelected(item.id)}><span><item.icon size={16} />{item.label}</span><strong>{formatValue(itemMovement?.actual_value, item.unit)}</strong><small className={(itemMovement?.delta ?? 0) < 0 ? 'negative' : 'positive'}>{formatDelta(itemMovement?.delta, item.unit)} vs baseline</small></button>
+          })}
+        </section>
+
+        <section className="hero-card card">
+          <div className="hero-summary"><span className="eyebrow">Primary observed KPI</span><h2>{kpi.label}</h2><div className="hero-number">{formatValue(movement?.actual_value, kpi.unit)}</div><p className={(movement?.delta ?? 0) < 0 ? 'negative' : 'positive'}><ArrowDownRight size={16} /> {formatDelta(movement?.delta, kpi.unit)} versus the engine baseline</p><span className={`evidence-pill ${movement?.is_material ? 'warning' : 'good'}`}>{movement?.is_material ? 'Material movement' : 'Not material'}</span></div>
+          <div className="comparison-chart" role="img" aria-label={`${kpi.label} actual compared with expected baseline`}><div className="chart-head"><span>Actual vs expected</span><small>No invented trend series</small></div><div className="bar-row"><span>Expected</span><i><b style={{ width: '100%' }} /></i><strong>{formatValue(movement?.expected_value, kpi.unit)}</strong></div><div className="bar-row actual"><span>Actual</span><i><b style={{ width: `${movement?.expected_value ? Math.min(100, Math.abs((movement.actual_value / movement.expected_value) * 100)) : 0}%` }} /></i><strong>{formatValue(movement?.actual_value, kpi.unit)}</strong></div><div className="chart-caption"><Database size={14} /> Target date {date} · As of {result?.as_of ? new Date(result.as_of).toLocaleString('en-IN') : 'awaiting run'}</div></div>
+        </section>
+
+        <div className="section-heading"><div><h2>What explains the movement?</h2><p>Accounting contributions and diagnostic indicators are deliberately separated.</p></div><button onClick={() => void askQuestion('Explain the difference between contributions and diagnostic drivers.')}><CircleHelp size={15} /> Ask AI</button></div>
+
+        <section className="explanation-grid">
+          <article className="card contribution-card"><div className="card-heading"><div><span className="eyebrow">Quantified contribution</span><h3>Accounting bridge</h3></div><span className={`evidence-pill ${decomposition?.is_identity_held ? 'good' : 'limited'}`}>{decomposition?.is_identity_held ? 'Identity reconciled' : titleCase(result?.decomposition_status)}</span></div>{contributionRows.length ? <><div className="donut-wrap"><div className="donut" style={{ '--slice': `${Math.round((Math.abs(contributionRows[0]?.value ?? 0) / contributionTotal) * 100)}%` } as React.CSSProperties}><span><strong>{formatDelta(decomposition?.total_delta, kpi.unit)}</strong><small>total change</small></span></div><div className="contribution-list">{contributionRows.map((item, index) => <div key={item.label}><i className={`swatch swatch-${index}`} /><span>{item.label}<small>{Math.round((Math.abs(item.value) / contributionTotal) * 100)}% of quantified movement</small></span><strong>{formatDelta(item.value, kpi.unit)}</strong></div>)}</div></div><p className="method-note">These values add to the observed movement. They are an accounting explanation, not proof of operational cause.</p></> : <div className="empty-state">No exact contribution bridge is available for this KPI.</div>}</article>
+
+          <article className="card driver-card"><div className="card-heading"><div><span className="eyebrow">Diagnostic drivers</span><h3>Ranked indicators</h3></div><span className="evidence-pill limited">Not attribution</span></div>{result?.correlational_candidates?.length ? <div className="driver-list">{result.correlational_candidates.slice(0, 4).map(candidate => <div key={candidate.driver_id} className="driver-row"><div><strong>{driverLabels[candidate.driver_id] ?? titleCase(candidate.driver_id)}</strong><span>Correlation {candidate.max_correlation.toFixed(2)} · lag {candidate.optimal_lag_days}d · n={candidate.sample_size}</span></div><div className="association"><i style={{ width: `${Math.min(100, Math.abs(candidate.max_correlation) * 100)}%` }} /></div><small>{titleCase(candidate.claim_type)}</small></div>)}</div> : <div className="empty-state">No diagnostic driver passed the ranking checks for this run.</div>}<p className="method-note">Indicators help decide what to investigate. Their association is not a monetary contribution or a causal claim.</p></article>
+        </section>
+
+        <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Evidence-bound narrative</span><h3>{result?.verdict ? titleCase(result.verdict) : 'Awaiting analysis'}</h3><p>{result?.narrative ?? 'Run the engine to generate a traceable explanation.'}</p><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></article><article className="card confidence-card"><div className="card-heading"><div><span className="eyebrow">Confidence and limits</span><h3>{titleCase(result?.confidence?.status)}</h3></div><span className={`evidence-pill ${evidenceTone(result?.confidence?.status)}`}>{titleCase(result?.confidence?.claim_type)}</span></div><p>{result?.causal_verification?.reason ?? result?.confidence?.reasons?.[0] ?? 'No causal confidence has been established.'}</p><div className="confidence-checks"><span className={movement?.is_statistically_significant ? 'pass' : ''}>Statistical materiality</span><span className={movement?.is_business_material ? 'pass' : ''}>Business materiality</span><span className={result?.grounding_passed ? 'pass' : ''}>Narrative grounding</span></div></article></section>
+
+        <section className="card action-card"><div className="section-heading compact"><div><span className="eyebrow">Recommended next step</span><h2>Action within marketing decision rights</h2></div></div>{result?.decision_cards?.length ? <div className="action-list">{result.decision_cards.slice(0, 3).map((action, index) => <article key={`${action.kind}-${index}`}><span>0{index + 1}</span><div><h3>{titleCase(action.kind)}</h3><p>{action.recommendation}</p><small>Owner: {action.owner} · Status: {titleCase(action.status)} · Expected impact: {action.expected_impact == null ? 'not estimated' : formatValue(action.expected_impact, kpi.unit)}</small></div><button onClick={() => void askQuestion(`Explain the evidence and constraints for this action: ${action.recommendation}`)}><ArrowRight size={16} /></button></article>)}</div> : <div className="empty-state">The engine is abstaining from action until the evidence is sufficient.</div>}</section>
+
+        <footer className="source-footer"><span>Run {result?.run_id ?? '—'}</span><span>Source status: {titleCase(result?.reconciliation_verdict?.status)}</span><span>Persona: Marketing manager</span></footer>
+      </section>
+
+      {assistantMode === 'closed' && <Composer value={draft} setValue={setDraft} submit={() => void askQuestion()} disabled={loading} />}
+      {assistantMode === 'minimized' && <button className="restore-pill" onClick={() => setAssistantMode('open')}><Bot size={17} /> Ask KPI Assistant</button>}
+
+      {isAssistantOpen && <aside className="assistant-panel" aria-label="KPI assistant"><button className="resize-handle" aria-label="Resize assistant" onPointerDown={beginResize}><GripVertical size={17} /></button><header className="assistant-header"><div className="assistant-title"><span><Bot size={18} /></span><div><strong>KPI Assistant</strong><small>{kpi.label} · {region} · {date}</small></div></div><div className="assistant-actions"><button onClick={() => setPanelWidth(panelWidth === 600 ? 410 : 600)} aria-label="Toggle assistant width"><Maximize2 size={16} /></button><button onClick={() => setAssistantMode('minimized')} aria-label="Minimize assistant"><Minimize2 size={16} /></button><button onClick={() => { setAssistantMode('closed'); setMessages([]); setConversationId(undefined) }} aria-label="Close assistant"><X size={18} /></button></div></header><div className="assistant-context"><Sparkles size={14} /> Grounded in run {result?.run_id ?? 'not available'}</div><div className="conversation">{!messages.length && <div className="assistant-empty"><span><Sparkles size={22} /></span><h2>Ask your marketing analyst</h2><p>I’ll explain the movement, distinguish evidence from hypotheses, and surface safe next steps.</p></div>}{messages.map(message => <article key={message.id} className={`message ${message.role}`}><p>{message.text}</p>{message.citations?.length ? <details><summary>{message.citations.length} evidence reference{message.citations.length === 1 ? '' : 's'}</summary>{message.citations.map((citation, index) => <small key={`${citation.source_path}-${index}`}>{citation.evidence_type}: {citation.source_path}{citation.line_or_row_ref ? ` · ${citation.line_or_row_ref}` : ''}</small>)}</details> : null}{message.limitations?.length ? <div className="limitations"><strong>Limits</strong>{message.limitations.map(item => <small key={item}>{item}</small>)}</div> : null}</article>)}{asking && <div className="thinking"><i /><i /><i /></div>}<div ref={conversationEnd} /></div><div className="assistant-suggestions">{['What changed?', 'Is the cause proven?', 'What should I verify next?'].map(item => <button key={item} onClick={() => void askQuestion(item)}>{item}</button>)}</div><Composer value={draft} setValue={setDraft} submit={() => void askQuestion()} panel disabled={asking} /></aside>}
+    </main>
   </div>
 }

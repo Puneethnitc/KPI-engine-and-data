@@ -13,6 +13,8 @@ from kpi_engine.pipeline import KPIEnginePipeline
 from backend.config import ACCESS_CSV, DEFAULT_CATEGORY, DEFAULT_DATE, DEFAULT_PERSONA, DEFAULT_REGION, ENGINE_REGISTRY_DIR, EVIDENCE_CSV, FEEDBACK_LOG_PATH, SALES_CSV
 from backend.storage import get_run, save_diagnosis_run
 
+SUPPORTED_PERSONAS = ("CFO", "marketing_manager")
+
 
 def _build_pipeline() -> KPIEnginePipeline:
     return KPIEnginePipeline(
@@ -63,7 +65,7 @@ def get_available_filters() -> Dict[str, list[str]]:
         "regions": regions,
         "categories": categories,
         "dates": dates,
-        "persona": [DEFAULT_PERSONA],
+        "persona": list(SUPPORTED_PERSONAS),
         "default": {
             "region": DEFAULT_REGION,
             "category": DEFAULT_CATEGORY,
@@ -86,8 +88,8 @@ def _validate_scope(target_date: str, region: str, category: str, persona: str) 
         raise ValueError(f"Unsupported category: {category}")
     if target_date not in filters["dates"]:
         raise ValueError(f"Unsupported target_date: {target_date}")
-    if persona != DEFAULT_PERSONA:
-        raise ValueError("Demo backend enforces the default server-side identity as CFO")
+    if persona not in SUPPORTED_PERSONAS:
+        raise ValueError(f"Unsupported persona: {persona}")
 
 
 def diagnose_scope(
