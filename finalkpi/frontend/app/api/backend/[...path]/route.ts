@@ -6,8 +6,12 @@ export const dynamic = 'force-dynamic'
 const BACKEND_URL = process.env.KPI_BACKEND_URL ?? 'http://127.0.0.1:8000'
 const ALLOWED_ROOTS = new Set(['filters', 'kpis', 'diagnoses', 'chat', 'conversations', 'feedback'])
 
-async function proxy(request: NextRequest, context: RouteContext<'/api/backend/[...path]'>) {
-  const { path } = await context.params
+async function proxy(request: NextRequest) {
+  const segments = request.nextUrl.pathname
+    .replace(/^\/api\/backend\/?/, '')
+    .split('/')
+    .filter(Boolean)
+  const path = segments[0] === 'api' ? segments.slice(1) : segments
   if (!path.length || !ALLOWED_ROOTS.has(path[0])) {
     return Response.json({ detail: 'Unsupported backend route.' }, { status: 404 })
   }
