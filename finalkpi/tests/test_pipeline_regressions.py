@@ -11,6 +11,7 @@ import pandas as pd
 import yaml
 
 from kpi_engine.normalize import DataNormalizer
+from kpi_engine.access import AccessController
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import daily_values
 from kpi_engine.decompose import DeterministicDecomposer
@@ -509,6 +510,34 @@ class PipelineRegressions(unittest.TestCase):
         self.assertEqual(normal.status, "DRIFT")
         self.assertEqual(wider.status, "AGREED")
 
+    def test_snapshot_reconciliation_requires_cutoff_and_unit_match(self):
+        daily = pd.DataFrame({
+            "date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+            "region": ["North", "North", "North"],
+            "category": ["Electronics", "Electronics", "Electronics"],
+            "available_at": pd.to_datetime(["2024-01-02 00:00:00", "2024-01-02 00:00:00", "2024-01-02 00:00:00"]),
+            "net_sales_revenue": [100.0, 100.0, 100.0],
+            "unit": ["USD", "USD", "USD"],
+        })
+        finance = pd.DataFrame({
+            "date": pd.to_datetime(["2024-01-01"]),
+            "month_end": pd.to_datetime(["2024-01-31"]),
+            "region": ["North"],
+            "category": ["Electronics"],
+            "available_at": pd.to_datetime(["2024-02-10 00:00:00"]),
+            "net_sales_revenue": [300.0],
+            "unit": ["USD"],
+        })
+        reconciler = SourceReconciler()
+        result = reconciler.reconcile_mtd(
+            daily, finance, "2024-01",
+            target_date="2024-01-31",
+            as_of="2024-02-01 00:00:00",
+            mode="snapshot",
+        )
+        self.assertEqual(result.status, "NOT_RECONCILED")
+        self.assertIn("snapshot", result.details["reason"].lower())
+
     def test_source_schema_yaml_handles_renamed_sales_columns(self):
         with tempfile.TemporaryDirectory() as directory:
             sales = pd.read_csv(self.paths["sales_csv"])
@@ -547,6 +576,62 @@ class PipelineRegressions(unittest.TestCase):
             Path(directory, "orders.yaml").write_text(source + "\nunsupported_claim: true\n")
             with self.assertRaisesRegex(ValueError, "unknown contract fields"):
                 KPIRegistry(directory)
+
+    def test_contract_loader_supports_versioned_schema_and_source_catalog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "sales_revenue_v2.yaml").write_text(
+                yaml.safe_dump({
+                    "schema_version": 2,
+                    "kpi_id": "sales_revenue_v2",
+                    "version": 2,
+                    "definition": "Daily net sales revenue.",
+                    "formula": "net_sales_revenue # descriptive text",
+                    "unit": "INR",
+                    "grain": "daily",
+                    "source": "sales_daily",
+                    "dimensions": ["region", "category"],
+                    "materiality": {"z_threshold": 2.5, "abs_threshold": 500.0},
+                    "seasonal_period": 7,
+                    "min_history_periods": 30,
+                    "owner": "regional_manager",
+                    "access_tags": ["region_scoped"],
+                    "calculation": {
+                        "operator": "sum",
+                        "value_column": "net_sales_revenue",
+                        "formula": "net_sales_revenue",
+                    },
+                    "source_catalog": {
+                        "source_id": "sales_daily",
+                        "format": "csv",
+                        "grain": "daily",
+                        "dimensions": ["region", "category"],
+                        "natural_key": ["date", "region", "category"],
+                        "unit": "INR",
+                        "fields": {
+                            "date": {"type": "date", "required": True},
+                            "region": {"type": "string", "required": True},
+                            "category": {"type": "string", "required": True},
+                            "available_at": {"type": "datetime", "required": True},
+                            "net_sales_revenue": {"type": "float", "required": True},
+                        },
+                        "availability": {"field": "available_at", "cutoff_policy": "as_of"},
+                        "missing_data": {"null_policy": "reject", "partial_group_policy": "reject"},
+                    },
+                    "comparison_policy": {
+                        "period": "same_slice_closed_month_only",
+                        "weighting": "none",
+                        "completeness": "required",
+                    },
+                    "candidate_drivers": [],
+                })
+            )
+            registry = KPIRegistry(directory)
+            contract = registry.get("sales_revenue_v2")
+            self.assertEqual(contract.schema_version, 2)
+            self.assertEqual(contract.calculation.operator, "sum")
+            self.assertEqual(contract.source_catalog.source_id, "sales_daily")
+            self.assertEqual(contract.comparison_policy.period, "same_slice_closed_month_only")
+            self.assertEqual(contract.formula, "net_sales_revenue # descriptive text")
 
     def test_closed_month_reconciles_after_posting(self):
         result = self.run_case(
@@ -641,6 +726,45 @@ class PipelineRegressions(unittest.TestCase):
             sales.to_csv(path, index=False)
             with self.assertRaisesRegex(ValueError, "available_at"):
                 DataNormalizer().load_and_normalize_sales(str(path))
+
+    def test_sales_rejects_non_finite_numeric_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sales = pd.read_csv(self.paths["sales_csv"])
+            sales.loc[0, "net_sales_revenue"] = float("nan")
+            path = Path(directory, "sales_bad_numeric.csv")
+            sales.to_csv(path, index=False)
+            with self.assertRaisesRegex(ValueError, "non-finite"):
+                DataNormalizer().load_and_normalize_sales(str(path))
+
+    def test_finance_revision_keeps_latest_posting_for_same_slice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            finance = pd.DataFrame({
+                "region": ["North", "North"],
+                "category": ["Electronics", "Electronics"],
+                "month_start": ["2024-01-01", "2024-01-01"],
+                "month_end": ["2024-01-31", "2024-01-31"],
+                "net_sales_revenue": [100.0, 150.0],
+                "available_at": ["2024-01-01 00:00:00", "2024-01-05 00:00:00"],
+                "revision": [1, 2],
+            })
+            path = Path(directory, "finance_revision.csv")
+            finance.to_csv(path, index=False)
+            result = DataNormalizer().load_and_normalize_finance(str(path))
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result.iloc[0]["net_sales_revenue"], 150.0)
+
+    def test_category_scoped_role_rejects_omitted_category(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "access_control.csv")
+            pd.DataFrame({
+                "region": ["North"],
+                "owner_role": ["regional_manager_north"],
+                "can_view_categories": ["Electronics"],
+            }).to_csv(path, index=False)
+            access = AccessController(str(path))
+            decision = access.check("regional_manager_north", {"region": "North"})
+            self.assertFalse(decision.allowed)
+            self.assertIn("category", decision.reason.lower())
 
     def test_future_duplicate_does_not_break_historical_replay(self):
         with tempfile.TemporaryDirectory() as directory:

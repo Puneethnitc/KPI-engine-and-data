@@ -1,3 +1,11 @@
+# IMPLEMENTATION HANDOFF — review suggestions
+# Current: five driver IDs map to fixed owners and review/proposal wording.
+# Next: use a small validated action catalog referenced by driver contracts;
+# contract owner is not currently the source of these action owners. Keep a
+# generic evidence-collection fallback for drivers with no configured action.
+# Check: rejected hypotheses cannot trigger their own proposals; suggestions
+# cite their evidence and never fabricate recovery amounts or execute actions.
+
 """Human-review recommendations from a closed, non-executing lever library."""
 
 from dataclasses import asdict, dataclass

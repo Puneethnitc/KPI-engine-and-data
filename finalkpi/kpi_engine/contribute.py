@@ -1,3 +1,15 @@
+# IMPLEMENTATION HANDOFF — modeled driver contributions
+# Current: caller supplies all 2^n coalition outcomes for 2-4 drivers. Each effect
+# is the weighted marginal outcome change across subsets; effects sum to the
+# full-minus-empty model outcome. Observed minus modeled remains a residual.
+# Next: define model ID/version, training/as-of scope, scenario baseline and input
+# provenance before connecting a coalition provider. There is no fitted provider
+# here today. Missing model outcomes should remain NOT_CALCULABLE in a future API.
+# Share-of-observed can be negative or exceed 100%; never normalize it to hide
+# offsetting effects or residuals. Preserve the MODEL_BASED_SCENARIO claim label.
+# Check: complete coalition coverage, symmetry, null driver, efficiency, zero
+# observed movement and mismatched scope/unit/model lineage.
+
 """Exact scenario Shapley; never infer causal values from correlations."""
 
 from dataclasses import dataclass

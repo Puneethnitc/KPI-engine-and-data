@@ -1,3 +1,11 @@
+# IMPLEMENTATION HANDOFF — evaluation boundary
+# Current: report per-KPI train/holdout confusion counts with abstentions separate.
+# Next: add contract/policy/source versions and case coverage to evaluation runs;
+# use independent labels for calibration, plus hand-calculated metric fixtures
+# for DuckDB parity. Data-generator event names are not automatic ground truth.
+# Check: duplicate cases fail, abstentions stay visible, held-out cases are not
+# used to choose thresholds, and metric correctness is evaluated separately.
+
 """Evaluate alerts only against independently reviewed, per-KPI labels."""
 
 from collections import Counter

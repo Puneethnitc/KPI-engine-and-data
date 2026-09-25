@@ -45,6 +45,16 @@ class EvidenceQualityTests(unittest.TestCase):
         self.assertEqual(assessment.status, "INSUFFICIENT")
         self.assertEqual(assessment.sub_scores["temporal_precedence"], 0)
 
+    def test_confidence_uses_resolved_verification_policy(self):
+        policy = type("Policy", (), {"min_pre_days": 10, "min_post_days": 5})()
+        assessment = ConfidenceEngine.assess(CausalVerificationResult(
+            "traffic_drop", "SUPPORTED_CONDITIONAL", "CHECKS_PASSED", "Passed",
+            did_effect=-10, confidence_interval=(-15, -5), pre_days=10,
+            post_days=5, temporal_precedence_passed=True,
+            policy=policy,
+        ))
+        self.assertEqual(assessment.sub_scores["outcome_window_coverage"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

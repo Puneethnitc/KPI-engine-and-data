@@ -5,10 +5,18 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List
 
+import pandas as pd
+
 try:
     from openai import OpenAI
 except Exception:  # pragma: no cover
     OpenAI = None
+
+from kpi_engine.access import AccessController
+from kpi_engine.contracts import KPIRegistry
+from kpi_engine.query import QueryRequest
+from kpi_engine.query.catalog import SourceCatalog
+from kpi_engine.query.service import QueryService
 
 from backend.prompts import SYSTEM_PROMPT
 from backend.query_router import DynamicQueryRouter
@@ -38,6 +46,74 @@ class DynamicRAGPipeline:
             line_or_row_ref="definition",
             kpi=kpi_id,
         )
+
+    def _metric_summary(self, request: ChatRequest) -> str | None:
+        if not request.active_kpi:
+            return None
+        registry = KPIRegistry(str(Path(__file__).resolve().parents[1] / "kpi_engine" / "registry"))
+        try:
+            contract = registry.get(request.active_kpi)
+        except Exception:
+            return None
+        catalog = SourceCatalog()
+        if contract.source not in catalog.sources:
+            return None
+
+        scope: Dict[str, str] = {}
+        for key in ("region", "category"):
+            value = getattr(request, f"active_{key}", None)
+            if value and value not in {"ALL", "all", None}:
+                scope[key] = str(value)
+
+        access = AccessController(str(Path(__file__).resolve().parents[1] / "data" / "access_control.csv")).check(
+            request.user_persona or "CFO",
+            scope,
+        )
+        if not access.allowed:
+            return None
+
+        query = QueryRequest(
+            source_id=contract.source,
+            aggregation=contract.aggregation,
+            value_column=contract.value_column,
+            numerator_column=getattr(contract, "numerator_column", None),
+            denominator_column=getattr(contract, "denominator_column", None),
+            weight_column=getattr(contract, "weight_column", None),
+            scope=scope or None,
+            as_of=request.as_of_timestamp,
+        )
+
+        try:
+            prepared = QueryService(catalog).prepare_metric(query)
+        except Exception:
+            return None
+
+        rows = prepared.rows
+        if not rows:
+            return None
+
+        if request.active_date:
+            target_date = pd.Timestamp(request.active_date).normalize()
+            date_rows = [
+                row for row in rows
+                if pd.Timestamp(row.get(catalog.get_source(contract.source).date_column)).normalize() == target_date
+            ]
+            if date_rows:
+                rows = date_rows
+            elif rows:
+                rows = [rows[-1]]
+
+        metric_row = rows[-1]
+        value = metric_row.get("metric_value")
+        if value is None:
+            return None
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        location = " / ".join(f"{key}={scope[key]}" for key in sorted(scope)) or "global"
+        return f"The current {contract.kpi_id} value for {location} on {request.active_date or 'the selected date'} is {numeric_value:,.6f} {contract.unit}."
 
     def _fallback_answer(self, request: ChatRequest, analysis, default_citations: List[Dict[str, Any]]) -> ChatResponse:
         diagnosis = request.diagnosis_json or {}
@@ -129,6 +205,49 @@ class DynamicRAGPipeline:
         intent_instruction = ""
         if analysis.intent == QueryIntent.ACTION_RECOMMENDATION:
             intent_instruction = "\nSPECIAL INSTRUCTION: The user is asking for actions/recommendations. State human review boundaries and required verification steps. Do NOT prescribe business actions."
+
+        question_lower = request.question.lower()
+        direct_value_request = (
+            analysis.intent == QueryIntent.SCOPED_DATA_QUERY
+            or any(phrase in question_lower for phrase in [
+                "what is the value",
+                "what was the value",
+                "what is the total",
+                "what was the total",
+                "how much",
+                "current value",
+                "value for",
+                "total for",
+                "average for",
+                "sum for",
+            ])
+        )
+        fallback_like_question = any(phrase in question_lower for phrase in [
+            "what changed",
+            "how is",
+            "formula",
+            "calculated",
+            "cause",
+            "delta",
+            "did traffic cause",
+        ])
+
+        if direct_value_request and not fallback_like_question:
+            metric_summary = self._metric_summary(request)
+            if metric_summary:
+                evidence_status = self._diagnosis_verdict(request)
+                return ChatResponse(
+                    answer=metric_summary,
+                    citations=[Citation(**c) for c in default_citations] if default_citations else [
+                        Citation(source_path=f"source/{request.active_kpi}", evidence_type="data_summary", line_or_row_ref="metric_service", kpi=request.active_kpi)
+                    ],
+                    evidence_status=evidence_status,
+                    limitations=["This numerical value was resolved from the shared source catalog and metric service for the active scope."],
+                    suggested_followups=[
+                        "What changed versus the baseline for this KPI?",
+                        "How does this compare to the diagnosis verdict?",
+                    ],
+                )
 
         user_prompt = f"""DYNAMIC INTENT: {analysis.intent}
 {intent_instruction}

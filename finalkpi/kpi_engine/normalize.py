@@ -1,3 +1,15 @@
+# IMPLEMENTATION HANDOFF — source preparation
+# Current: reads three CSV roles, renames mapped columns, applies as-of filters,
+# validates fixed keys, and repeats weekly rows across seven dates for lookup.
+# Finance stays separate. The sales/marketing join checks one-to-one cardinality.
+# Next: move source metadata, types, keys, calendar and availability rules into a
+# source catalog; let the query service prepare scoped data once per request.
+# Define missing versus zero, partial segment coverage, timestamp/timezone rules,
+# and snapshot revision selection before aggregation. Reject invalid numeric data.
+# Check: alternate dimensions, duplicate/revised keys, missing rows, non-finite
+# measures, overlapping weeks and join fan-out; never silently repair these.
+# See duckdb/README.md. Preserve current adapters until parity is demonstrated.
+
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple
@@ -36,7 +48,24 @@ class DataNormalizer:
     def _require_unique(frame: pd.DataFrame, source: str, columns: list[str]) -> None:
         if frame.duplicated(subset=columns).any():
             raise ValueError(f"{source}: duplicate rows at grain {columns}")
-    
+
+    @staticmethod
+    def _validate_numeric_columns(frame: pd.DataFrame, source: str, columns: tuple[str, ...]) -> None:
+        for column in columns:
+            if column not in frame.columns:
+                continue
+            candidate = frame[column]
+            if candidate.empty:
+                continue
+            if pd.api.types.is_bool_dtype(candidate):
+                continue
+            try:
+                numeric = pd.to_numeric(candidate, errors='raise')
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(numeric.to_numpy(dtype=float)).all():
+                raise ValueError(f"{source}: non-finite numeric values are not allowed in {column}")
+
     @staticmethod
     def ratio_safe_division(numerator: pd.Series, denominator: pd.Series, epsilon: float = 1e-6) -> pd.Series:
         """Ratio-safe division formula to prevent ZeroDenominator panics[cite: 3]."""
@@ -55,10 +84,17 @@ class DataNormalizer:
             raise ValueError("sales_daily: date, dimension, and availability cannot be null")
         if 'grain' in df.columns and not df['grain'].eq('daily').all():
             raise ValueError("sales_daily: declared row grain must be daily")
+        self._validate_numeric_columns(df, "sales_daily", tuple(
+            col for col in df.columns
+            if col not in {"date", "region", "category", "available_at", "source_system", "source_grain", "grain"}
+        ))
         if as_of is not None:
             df = df[df['available_at'] <= pd.Timestamp(as_of)].copy()
         self._require_unique(df, "sales_daily", ['date', 'region', 'category'])
         
+        # NEXT: declare derived fields in the contract. This fallback calls
+        # revenue per UNIT "aov"; average order value normally uses orders.
+        # Preserve current values during migration, then resolve naming explicitly.
         if 'aov' not in df.columns and 'units_sold' in df.columns and 'net_sales_revenue' in df.columns:
             df['aov'] = self.ratio_safe_division(df['net_sales_revenue'], df['units_sold'])
 
@@ -85,6 +121,10 @@ class DataNormalizer:
             week_end = pd.to_datetime(df['week_end'], errors='raise')
             if week_end.isna().any() or not week_end.eq(df['week_start'] + pd.Timedelta(days=6)).all():
                 raise ValueError("marketing_weekly: week_end must be six days after week_start")
+        self._validate_numeric_columns(df, "marketing_weekly", tuple(
+            col for col in df.columns
+            if col not in {"week_start", "week_end", "region", "category", "available_at", "source_system", "source_grain", "grain"}
+        ))
         if as_of is not None:
             df = df[df['available_at'] <= pd.Timestamp(as_of)].copy()
         self._require_unique(df, "marketing_weekly", ['week_start', 'region', 'category'])
@@ -121,7 +161,11 @@ class DataNormalizer:
             raise ValueError("finance_monthly: period and dimensions cannot be null")
         if 'grain' in df.columns and not df['grain'].eq('monthly').all():
             raise ValueError("finance_monthly: declared row grain must be monthly")
-            
+        self._validate_numeric_columns(df, "finance_monthly", tuple(
+            col for col in df.columns
+            if col not in {"region", "category", "month_end", "date", "month", "month_start", "period", "available_at", "closes_at", "status", "source_system", "source_grain", "grain"}
+        ))
+
         if 'source_system' not in df.columns:
             df['source_system'] = 'finance_monthly'
         df['source_grain'] = 'monthly'
@@ -136,6 +180,14 @@ class DataNormalizer:
                 df.loc[df['status'] != 'closed', 'available_at'] = pd.NaT
         else:
             raise ValueError("finance_monthly: available_at or closes_at is required")
+        duplicate_keys = ['region', 'category', 'month_end']
+        if df.duplicated(subset=duplicate_keys).any():
+            if 'revision' in df.columns:
+                df = df.sort_values('revision').drop_duplicates(subset=duplicate_keys, keep='last')
+            elif 'available_at' in df.columns:
+                df = df.sort_values('available_at').drop_duplicates(subset=duplicate_keys, keep='last')
+            else:
+                raise ValueError("finance_monthly: duplicate postings for the same period and slice require a revision or timestamp")
         if as_of is not None:
             df = df[df['available_at'] <= pd.Timestamp(as_of)].copy()
         return df
@@ -166,6 +218,8 @@ class DataNormalizer:
 
         marketing_df = self.load_and_normalize_marketing(marketing_path, date_range, as_of=as_of)
 
+        # NEXT: obtain keys and cardinality from the source relationship contract.
+        # Keep weekly measures native for calculation; expanded copies are lookups.
         merge_keys = ['date', 'region', 'category']
         # BUGFIX: both frames also carry 'category'. Without joining on it too,
         # every sales row fans out against every marketing category sharing

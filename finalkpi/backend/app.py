@@ -31,10 +31,12 @@ pipeline = DynamicRAGPipeline(router=router, context_builder=context_builder)
 
 class DiagnosisRequest(BaseModel):
     kpis: List[str] = Field(default_factory=lambda: ["all"])
-    target_date: str = "2023-07-24"
-    region: str = "North"
-    category: str = "Electronics"
+    target_date: Optional[str] = None
+    region: Optional[str] = None
+    category: Optional[str] = None
     persona: str = "CFO"
+    scope: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    as_of: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
@@ -48,8 +50,10 @@ class ChatRequest(BaseModel):
     active_date: Optional[str] = None
     active_region: Optional[str] = None
     active_category: Optional[str] = None
+    scope: Optional[Dict[str, Any]] = Field(default_factory=dict)
     user_access_tags: List[str] = Field(default_factory=lambda: ["public", "internal"])
     as_of_timestamp: Optional[str] = None
+    as_of: Optional[str] = None
 
 
 class FeedbackRequest(BaseModel):
@@ -97,6 +101,8 @@ def api_diagnoses(payload: DiagnosisRequest) -> Dict[str, Any]:
             region=payload.region,
             category=payload.category,
             persona=payload.persona,
+            scope=payload.scope,
+            as_of=payload.as_of,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -121,18 +127,18 @@ def api_chat(payload: ChatRequest) -> Dict[str, Any]:
             diagnosis_json = run_record if run_record else saved.get("diagnosis_json")
             active_kpi = payload.active_kpi or run_record.get("kpi_id") or saved.get("kpi_id")
             active_date = payload.active_date or run_record.get("target_date") or saved.get("target_date")
-            active_region = payload.active_region or saved.get("scope", {}).get("region") or run_record.get("segment", {}).get("region") or "ALL"
-            active_category = payload.active_category or saved.get("scope", {}).get("category") or run_record.get("segment", {}).get("category") or "ALL"
-            as_of_timestamp = payload.as_of_timestamp or run_record.get("as_of") or "2023-07-25T12:00:00"
+            active_region = payload.active_region or saved.get("scope", {}).get("region") or run_record.get("segment", {}).get("region") or (payload.scope or {}).get("region") or "ALL"
+            active_category = payload.active_category or saved.get("scope", {}).get("category") or run_record.get("segment", {}).get("category") or (payload.scope or {}).get("category") or "ALL"
+            as_of_timestamp = payload.as_of_timestamp or payload.as_of or run_record.get("as_of") or (payload.scope or {}).get("as_of") or "2023-07-25T12:00:00"
         else:
             diagnosis_json = payload.diagnosis_json
             if diagnosis_json is None:
                 raise ValueError("Either run_id or diagnosis_json is required.")
             active_kpi = payload.active_kpi or diagnosis_json.get("kpi_id")
             active_date = payload.active_date or diagnosis_json.get("target_date")
-            active_region = payload.active_region or diagnosis_json.get("segment", {}).get("region") or "ALL"
-            active_category = payload.active_category or diagnosis_json.get("segment", {}).get("category") or "ALL"
-            as_of_timestamp = payload.as_of_timestamp or diagnosis_json.get("as_of") or "2023-07-25T12:00:00"
+            active_region = payload.active_region or diagnosis_json.get("segment", {}).get("region") or (payload.scope or {}).get("region") or "ALL"
+            active_category = payload.active_category or diagnosis_json.get("segment", {}).get("category") or (payload.scope or {}).get("category") or "ALL"
+            as_of_timestamp = payload.as_of_timestamp or payload.as_of or diagnosis_json.get("as_of") or (payload.scope or {}).get("as_of") or "2023-07-25T12:00:00"
 
         if not active_kpi or not active_date:
             raise ValueError("A valid active_kpi and active_date are required for grounded chat.")

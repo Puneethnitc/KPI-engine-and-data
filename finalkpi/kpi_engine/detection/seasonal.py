@@ -1,3 +1,12 @@
+# IMPLEMENTATION HANDOFF — seasonal review evidence
+# Current: MSTL forecast with prior-only walk-forward errors; fixed calibration
+# 21 days, minimum fit 60, default window 90 and trend span 4*period+1.
+# Next: resolve supported seasonality/calendars and fit/calibration policy;
+# reuse the prepared series, retain chronological calibration and explicit gaps.
+# Do not make this branch the primary alert by accident during SQL migration.
+# Check: fit never includes target/future values, declared periods are supported,
+# missing/non-finite history abstains, and policy changes have held-out evidence.
+
 """As-of seasonal forecasts calibrated with prior one-step forecast errors."""
 
 from dataclasses import dataclass

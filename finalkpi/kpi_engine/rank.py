@@ -1,7 +1,20 @@
+# IMPLEMENTATION HANDOFF — candidate associations
+# Current: correlate first differences, search nonnegative lags, rank by |r|;
+# weekly observations are deduplicated and compared at weekly grain.
+# Next: declare window (120 days), lags (0-7 days), minimum pairs (14 daily/8
+# weekly), |r| filter (0.3), and movement baseline (7 observations) as policies.
+# Get native-grain series and dimensions from the query service. Reindex a FULL
+# weekly calendar before diff/shift; missing weeks must not compress elapsed lag.
+# Add per-driver weighting, source-qualified column resolution and dependency
+# checks for mechanically related metrics. A winning lag is exploratory evidence;
+# validate stability across windows before treating ranking as a strong signal.
+# Check: weekly gaps, unequal weights, target-period availability, source-column
+# collisions, component leakage and a driver whose current movement is absent.
+
 """Lagged associations only; never promote a candidate driver to a cause."""
 
-from dataclasses import dataclass
-from typing import Dict, List
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -34,6 +47,55 @@ class RankingResult:
     exclusions: List[DriverExclusion]
 
 
+@dataclass
+class RankingPolicy:
+    max_lag: int = 7
+    window_days: int = 120
+    min_pairs: int = 14
+    weekly_min_pairs: int = 8
+    threshold: float = 0.3
+    source_grain: str = "daily"
+    allowed_lags: Optional[List[int]] = None
+
+    @classmethod
+    def from_contract(cls, contract: KPIContract | None, driver_spec: Optional[Dict[str, Any]] = None) -> "RankingPolicy":
+        config: Dict[str, Any] = {}
+        if contract is not None and getattr(contract, "comparison_policy", None) is not None:
+            cfg = getattr(contract.comparison_policy, "config", {}) or {}
+            if isinstance(cfg, dict):
+                config.update(cfg)
+        if contract is not None and hasattr(contract, "ranking_policy") and contract.ranking_policy:
+            cfg = getattr(contract, "ranking_policy")
+            if isinstance(cfg, dict):
+                config.update(cfg)
+        if isinstance(driver_spec, dict):
+            config.update({
+                k: v for k, v in driver_spec.items() if k in {
+                    "max_lag", "window_days", "min_pairs", "weekly_min_pairs", "threshold", "source_grain", "allowed_lags"
+                }
+            })
+        if isinstance(driver_spec, dict):
+            nested = driver_spec.get("ranking") or driver_spec.get("policy") or driver_spec.get("lag_policy")
+            if isinstance(nested, dict):
+                config.update({
+                    k: v for k, v in nested.items() if k in {
+                        "max_lag", "window_days", "min_pairs", "weekly_min_pairs", "threshold", "source_grain", "allowed_lags"
+                    }
+                })
+        allowed_lags = config.get("allowed_lags")
+        if isinstance(allowed_lags, str):
+            allowed_lags = [int(part.strip()) for part in allowed_lags.split(",") if part.strip()]
+        return cls(
+            max_lag=int(config.get("max_lag", 7)),
+            window_days=int(config.get("window_days", 120)),
+            min_pairs=int(config.get("min_pairs", 14)),
+            weekly_min_pairs=int(config.get("weekly_min_pairs", 8)),
+            threshold=float(config.get("threshold", 0.3)),
+            source_grain=str(config.get("source_grain", "daily")),
+            allowed_lags=list(allowed_lags) if allowed_lags is not None else None,
+        )
+
+
 class CorrelationalRanker:
     """Rank changes in declared drivers against KPI changes at their native grain."""
 
@@ -42,6 +104,8 @@ class CorrelationalRanker:
         kpi_series: pd.Series, driver_series: pd.Series, max_lag: int = 7,
         min_pairs: int = 14,
     ) -> tuple[float, int, int]:
+        # Lag selection maximizes correlation on this same sample; it does not
+        # establish causal direction or provide a multiple-testing correction.
         best = (0.0, 0, 0)
         for lag in range(max_lag + 1):
             paired = pd.concat([kpi_series, driver_series.shift(lag)], axis=1).dropna()
@@ -63,6 +127,50 @@ class CorrelationalRanker:
         if abs(baseline) < 1e-9:
             return None
         return round(100.0 * (float(available.iloc[-1]) - baseline) / abs(baseline), 2)
+
+    @staticmethod
+    def _resolve_driver_column(
+        frame: pd.DataFrame,
+        driver_id: str,
+        spec: Dict[str, Any],
+        driver_columns: Optional[Dict[str, str]] = None,
+    ) -> str | None:
+        raw_column = spec.get("column") or (driver_columns or {}).get(driver_id, driver_id)
+        if raw_column in frame:
+            return str(raw_column)
+        source = str(spec.get("source") or "").strip()
+        column_name = str(raw_column).strip()
+        candidates: List[str] = []
+        if source:
+            for prefix in (source, source.replace("_weekly", "").replace("_daily", ""), source.replace("-", "_")):
+                if prefix:
+                    candidates.extend([
+                        f"{prefix}_{column_name}",
+                        f"{prefix}.{column_name}",
+                        f"{prefix}__{column_name}",
+                    ])
+        candidates.extend([
+            f"{column_name}_{source}" if source else column_name,
+            f"{column_name}.{source}" if source else column_name,
+        ])
+        for candidate in candidates:
+            if candidate in frame:
+                return candidate
+        return str(raw_column) if raw_column is not None else None
+
+    @staticmethod
+    def _resolve_policy(contract: KPIContract | None, driver_spec: Optional[Dict[str, Any]] = None) -> RankingPolicy:
+        return RankingPolicy.from_contract(contract, driver_spec)
+
+    @staticmethod
+    def _lag_candidates(allowed_lags: Optional[List[int]], max_lag: int) -> List[int]:
+        if not allowed_lags:
+            return list(range(max_lag + 1))
+        result = []
+        for lag in sorted(set(int(value) for value in allowed_lags)):
+            if 0 <= lag <= max_lag:
+                result.append(lag)
+        return result or list(range(max_lag + 1))
 
     def evaluate_candidates(
         self,
@@ -96,7 +204,17 @@ class CorrelationalRanker:
 
         for driver_id in candidate_cols:
             spec = specs.get(driver_id, {})
-            column = spec.get("column") or (driver_columns or {}).get(driver_id, driver_id)
+            policy = self._resolve_policy(contract, spec)
+            active_max_lag = int(spec.get("max_lag", policy.max_lag)) if isinstance(spec, dict) else policy.max_lag
+            active_window_days = int(spec.get("window_days", policy.window_days)) if isinstance(spec, dict) else policy.window_days
+            active_min_pairs = int(spec.get("min_pairs", policy.min_pairs)) if isinstance(spec, dict) else policy.min_pairs
+            active_threshold = float(spec.get("threshold", policy.threshold)) if isinstance(spec, dict) else policy.threshold
+            effective_max_lag = max(0, min(active_max_lag, max_lag if max_lag is not None else active_max_lag))
+            if target_date is not None:
+                effective_window_days = max(active_window_days, int(window_days))
+            else:
+                effective_window_days = active_window_days
+            column = self._resolve_driver_column(frame, driver_id, spec, driver_columns)
             if column not in frame:
                 exclusions.append(DriverExclusion(
                     driver_id, "MISSING_COLUMN", f"Declared driver column {column} is unavailable"
@@ -108,22 +226,42 @@ class CorrelationalRanker:
                 ))
                 continue
             aggregation = spec.get("aggregation", "mean")
-            grain = spec.get("grain", "daily")
+            grain = spec.get("grain", policy.source_grain)
             if aggregation not in {"sum", "mean"} or grain not in {"daily", "weekly"}:
                 raise ValueError(f"Unsupported driver aggregation or grain: {driver_id}")
+
+            availability = spec.get("availability") or spec.get("lag_availability") or {}
+            allowed_lags = self._lag_candidates(spec.get("allowed_lags") or policy.allowed_lags, effective_max_lag)
+            if isinstance(availability, dict):
+                unavailable = set(availability.get("unavailable_lags", []) or [])
+                if unavailable:
+                    allowed_lags = [lag for lag in allowed_lags if lag not in set(int(v) for v in unavailable)]
+            if not allowed_lags:
+                exclusions.append(DriverExclusion(
+                    driver_id, "LAG_UNAVAILABLE",
+                    "No valid lags are available for this driver at the current comparison window",
+                ))
+                continue
 
             if grain == "daily":
                 grouped = frame.groupby("date")[column]
                 driver = (grouped.sum(min_count=1) if aggregation == "sum" else grouped.mean()).reindex(calendar)
-                # Changes reduce correlations arising solely from a shared trend.
                 kpi_changes = kpi_daily.diff()
                 driver_changes = driver.diff()
-                correlation, lag, support = self.calculate_lagged_correlation(
-                    kpi_changes, driver_changes, max_lag=max_lag, min_pairs=14
-                )
+                best = (0.0, 0, 0)
+                for lag in allowed_lags:
+                    paired = pd.concat([kpi_changes, driver_changes.shift(lag)], axis=1).dropna()
+                    if len(paired) < active_min_pairs:
+                        continue
+                    if paired.iloc[:, 0].std() < 1e-9 or paired.iloc[:, 1].std() < 1e-9:
+                        continue
+                    correlation = paired.iloc[:, 0].corr(paired.iloc[:, 1])
+                    if pd.notna(correlation) and abs(correlation) > abs(best[0]):
+                        best = (float(correlation), lag, len(paired))
+                correlation, lag, support = best
                 lag0_pairs = pd.concat([kpi_changes, driver_changes], axis=1).dropna()
                 available_pairs = len(lag0_pairs)
-                minimum_pairs = 14
+                minimum_pairs = active_min_pairs
                 lag_days = lag
             else:
                 if "week_start" not in frame:
@@ -138,7 +276,6 @@ class CorrelationalRanker:
                     ))
                     continue
                 weekly_rows["week_start"] = pd.to_datetime(weekly_rows["week_start"])
-                # One source observation per week and segment, not seven daily copies.
                 keys = [name for name in ("region", "category") if name in weekly_rows]
                 if (weekly_rows.groupby(["week_start", *keys])[column]
                         .nunique(dropna=False).gt(1).any()):
@@ -186,13 +323,20 @@ class CorrelationalRanker:
                 common = weekly_kpi.index.union(driver.index)
                 weekly_kpi = weekly_kpi.reindex(common).sort_index()
                 driver = driver.reindex(common).sort_index()
-                correlation, lag, support = self.calculate_lagged_correlation(
-                    weekly_kpi.diff(), driver.diff(), max_lag=max_lag // 7,
-                    min_pairs=8,
-                )
+                best = (0.0, 0, 0)
+                for lag in self._lag_candidates([value // 7 for value in allowed_lags], max_lag=effective_max_lag // 7):
+                    paired = pd.concat([weekly_kpi.diff(), driver.diff().shift(lag)], axis=1).dropna()
+                    if len(paired) < policy.weekly_min_pairs:
+                        continue
+                    if paired.iloc[:, 0].std() < 1e-9 or paired.iloc[:, 1].std() < 1e-9:
+                        continue
+                    correlation = paired.iloc[:, 0].corr(paired.iloc[:, 1])
+                    if pd.notna(correlation) and abs(correlation) > abs(best[0]):
+                        best = (float(correlation), lag, len(paired))
+                correlation, lag, support = best
                 lag0_pairs = pd.concat([weekly_kpi.diff(), driver.diff()], axis=1).dropna()
                 available_pairs = len(lag0_pairs)
-                minimum_pairs = 8
+                minimum_pairs = policy.weekly_min_pairs
                 lag_days = lag * 7
 
             if support == 0:
@@ -215,10 +359,10 @@ class CorrelationalRanker:
                         available_pairs,
                     ))
                 continue
-            if abs(correlation) < 0.3:
+            if abs(correlation) < active_threshold:
                 exclusions.append(DriverExclusion(
                     driver_id, "WEAK_ASSOCIATION",
-                    f"Absolute lagged correlation {abs(correlation):.4f} is below 0.3000",
+                    f"Absolute lagged correlation {abs(correlation):.4f} is below {active_threshold:.4f}",
                     support,
                 ))
                 continue

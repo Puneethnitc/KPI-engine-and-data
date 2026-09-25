@@ -1,3 +1,11 @@
+# IMPLEMENTATION HANDOFF — alert policy
+# Current: robust branch decides is_material; seasonal-only means review. A
+# non-OK robust result returns before seasonal evaluation.
+# Next: make the chosen policy explicit in resolved config and run lineage;
+# prepare a metric series once for both branches instead of aggregating twice.
+# Check: BOTH/ROBUST_ONLY/SEASONAL_ONLY/NEITHER and early abstentions retain their
+# current meaning. Any new ensemble rule is a separate calibrated behavior change.
+
 """Use robust movement for provisional alerts; retain seasonal review evidence."""
 
 from kpi_engine.detection.robust import RobustBaselineDetector
@@ -10,9 +18,11 @@ class AnomalyDetector:
         self.seasonal = SeasonalForecastDetector()
 
     def evaluate_movement(self, df, kpi_contract, target_date, dimension_slice=None,
-                          metric_col="net_sales_revenue", window_days=30):
+                          metric_col="net_sales_revenue", window_days=30,
+                          comparison_plan=None):
         robust = self.robust.evaluate_movement(
-            df, kpi_contract, target_date, dimension_slice, metric_col, window_days
+            df, kpi_contract, target_date, dimension_slice, metric_col, window_days,
+            comparison_plan=comparison_plan,
         )
         robust.robust_is_material = robust.is_material
         if robust.status != "OK":

@@ -1,3 +1,11 @@
+# IMPLEMENTATION HANDOFF — configured dataset locations
+# Current: bundled sales/marketing/finance/access files and demo scope defaults;
+# SQLite path is separately configurable and its directory is created on import.
+# Next: reference a validated source catalog and choose valid scope/date defaults
+# from metadata. Keep app storage separate from the analytic query connection.
+# Check: an alternate dataset works through configuration without path edits;
+# no stale North/Electronics/date default is silently applied to that dataset.
+
 from __future__ import annotations
 
 import os

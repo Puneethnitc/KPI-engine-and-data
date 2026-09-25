@@ -1,3 +1,15 @@
+# IMPLEMENTATION HANDOFF — local scope guard
+# Current: a CSV maps supplied roles to region/category permissions; this is not
+# authenticated identity or database row security. Contract access_tags are not
+# enforced here. The pipeline checks access before loading diagnostic sources.
+# Next: resolve an explicit allowed scope and apply it to all query-service reads,
+# including metadata, evidence, saved runs and controls. Keep local role config
+# for the prototype, but do not treat client-provided tags as proof of access.
+# Fix omitted-category semantics: a category-restricted row currently permits
+# category=None, which then allows the pipeline to include every category.
+# Check: omitted dimensions cannot broaden scope, and inaccessible control/data
+# rows never reach narratives. Do not add an authentication project in this pass.
+
 import pandas as pd
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -44,6 +56,12 @@ class AccessController:
             return AccessDecision(
                 allowed=False,
                 reason="A region is required for this role.",
+            )
+
+        if requested_category is None and not (matches['can_view_categories'] == 'ALL').any():
+            return AccessDecision(
+                allowed=False,
+                reason="A category is required for this role.",
             )
 
         for _, row in matches.iterrows():

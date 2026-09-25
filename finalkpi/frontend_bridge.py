@@ -1,3 +1,11 @@
+# IMPLEMENTATION HANDOFF — legacy demo entry point
+# Current: fixed five-KPI tuple and demo scope call a run_full_demo module.
+# Next: use registry metadata and the shared backend/query entry point; first
+# check which frontend route is active. The imported module is now under tests/,
+# so verify launch/import behavior before retaining this bridge in a migration.
+# Check: registry additions appear without editing this tuple, and alternate
+# dimensions/as-of propagate unchanged. See kpi_engine/IMPLEMENTATION_HANDOFF.md.
+
 """Small JSON bridge for the mentor-demo frontend.
 
 This runs the existing engine unchanged. It intentionally returns its evidence
@@ -7,16 +15,11 @@ verdicts instead of fabricating dashboard-friendly confidence or causal claims.
 import argparse
 import json
 
+from kpi_engine.contracts import KPIRegistry
 from run_full_demo import run
 
 
-KPI_IDS = (
-    "net_sales_revenue",
-    "orders",
-    "units_sold",
-    "traffic_total",
-    "conversion_rate",
-)
+KPI_IDS = KPIRegistry("kpi_engine/registry").list_ids()
 
 
 def main() -> None:

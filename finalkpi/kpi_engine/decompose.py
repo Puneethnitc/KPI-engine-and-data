@@ -1,3 +1,15 @@
+# IMPLEMENTATION HANDOFF — accounting contributions
+# Current: symmetric two-factor bridge and exact quantity/mix/rate Shapley bridge.
+# The latter averages marginal changes over six orders and derives rate=value/q.
+# Missing segments inherit the other period's rate; effects explain accounting
+# movement, not event causation. Two-decimal output balances rounding in rate.
+# Next: declare method, baseline, segment keys, precision and launch/exit policy;
+# consume the same comparison plan as detection. Check data completeness before
+# missing segments become zeros. Return raw effects separately from display data.
+# Keep permutation weights as mathematics; do not make them business settings.
+# Check: sum(effects)=delta at raw and displayed precision; launches, exits, zero
+# quantity with nonzero value, refunds and unavailable components are explicit.
+
 import pandas as pd
 import numpy as np
 from itertools import permutations
@@ -107,6 +119,7 @@ class DeterministicDecomposer:
         if total_q0 <= 0:
             raise ValueError("Segment bridge needs a positive baseline quantity")
 
+        # Derive exact rates from authoritative totals, not rounded display rates.
         r0 = np.divide(v0, q0, out=np.full_like(v0, np.nan), where=q0 > 0)
         r1 = np.divide(v1, q1, out=np.full_like(v1, np.nan), where=q1 > 0)
         r0 = np.where(np.isnan(r0), r1, r0)
@@ -120,6 +133,7 @@ class DeterministicDecomposer:
                 shares["mix" in active], rates["rate" in active]
             ))
 
+        # Average every factor's marginal effect across all 3! switching orders.
         effects = {name: 0.0 for name in ("quantity", "mix", "rate")}
         for order in permutations(effects):
             active: frozenset[str] = frozenset()
