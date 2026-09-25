@@ -3,10 +3,10 @@
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import AppShell, { API_BASE, identityForPersona, KPIS, State, useDemoContext } from '../../components/app-shell'
+import AppShell, { API_BASE, identityForPersona, State, useDemoContext } from '../../components/app-shell'
 
 type Investigation = { run_id: string; kpi_id: string; target_date: string; actual: number | null; expected: number | null; delta: number | null; is_material: boolean; detector_agreement?: string; reconciliation_status?: string; verdict?: string; confidence_status?: string; review_state: string; owner: string; scope: { region: string; category: string } }
-const label = (id: string) => KPIS.find(item => item[0] === id)?.[1] ?? id.replaceAll('_', ' ')
+const label = (id: string) => id.replaceAll('_', ' ').replace(/(^|\s)\S/g, character => character.toUpperCase())
 const number = (value: number | null) => value == null ? '—' : value.toLocaleString('en-IN', { maximumFractionDigits: 2 })
 const pendingStates = new Set(['UNREVIEWED', 'AWAITING_REVIEW', 'PENDING_REVIEW'])
 const staleStates = new Set(['CONTRADICTED', 'STALE', 'UNAVAILABLE_OR_MISSING', 'PARTIAL'])

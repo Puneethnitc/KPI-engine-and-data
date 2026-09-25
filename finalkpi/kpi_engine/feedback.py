@@ -1,8 +1,19 @@
+# IMPLEMENTATION HANDOFF — proposed corrections
+# Current: append JSONL feedback with pending-review status and an actual UTC
+# creation time; historical diagnoses and contract definitions remain untouched.
+# Next: align record IDs and review lifecycle with backend/storage.py's separate
+# feedback path. Reference run/contract/source versions and validate run linkage.
+# SQLite may keep this transactional work when DuckDB handles analytics.
+# Check: feedback persists as a proposal; no automatic causal label or contract
+# rewrite, and original/corrected text must remain a paired audit record.
+
 import json
 import os
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
 
+
+# Stored feedback shape; corrections are proposed evidence for later review.
 @dataclass
 class FeedbackRecord:
     run_id: str
@@ -16,6 +27,8 @@ class FeedbackRecord:
     corrected_text: str | None = None
     review_status: str = "PENDING_REVIEW"
 
+
+# Persistence boundary; callers choose the destination through configuration.
 class FeedbackLogger:
     """Append proposed corrections without mutating historical output."""
 

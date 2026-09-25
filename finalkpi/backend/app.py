@@ -13,7 +13,7 @@ from backend.rag_pipeline import DynamicRAGPipeline
 from backend.query_router import DynamicQueryRouter
 from backend.retrieval import ContextBuilder
 from backend.schemas import ChatRequest as RagChatRequest
-from backend.service import authorize_scope, diagnose_scope, get_available_filters, get_authorized_diagnosis, get_diagnosis, get_evidence, get_feedback, get_investigations, get_insights, get_marketing, get_registered_kpis, get_timeseries, identity_persona
+from backend.service import authorize_scope, build_marketing_brief, diagnose_scope, get_available_filters, get_authorized_diagnosis, get_diagnosis, get_evidence, get_feedback, get_investigations, get_insights, get_marketing, get_registered_kpis, get_timeseries, identity_persona
 from backend.storage import append_message, create_conversation, get_conversation, review_feedback, save_feedback
 
 app = FastAPI(title="KPI Engine Backend", version="0.1.0")
@@ -32,11 +32,13 @@ pipeline = DynamicRAGPipeline(router=router, context_builder=context_builder)
 
 class DiagnosisRequest(BaseModel):
     kpis: List[str] = Field(default_factory=lambda: ["all"])
-    target_date: str = "2023-07-24"
-    region: str = "North"
-    category: str = "Electronics"
-    persona: str = "marketing_manager"
+    target_date: Optional[str] = None
+    region: Optional[str] = None
+    category: Optional[str] = None
+    persona: Optional[str] = None
     user_id: str = "demo-marketing"
+    scope: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    as_of: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
@@ -50,8 +52,10 @@ class ChatRequest(BaseModel):
     active_date: Optional[str] = None
     active_region: Optional[str] = None
     active_category: Optional[str] = None
+    scope: Optional[Dict[str, Any]] = Field(default_factory=dict)
     user_access_tags: List[str] = Field(default_factory=lambda: ["public", "internal"])
     as_of_timestamp: Optional[str] = None
+    as_of: Optional[str] = None
 
 
 class FeedbackRequest(BaseModel):
@@ -112,13 +116,24 @@ def api_filters() -> Dict[str, Any]:
 def api_diagnoses(payload: DiagnosisRequest) -> Dict[str, Any]:
     try:
         persona = _persona(payload.user_id, payload.persona)
-        return diagnose_scope(
+        response = diagnose_scope(
             kpis=payload.kpis,
             target_date=payload.target_date,
             region=payload.region,
             category=payload.category,
             persona=persona,
+            scope=payload.scope,
+            as_of=payload.as_of,
         )
+        first_result = next(iter(response["results"].values()), {})
+        segment = first_result.get("segment", {})
+        response["marketing_brief"] = build_marketing_brief(response["results"], {
+            "region": segment.get("region", payload.region),
+            "category": segment.get("category", payload.category),
+            "target_date": first_result.get("target_date", payload.target_date),
+            "as_of": first_result.get("as_of", payload.as_of),
+        }, persona=persona)
+        return response
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -137,11 +152,10 @@ def api_investigations(limit: int = 100, offset: int = 0, persona: Optional[str]
 
 
 @app.get("/api/kpis/{kpi_id}/timeseries")
-def api_timeseries(kpi_id: str, region: str = "North", category: str = "Electronics", user_id: str = "demo-marketing") -> Dict[str, Any]:
+def api_timeseries(kpi_id: str, region: str = "North", category: str = "Electronics", user_id: str = "demo-marketing", start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
     try:
         _persona(user_id)
-        authorize_scope(user_id, region, category)
-        return get_timeseries(kpi_id, region, category)
+        return get_timeseries(kpi_id, region, category, user_id=user_id, start_date=start_date, end_date=end_date)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc: raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -161,11 +175,11 @@ def api_insights(limit: int = 50, offset: int = 0, persona: Optional[str] = None
 
 
 @app.get("/api/marketing")
-def api_marketing(region: str = "North", category: str = "Electronics", user_id: str = "demo-marketing") -> Dict[str, Any]:
+def api_marketing(region: str = "North", category: str = "Electronics", user_id: str = "demo-marketing", as_of: Optional[str] = None) -> Dict[str, Any]:
     try:
         _persona(user_id)
         authorize_scope(user_id, region, category)
-        return get_marketing(region, category)
+        return get_marketing(region, category, as_of=as_of)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
@@ -184,9 +198,9 @@ def api_chat(payload: ChatRequest) -> Dict[str, Any]:
             diagnosis_json = run_record if run_record else saved.get("diagnosis_json")
             active_kpi = payload.active_kpi or run_record.get("kpi_id") or saved.get("kpi_id")
             active_date = payload.active_date or run_record.get("target_date") or saved.get("target_date")
-            active_region = payload.active_region or saved.get("scope", {}).get("region") or run_record.get("segment", {}).get("region") or "ALL"
-            active_category = payload.active_category or saved.get("scope", {}).get("category") or run_record.get("segment", {}).get("category") or "ALL"
-            as_of_timestamp = payload.as_of_timestamp or run_record.get("as_of") or "2023-07-25T12:00:00"
+            active_region = payload.active_region or saved.get("scope", {}).get("region") or run_record.get("segment", {}).get("region") or (payload.scope or {}).get("region") or "ALL"
+            active_category = payload.active_category or saved.get("scope", {}).get("category") or run_record.get("segment", {}).get("category") or (payload.scope or {}).get("category") or "ALL"
+            as_of_timestamp = payload.as_of_timestamp or payload.as_of or run_record.get("as_of") or (payload.scope or {}).get("as_of") or "2023-07-25T12:00:00"
         else:
             actual_persona = _persona(payload.user_id, payload.persona)
             diagnosis_json = payload.diagnosis_json
@@ -194,9 +208,9 @@ def api_chat(payload: ChatRequest) -> Dict[str, Any]:
                 raise ValueError("Either run_id or diagnosis_json is required.")
             active_kpi = payload.active_kpi or diagnosis_json.get("kpi_id")
             active_date = payload.active_date or diagnosis_json.get("target_date")
-            active_region = payload.active_region or diagnosis_json.get("segment", {}).get("region") or "ALL"
-            active_category = payload.active_category or diagnosis_json.get("segment", {}).get("category") or "ALL"
-            as_of_timestamp = payload.as_of_timestamp or diagnosis_json.get("as_of") or "2023-07-25T12:00:00"
+            active_region = payload.active_region or diagnosis_json.get("segment", {}).get("region") or (payload.scope or {}).get("region") or "ALL"
+            active_category = payload.active_category or diagnosis_json.get("segment", {}).get("category") or (payload.scope or {}).get("category") or "ALL"
+            as_of_timestamp = payload.as_of_timestamp or payload.as_of or diagnosis_json.get("as_of") or (payload.scope or {}).get("as_of") or "2023-07-25T12:00:00"
 
         if not active_kpi or not active_date:
             raise ValueError("A valid active_kpi and active_date are required for grounded chat.")

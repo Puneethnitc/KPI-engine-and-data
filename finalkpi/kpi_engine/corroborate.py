@@ -1,3 +1,14 @@
+# IMPLEMENTATION HANDOFF — legacy text evidence helper
+# Current: standalone keyword-frequency retrieval with an IDF-like weight over
+# a +/-3-day window. The main pipeline does not instantiate this helper; backend
+# retrieval is a separate path. Read errors are currently swallowed as no data.
+# Next: decide one evidence retrieval owner before wiring this in. Require an
+# availability cutoff, authorized scope and stable document IDs; a future event
+# date must not leak evidence into an earlier diagnosis. Text fencing alone is
+# not an authorization or prompt-injection boundary. Report failed loads clearly.
+# Check: no future/denied documents, missing evidence differs from retrieval
+# failure, and retrieved prose cannot upgrade an association into a causal claim.
+
 import pandas as pd
 import numpy as np
 import re

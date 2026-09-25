@@ -1,3 +1,11 @@
+# HANDOFF: sum recorded traffic_total; channel fields are not recomputed here.
+# NEXT: define visit/count semantics, channel overlap, source reference, coverage
+# and comparison policy. Do not infer unique visitors from summed channel visits.
+# CHECK: totals across dimensions are additive under the supplied business
+# definition; absent rows must not masquerade as genuine traffic drops.
+
+# Identity and current calculation metadata.
+schema_version: 1
 kpi_id: traffic_total
 version: 1
 definition: Daily total traffic from the sales operational source, summed across the requested slice.
@@ -8,6 +16,37 @@ unit: visits
 grain: daily
 source: sales_daily
 dimensions: [region, category]
+source_catalog:
+  source_id: sales_daily
+  format: csv
+  grain: daily
+  dimensions: [region, category]
+  natural_key: [date, region, category]
+  unit: visits
+  fields:
+    date: {type: date, required: true}
+    region: {type: string, required: true}
+    category: {type: string, required: true}
+    available_at: {type: datetime, required: true}
+    traffic_total: {type: float, required: true}
+  availability:
+    field: available_at
+    cutoff_policy: as_of
+    timezone: UTC
+  missing_data:
+    null_policy: reject
+    partial_group_policy: reject
+    zero_is_valid: true
+calculation:
+  operator: sum
+  value_column: traffic_total
+  formula: traffic_total
+comparison_policy:
+  period: same_slice_closed_month_only
+  weighting: none
+  completeness: required
+
+# Dataset-specific provisional alert thresholds.
 materiality:
   z_threshold: 2.5
   abs_threshold: 100.0
@@ -15,8 +54,12 @@ seasonal_period: 7
 min_history_periods: 60
 owner: growth_lead
 access_tags: [region_scoped]
+
+# Optional capabilities deliberately absent in the current definition.
 decomposition: null
 reconciliation: null
+
+# Weekly spend stays weekly for analysis; it must never be summed seven times.
 candidate_drivers:
   - {id: ad_spend_drop, column: marketing_spend, source: marketing_weekly, grain: weekly, aggregation: sum}
   - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}

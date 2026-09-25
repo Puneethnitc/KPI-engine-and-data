@@ -1,8 +1,13 @@
+import importlib
 import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
 
+from backend import config as backend_config
 from backend.service import diagnose_scope, get_registered_kpis
+from backend import storage as backend_storage
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE_ROOT = ROOT.parent
@@ -28,6 +33,13 @@ class BackendDiagnosisApiTests(unittest.TestCase):
             self.assertIn(result["verdict"], {"MATERIAL_CAUSE_UNVERIFIED", "NO_MATERIAL_MOVEMENT", "SEASONAL_REVIEW"})
             self.assertIn("narrative", result)
             json.dumps(result, allow_nan=False)
+
+    def test_fresh_database_returns_none_without_crashing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ["KPI_BACKEND_DB"] = str(Path(tmpdir) / "kpi_backend.sqlite3")
+            importlib.reload(backend_config)
+            importlib.reload(backend_storage)
+            self.assertIsNone(backend_storage.get_run("missing-run-id"))
 
 
 if __name__ == "__main__":

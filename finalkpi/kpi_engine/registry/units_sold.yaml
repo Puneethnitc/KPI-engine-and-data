@@ -1,3 +1,10 @@
+# HANDOFF: daily sum of authoritative source units; no accounting bridge declared.
+# NEXT: declare source keys, calendar, coverage, comparison and returns policy.
+# CHECK: distinguish absent records from zero sales; decide whether signed return
+# quantities belong in this metric before enabling nonnegative data validation.
+
+# Identity and current calculation metadata.
+schema_version: 1
 kpi_id: units_sold
 version: 1
 definition: Daily units sold recorded in sales_daily, summed across the requested slice.
@@ -8,6 +15,37 @@ unit: units
 grain: daily
 source: sales_daily
 dimensions: [region, category]
+source_catalog:
+  source_id: sales_daily
+  format: csv
+  grain: daily
+  dimensions: [region, category]
+  natural_key: [date, region, category]
+  unit: units
+  fields:
+    date: {type: date, required: true}
+    region: {type: string, required: true}
+    category: {type: string, required: true}
+    available_at: {type: datetime, required: true}
+    units_sold: {type: float, required: true}
+  availability:
+    field: available_at
+    cutoff_policy: as_of
+    timezone: UTC
+  missing_data:
+    null_policy: reject
+    partial_group_policy: reject
+    zero_is_valid: true
+calculation:
+  operator: sum
+  value_column: units_sold
+  formula: units_sold
+comparison_policy:
+  period: same_slice_closed_month_only
+  weighting: none
+  completeness: required
+
+# Dataset-specific provisional alert thresholds.
 materiality:
   z_threshold: 2.5
   abs_threshold: 10.0
@@ -15,8 +53,12 @@ seasonal_period: 7
 min_history_periods: 60
 owner: operations_lead
 access_tags: [region_scoped]
+
+# No second-source comparison or quantity/rate identity currently configured.
 decomposition: null
 reconciliation: null
+
+# NEXT: resolve driver source/column and analysis policy through the catalog.
 candidate_drivers:
   - {id: checkout_latency_spike, column: checkout_latency_ms, source: sales_daily, grain: daily, aggregation: mean}
   - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}

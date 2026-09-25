@@ -1,9 +1,17 @@
+# IMPLEMENTATION HANDOFF — evidence-quality diagnostics
+# Current: maps verification verdicts and reports window coverage, temporal
+# precedence and interval precision; there is no calibrated causal probability.
+# Next: use the SAME resolved verification policy for coverage denominators
+# (currently 14 pre/7 post) and expose that policy in result provenance.
+# Check: changing verification minima also changes diagnostic coverage; missing
+# evidence stays unknown rather than becoming a zero-confidence probability.
+
 """Transparent evidence diagnostics, not a calibrated causal probability."""
 
 from dataclasses import dataclass
 from math import isfinite
 
-from kpi_engine.verification.models import CausalVerificationResult
+from kpi_engine.verification.models import CausalVerificationResult, VerificationPolicy
 
 
 @dataclass(frozen=True)
@@ -23,10 +31,19 @@ class ConfidenceEngine:
         if not isinstance(verification, CausalVerificationResult):
             raise TypeError("A CausalVerificationResult is required")
 
+        policy = verification.policy or VerificationPolicy()
+        if hasattr(policy, "validate"):
+            policy.validate()
+
+        min_pre_days = getattr(policy, "min_pre_days", VerificationPolicy.min_pre_days)
+        min_post_days = getattr(policy, "min_post_days", VerificationPolicy.min_post_days)
+
         # These are descriptive diagnostics, not empirical probabilities.
-        coverage = (min(1.0, verification.pre_days / 14,
-                        verification.post_days / 7)
-                    if verification.pre_days and verification.post_days else None)
+        coverage = (
+            min(1.0, verification.pre_days / min_pre_days,
+                verification.post_days / min_post_days)
+            if verification.pre_days and verification.post_days else None
+        )
         temporal = (float(verification.temporal_precedence_passed)
                     if verification.temporal_precedence_passed is not None else None)
         precision = None

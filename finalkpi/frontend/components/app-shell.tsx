@@ -7,13 +7,9 @@ import { useEffect, useState } from 'react'
 import { createContext, useContext } from 'react'
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api/backend'
-export const KPIS = [
-  ['net_sales_revenue', 'Revenue'], ['orders', 'Orders'], ['units_sold', 'Units sold'],
-  ['traffic_total', 'Traffic'], ['conversion_rate', 'Conversion rate'],
-] as const
 export const identityForPersona = (persona: string) => persona === 'CFO' ? 'demo-cfo' : 'demo-marketing'
 
-type DemoContextValue = { persona: string; setPersona: (value: string) => void; region: string; setRegion: (value: string) => void; category: string; setCategory: (value: string) => void; date: string; setDate: (value: string) => void; theme: 'dark' | 'light'; setTheme: (value: 'dark' | 'light') => void }
+type DemoContextValue = { ready: boolean; persona: string; setPersona: (value: string) => void; region: string; setRegion: (value: string) => void; category: string; setCategory: (value: string) => void; date: string; setDate: (value: string) => void; theme: 'dark' | 'light'; setTheme: (value: 'dark' | 'light') => void }
 const DemoContext = createContext<DemoContextValue | null>(null)
 
 export function DemoProvider({ children }: { children: React.ReactNode }) {
@@ -25,18 +21,33 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
   const [category, setCategory] = useState('Electronics')
   const [date, setDate] = useState('2023-07-24')
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [allowed, setAllowed] = useState<{ personas: string[]; regions: string[]; categories: string[]; dates: string[] }>({ personas: [], regions: [], categories: [], dates: [] })
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
     let stored: Record<string, string> = {}
     try { stored = JSON.parse(sessionStorage.getItem('kpi-scope') || '{}') as Record<string, string> } catch { sessionStorage.removeItem('kpi-scope') }
-    setPersona(['marketing_manager', 'CFO'].includes(params.get('persona') || '') ? params.get('persona')! : stored.persona === 'CFO' ? 'CFO' : 'marketing_manager')
-    const validRegions = ['East', 'North', 'South', 'West']
-    const validCategories = ['Apparel', 'Beauty', 'Electronics', 'Home']
-    setRegion(validRegions.includes(params.get('region') || '') ? params.get('region')! : stored.region && validRegions.includes(stored.region) ? stored.region : 'North')
-    setCategory(validCategories.includes(params.get('category') || '') ? params.get('category')! : stored.category && validCategories.includes(stored.category) ? stored.category : 'Electronics')
-    setDate(/^\d{4}-\d{2}-\d{2}$/.test(params.get('date') || '') ? params.get('date')! : stored.date || '2023-07-24')
     setTheme(localStorage.getItem('kpi-theme') === 'light' ? 'light' : 'dark')
-    setHydrated(true)
+    fetch(`${API_BASE}/api/filters`, { cache: 'no-store' }).then(response => response.ok ? response.json() : Promise.reject(new Error('Metadata unavailable'))).then(payload => {
+      const values = payload.allowed_values ?? {}
+      const allowedValues = { personas: payload.persona ?? [], regions: values.region ?? payload.regions ?? [], categories: values.category ?? payload.categories ?? [], dates: payload.dates ?? [] }
+      setAllowed(allowedValues)
+      const params = new URLSearchParams(window.location.search)
+      const choose = (key: keyof typeof stored, valid: string[], fallback?: string) => {
+        const fromUrl = params.get(key)
+        if (fromUrl && valid.includes(fromUrl)) return fromUrl
+        if (stored[key] && valid.includes(stored[key])) return stored[key]
+        return fallback ?? valid[0] ?? ''
+      }
+      setPersona(choose('persona', allowedValues.personas, payload.default?.persona || 'marketing_manager'))
+      setRegion(choose('region', allowedValues.regions, payload.default?.region))
+      setCategory(choose('category', allowedValues.categories, payload.default?.category))
+      setDate(choose('date', allowedValues.dates, payload.default?.date))
+    }).catch(() => {
+      const params = new URLSearchParams(window.location.search)
+      setPersona(params.get('persona') === 'CFO' || stored.persona === 'CFO' ? 'CFO' : 'marketing_manager')
+      setRegion(params.get('region') || stored.region || 'North')
+      setCategory(params.get('category') || stored.category || 'Electronics')
+      setDate(params.get('date') || stored.date || '2023-07-24')
+    }).finally(() => setHydrated(true))
   }, [])
   useEffect(() => {
     sessionStorage.setItem('kpi-scope', JSON.stringify({ persona, region, category, date }))
@@ -47,7 +58,18 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
     }
   }, [persona, region, category, date, hydrated, pathname, router])
   useEffect(() => localStorage.setItem('kpi-theme', theme), [theme])
-  return <DemoContext.Provider value={{ persona, setPersona, region, setRegion, category, setCategory, date, setDate, theme, setTheme }}>{children}</DemoContext.Provider>
+  useEffect(() => {
+    const restoreUrlScope = () => {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('persona') && allowed.personas.includes(params.get('persona')!)) setPersona(params.get('persona')!)
+      if (params.get('region') && allowed.regions.includes(params.get('region')!)) setRegion(params.get('region')!)
+      if (params.get('category') && allowed.categories.includes(params.get('category')!)) setCategory(params.get('category')!)
+      if (params.get('date') && allowed.dates.includes(params.get('date')!)) setDate(params.get('date')!)
+    }
+    window.addEventListener('popstate', restoreUrlScope)
+    return () => window.removeEventListener('popstate', restoreUrlScope)
+  }, [allowed])
+  return <DemoContext.Provider value={{ ready: hydrated, persona, setPersona, region, setRegion, category, setCategory, date, setDate, theme, setTheme }}>{children}</DemoContext.Provider>
 }
 
 export function useDemoContext() {

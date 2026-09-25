@@ -1,3 +1,12 @@
+# IMPLEMENTATION HANDOFF — evidence rendering
+# Current: builds approved claims and validates their evidence paths. An optional
+# remote model selects existing wording variants; it cannot calculate new facts.
+# Next: render declared units, comparison periods, coverage and lineage from the
+# shared result schema. Configure provider/model separately from KPI semantics.
+# Preserve deterministic fallback and align backend chat with these claim types.
+# Check: unsupported numbers, missing paths and contradictory verdicts fail
+# grounding; access denials contain no diagnostic details. SQL computes facts.
+
 """Deterministic, evidence-bound diagnosis narrative.
 
 This renderer accepts no arbitrary prose. Validation rebuilds the permitted

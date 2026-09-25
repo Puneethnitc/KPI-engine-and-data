@@ -24,6 +24,59 @@ DIAGNOSIS = {
 
 
 class RAGFallbackTests(unittest.TestCase):
+    def test_metric_summary_aggregates_revenue_across_multiple_rows(self):
+        pipeline = DynamicRAGPipeline(DynamicQueryRouter(), ContextBuilder())
+        request = ChatRequest(
+            question="What is the revenue total for North?",
+            diagnosis_json=None,
+            active_kpi="net_sales_revenue",
+            active_date="2023-07-24",
+            active_region="North",
+            active_category="ALL",
+            user_persona="CFO",
+            user_access_tags=["public", "internal"],
+            as_of_timestamp="2023-07-25T12:00:00",
+        )
+
+        answer = pipeline._metric_summary(request)
+        self.assertIsNotNone(answer)
+        self.assertIn("North", answer)
+        self.assertIn("9263.120000", answer.replace(",", ""))
+
+    def test_metric_summary_uses_ratio_of_sums_for_conversion_rate(self):
+        pipeline = DynamicRAGPipeline(DynamicQueryRouter(), ContextBuilder())
+        request = ChatRequest(
+            question="What is North conversion rate?",
+            diagnosis_json=None,
+            active_kpi="conversion_rate",
+            active_date="2023-07-24",
+            active_region="North",
+            active_category="ALL",
+            user_persona="CFO",
+            user_access_tags=["public", "internal"],
+            as_of_timestamp="2023-07-25T12:00:00",
+        )
+
+        answer = pipeline._metric_summary(request)
+        self.assertIsNotNone(answer)
+        self.assertIn("0.024125", answer)
+
+    def test_metric_summary_denies_unauthorized_chat_scope(self):
+        pipeline = DynamicRAGPipeline(DynamicQueryRouter(), ContextBuilder())
+        request = ChatRequest(
+            question="What is the value for North?",
+            diagnosis_json=None,
+            active_kpi="net_sales_revenue",
+            active_date="2023-07-24",
+            active_region="North",
+            active_category="Electronics",
+            user_persona="regional_manager_south",
+            user_access_tags=["public", "internal"],
+            as_of_timestamp="2023-07-25T12:00:00",
+        )
+
+        self.assertIsNone(pipeline._metric_summary(request))
+
     def test_fallback_answer_matches_saved_revenue_diagnosis(self):
         request = ChatRequest(
             question="What changed in revenue?",

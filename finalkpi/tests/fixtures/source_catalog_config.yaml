@@ -1,0 +1,38 @@
+sources:
+  channel_daily:
+    source_id: channel_daily
+    table_name: channel_daily
+    file_path: ./channel_daily.csv
+    grain: daily
+    date_column: date
+    dimensions:
+      - channel
+      - region
+    availability_column: available_at
+    natural_key:
+      - date
+      - channel
+      - region
+    revision_column: revision
+    fields:
+      date:
+        type: date
+        required: true
+      channel:
+        type: string
+        required: true
+      region:
+        type: string
+        required: true
+      orders:
+        type: float
+        required: true
+      visits:
+        type: float
+        required: true
+      available_at:
+        type: datetime
+        required: true
+      revision:
+        type: int
+        required: true

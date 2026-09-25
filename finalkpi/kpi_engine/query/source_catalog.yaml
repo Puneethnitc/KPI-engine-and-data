@@ -1,0 +1,118 @@
+sources:
+  sales_daily:
+    source_id: sales_daily
+    table_name: sales_daily
+    file_path: ../../data/sales_daily.csv
+    grain: daily
+    date_column: date
+    dimensions:
+      - region
+      - category
+    availability_column: available_at
+    natural_key:
+      - date
+      - region
+      - category
+    fields:
+      date:
+        type: date
+        required: true
+      region:
+        type: string
+        required: true
+      category:
+        type: string
+        required: true
+      available_at:
+        type: datetime
+        required: true
+      net_sales_revenue:
+        type: float
+        required: true
+      orders:
+        type: float
+        required: true
+      units_sold:
+        type: float
+        required: false
+      traffic_total:
+        type: float
+        required: true
+      conversion_rate:
+        type: float
+        required: false
+      marketing_spend:
+        type: float
+        required: false
+
+  marketing_weekly:
+    source_id: marketing_weekly
+    table_name: marketing_weekly
+    file_path: ../../data/marketing_weekly.csv
+    grain: weekly
+    date_column: week_start
+    dimensions:
+      - region
+      - category
+    availability_column: available_at
+    natural_key:
+      - week_start
+      - region
+      - category
+    fields:
+      week_start:
+        type: date
+        required: true
+      region:
+        type: string
+        required: true
+      category:
+        type: string
+        required: true
+      available_at:
+        type: datetime
+        required: true
+      marketing_spend:
+        type: float
+        required: true
+      traffic_total:
+        type: float
+        required: true
+
+  finance_monthly:
+    source_id: finance_monthly
+    table_name: finance_monthly
+    file_path: ../../data/finance_monthly.csv
+    grain: monthly
+    date_column: month_start
+    dimensions:
+      - region
+      - category
+    availability_column: available_at
+    natural_key:
+      - region
+      - category
+      - month_end
+    revision_column: revision
+    fields:
+      region:
+        type: string
+        required: true
+      category:
+        type: string
+        required: true
+      month_start:
+        type: date
+        required: true
+      month_end:
+        type: date
+        required: true
+      available_at:
+        type: datetime
+        required: true
+      net_sales_revenue:
+        type: float
+        required: true
+      revision:
+        type: int
+        required: true

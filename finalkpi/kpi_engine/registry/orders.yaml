@@ -1,3 +1,11 @@
+# HANDOFF: sum recorded orders; synthetic inputs currently allow fractional counts.
+# NEXT: declare count validation, calendar/baseline, missing-data policy and source
+# reference. Keep authoritative orders distinct from rounded displayed conversion.
+# CHECK: traffic * derived conversion bridges exactly to recorded orders; specify
+# how refunds/cancellations and zero-traffic nonzero-order rows should be handled.
+
+# Identity and current calculation metadata.
+schema_version: 1
 kpi_id: orders
 version: 1
 definition: Daily orders as recorded in sales_daily; synthetic source values may be fractional.
@@ -8,6 +16,38 @@ unit: count
 grain: daily
 source: sales_daily
 dimensions: [region, category]
+source_catalog:
+  source_id: sales_daily
+  format: csv
+  grain: daily
+  dimensions: [region, category]
+  natural_key: [date, region, category]
+  unit: count
+  fields:
+    date: {type: date, required: true}
+    region: {type: string, required: true}
+    category: {type: string, required: true}
+    available_at: {type: datetime, required: true}
+    orders: {type: float, required: true}
+    traffic_total: {type: float, required: false}
+  availability:
+    field: available_at
+    cutoff_policy: as_of
+    timezone: UTC
+  missing_data:
+    null_policy: reject
+    partial_group_policy: reject
+    zero_is_valid: true
+calculation:
+  operator: sum
+  value_column: orders
+  formula: orders
+comparison_policy:
+  period: same_slice_closed_month_only
+  weighting: none
+  completeness: required
+
+# Alert policy; min_history is also used by the current baseline window logic.
 materiality:
   z_threshold: 2.5
   abs_threshold: 5.0
@@ -15,10 +55,14 @@ seasonal_period: 7
 min_history_periods: 30
 owner: ops_lead
 access_tags: [region_scoped]
+
+# Accounting components; the rate is calculated as orders/traffic_total.
 decomposition:
   quantity_column: traffic_total
   reference_rate_column: conversion_rate # Exact bridge derives rate as orders / traffic_total.
 reconciliation: null # Finance has no comparable orders posting.
+
+# NEXT: add per-driver lag/window/weight policy instead of shared Python defaults.
 candidate_drivers:
   - {id: checkout_latency_spike, column: checkout_latency_ms, source: sales_daily, grain: daily, aggregation: mean}
   - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}

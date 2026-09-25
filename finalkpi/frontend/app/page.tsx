@@ -61,6 +61,15 @@ type Result = {
   narrative_method?: string
 }
 
+type MarketingBrief = {
+  summary: string
+  first_weak_stage?: { label: string; stage: string; direction: string; material: boolean } | null
+  funnel: { kpi_id: string; label: string; stage: string; actual: number | null; expected: number | null; delta: number | null; direction: string; material: boolean; status: string }[]
+  ranked_insights: { kpi_id: string; label: string; stage: string; actual: number | null; delta: number | null; direction: string; material: boolean; confidence_status: string; source_freshness: string; narrative: string }[]
+  uncertainty: string[]
+  method: string
+}
+
 type ChatMessage = {
   id: string
   role: 'user' | 'assistant'
@@ -70,16 +79,14 @@ type ChatMessage = {
 }
 
 type AssistantMode = 'closed' | 'opening' | 'open' | 'minimized'
+type RegisteredKpi = { kpi_id: string; version: number; definition: string; unit: string; dimensions: string[] }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api/backend'
-const KPIS = [
-  { id: 'net_sales_revenue', label: 'Revenue', unit: 'INR', icon: TrendingDown },
-  { id: 'orders', label: 'Orders', unit: 'count', icon: BarChart3 },
-  { id: 'units_sold', label: 'Units sold', unit: 'count', icon: BarChart3 },
-  { id: 'traffic_total', label: 'Traffic', unit: 'count', icon: Activity },
-  { id: 'conversion_rate', label: 'Conversion rate', unit: 'ratio', icon: Activity },
-] as const
-type KpiId = typeof KPIS[number]['id']
+type KpiId = string
+
+function kpiLabel(id: string) { return id.replaceAll('_', ' ').replace(/(^|\s)\S/g, character => character.toUpperCase()) }
+function kpiIcon(id: string) { return id.includes('revenue') ? TrendingDown : id === 'orders' || id.includes('units') ? BarChart3 : Activity }
+function isRatioUnit(unit: string) { return unit === 'ratio' || unit === 'orders_per_visit' || unit.endsWith('_rate') }
 
 const driverLabels: Record<string, string> = {
   traffic_drop: 'Traffic movement',
@@ -91,16 +98,16 @@ const driverLabels: Record<string, string> = {
 
 function formatValue(value: number | null | undefined, unit: string) {
   if (value == null || !Number.isFinite(value)) return '—'
-  if (unit === 'ratio') return `${(value * 100).toFixed(2)}%`
+  if (isRatioUnit(unit)) return `${(value * 100).toFixed(2)}%`
   if (unit === 'INR') return `₹${Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
   return value.toLocaleString('en-IN', { maximumFractionDigits: 2 })
 }
 
 function formatDelta(value: number | null | undefined, unit: string) {
   if (value == null || !Number.isFinite(value)) return '—'
-  const scaled = unit === 'ratio' ? value * 100 : value
+  const scaled = isRatioUnit(unit) ? value * 100 : value
   const amount = Math.abs(scaled).toLocaleString('en-IN', { maximumFractionDigits: 2 })
-  return `${scaled < 0 ? '−' : '+'}${unit === 'INR' ? '₹' : ''}${amount}${unit === 'ratio' ? ' pp' : ''}`
+  return `${scaled < 0 ? '−' : '+'}${unit === 'INR' ? '₹' : ''}${amount}${isRatioUnit(unit) ? ' pp' : ''}`
 }
 
 function titleCase(value?: string | null) {
@@ -149,12 +156,14 @@ function Composer({ value, setValue, submit, panel = false, disabled = false }: 
 }
 
 export default function Page() {
-  const { persona, setPersona, region, setRegion, category, setCategory, date, setDate, theme, setTheme } = useDemoContext()
+  const { ready, persona, setPersona, region, setRegion, category, setCategory, date, setDate, theme, setTheme } = useDemoContext()
+  const [registeredKpis, setRegisteredKpis] = useState<RegisteredKpi[]>([])
   const [selected, setSelected] = useState<KpiId>('net_sales_revenue')
-  const [regions, setRegions] = useState(['North', 'South', 'East', 'West'])
-  const [categories, setCategories] = useState(['Electronics', 'Apparel', 'Home'])
-  const [dates, setDates] = useState(['2023-07-24'])
+  const [regions, setRegions] = useState<string[]>([])
+  const [categories, setCategories] = useState<string[]>([])
+  const [dates, setDates] = useState<string[]>([])
   const [results, setResults] = useState<Record<string, Result>>({})
+  const [marketingBrief, setMarketingBrief] = useState<MarketingBrief | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('closed')
@@ -166,7 +175,8 @@ export default function Page() {
   const conversationEnd = useRef<HTMLDivElement>(null)
 
   const result = results[selected]
-  const kpi = KPIS.find(item => item.id === selected) ?? KPIS[0]
+  const kpi = registeredKpis.find(item => item.kpi_id === selected) ?? registeredKpis[0] ?? { kpi_id: selected, unit: 'count', version: 1, definition: '', dimensions: [] }
+  const selectedKpiLabel = kpiLabel(kpi.kpi_id)
   const movement = result?.movement_assessment
   const decomposition = result?.decomposition
   const isAssistantOpen = assistantMode === 'opening' || assistantMode === 'open'
@@ -188,12 +198,16 @@ export default function Page() {
 
   async function loadMetadata() {
     try {
-      const response = await fetch(`${API_BASE}/api/filters`, { cache: 'no-store' })
-      if (!response.ok) return
-      const payload = await response.json()
-      setRegions(payload.regions ?? regions)
-      setCategories(payload.categories ?? categories)
-      setDates(payload.dates ?? dates)
+      const [filterResponse, kpiResponse] = await Promise.all([fetch(`${API_BASE}/api/filters`, { cache: 'no-store' }), fetch(`${API_BASE}/api/kpis`, { cache: 'no-store' })])
+      if (!filterResponse.ok || !kpiResponse.ok) throw new Error('Could not load KPI metadata')
+      const [payload, kpiPayload] = await Promise.all([filterResponse.json(), kpiResponse.json()])
+      const values = payload.allowed_values ?? {}
+      const nextKpis: RegisteredKpi[] = kpiPayload.items ?? []
+      setRegisteredKpis(nextKpis)
+      setRegions(values.region ?? payload.regions ?? [])
+      setCategories(values.category ?? payload.categories ?? [])
+      setDates(payload.dates ?? [])
+      if (nextKpis.length && !nextKpis.some(item => item.kpi_id === selected)) setSelected(nextKpis[0].kpi_id)
       if (payload.default) {
         const params = new URLSearchParams(window.location.search)
         setRegion(params.get('region') ?? payload.default.region ?? region)
@@ -217,6 +231,7 @@ export default function Page() {
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.detail ?? 'Diagnosis failed')
       setResults(payload.results ?? {})
+      setMarketingBrief(payload.marketing_brief ?? null)
       setMessages([])
       setConversationId(undefined)
     } catch (requestError) {
@@ -227,7 +242,7 @@ export default function Page() {
   }
 
   useEffect(() => { void loadMetadata() }, [])
-  useEffect(() => { void diagnose() }, [region, category, date, persona])
+  useEffect(() => { if (ready) void diagnose() }, [ready, region, category, date, persona])
   useEffect(() => {
     const runId = new URLSearchParams(window.location.search).get('runId')
     if (!runId) return
@@ -313,30 +328,42 @@ export default function Page() {
     <main className="workspace" data-ai={isAssistantOpen ? 'open' : assistantMode}>
       <section className="dashboard-column">
         <div className="page-heading">
-          <div><span className="eyebrow"><LayoutDashboard size={14} /> Marketing manager workspace</span><h1>Performance overview</h1><p>What changed, what may explain it, and what to verify next.</p></div>
+          <div><span className="eyebrow"><LayoutDashboard size={14} /> {persona === 'CFO' ? 'Financial reviewer workspace' : 'Marketing manager workspace'}</span><h1>Performance overview</h1><p>What changed, what may explain it, and what to verify next.</p></div>
           <div className="filter-row">
             <label>Region<select value={region} onChange={event => setRegion(event.target.value)}>{regions.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
             <label>Category<select value={category} onChange={event => setCategory(event.target.value)}>{categories.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
             <label>Date<select value={date} onChange={event => setDate(event.target.value)}>{dates.slice(-120).map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
-            <button className="run-button" disabled={loading} onClick={() => void diagnose()}><RefreshCw size={15} className={loading ? 'spin' : ''} /> Run</button>
+            <button className="run-button" disabled={!ready || loading} onClick={() => void diagnose()}><RefreshCw size={15} className={loading ? 'spin' : ''} /> Run</button>
           </div>
         </div>
 
-        <div className="context-strip"><strong>{region} · {category} · {date}</strong><span>{materialCount} of {KPIS.length} KPIs are material</span></div>
+        <div className="context-strip"><strong>{region} · {category} · {date}</strong><span>{materialCount} of {registeredKpis.length} KPIs are material</span></div>
         {error && <div className="alert error"><ShieldAlert size={18} /><span>{error}</span></div>}
         {loading && <div className="alert"><Activity className="spin" size={18} /><span>Running the governed KPI engine across daily, weekly, and monthly sources…</span></div>}
 
+        {marketingBrief && <section className="marketing-brief" aria-labelledby="briefing-title">
+          <div className="briefing-lead"><div><span className="eyebrow">Marketing manager briefing</span><h2 id="briefing-title">What you need to know today</h2><p>{marketingBrief.summary}</p><small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
+          <div className="funnel-strip" aria-label="Connected marketing funnel">{marketingBrief.funnel.map((stage, index) => {
+            const unit = registeredKpis.find(item => item.kpi_id === stage.kpi_id)?.unit ?? 'count'
+            return <article className={`funnel-stage ${stage.direction}`} key={stage.kpi_id}><small>{stage.stage}</small><strong>{formatValue(stage.actual, unit)}</strong><span>{formatDelta(stage.delta, unit)} · {stage.material ? 'material' : stage.status === 'OK' ? 'not material' : titleCase(stage.status)}</span><b>{stage.label}</b>{index < marketingBrief.funnel.length - 1 && <ArrowRight className="funnel-arrow" size={15} />}</article>
+          })}</div>
+          <div className="brief-insights">{marketingBrief.ranked_insights.slice(0, 5).map((insight, index) => <article className="brief-insight" key={insight.kpi_id}><span className="brief-rank">{String(index + 1).padStart(2, '0')}</span><div><strong>{insight.label}: {insight.direction === 'up' ? 'improved' : insight.direction === 'down' ? 'declined' : 'moved'}</strong><p>{insight.narrative || `${formatDelta(insight.delta, registeredKpis.find(item => item.kpi_id === insight.kpi_id)?.unit ?? 'count')} observed in ${insight.stage}.`}</p><small>{insight.material ? 'Material' : 'Not material'} · {titleCase(insight.confidence_status)} · as of {insight.source_freshness}</small></div><button onClick={() => { setSelected(insight.kpi_id as KpiId); setDraft(`Explain the ${insight.label} movement and supporting evidence.`); setAssistantMode('open') }} aria-label={`Investigate ${insight.label}`}><ArrowRight size={15} /></button></article>)}</div>
+          {marketingBrief.uncertainty.length > 0 && <p className="brief-limits">Evidence limits: {marketingBrief.uncertainty.join(' · ')}</p>}
+          <small className="method-note">{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</small>
+        </section>}
+
         <section className="kpi-selector" aria-label="Registered KPIs">
-          {KPIS.map(item => {
-            const itemResult = results[item.id]
+          {registeredKpis.map(item => {
+            const itemResult = results[item.kpi_id]
             const itemMovement = itemResult?.movement_assessment
-            return <button key={item.id} className={selected === item.id ? 'kpi-tile active' : 'kpi-tile'} onClick={() => setSelected(item.id)}><span><item.icon size={16} />{item.label}</span><strong>{formatValue(itemMovement?.actual_value, item.unit)}</strong><small className={(itemMovement?.delta ?? 0) < 0 ? 'negative' : 'positive'}>{formatDelta(itemMovement?.delta, item.unit)} vs baseline</small></button>
+            const Icon = kpiIcon(item.kpi_id)
+            return <button key={item.kpi_id} className={selected === item.kpi_id ? 'kpi-tile active' : 'kpi-tile'} onClick={() => setSelected(item.kpi_id)}><span><Icon size={16} />{kpiLabel(item.kpi_id)}</span><strong>{formatValue(itemMovement?.actual_value, item.unit)}</strong><small className={(itemMovement?.delta ?? 0) < 0 ? 'negative' : 'positive'}>{formatDelta(itemMovement?.delta, item.unit)} vs baseline</small></button>
           })}
         </section>
 
         <section className="hero-card card">
-          <div className="hero-summary"><span className="eyebrow">Primary observed KPI</span><h2>{kpi.label}</h2><div className="hero-number">{formatValue(movement?.actual_value, kpi.unit)}</div><p className={(movement?.delta ?? 0) < 0 ? 'negative' : 'positive'}><ArrowDownRight size={16} /> {formatDelta(movement?.delta, kpi.unit)} versus the engine baseline</p><span className={`evidence-pill ${movement?.is_material ? 'warning' : 'good'}`}>{movement?.is_material ? 'Material movement' : 'Not material'}</span></div>
-          <div className="comparison-chart" role="img" aria-label={`${kpi.label} actual compared with expected baseline`}><div className="chart-head"><span>Actual vs expected</span><small>No invented trend series</small></div><div className="bar-row"><span>Expected</span><i><b style={{ width: '100%' }} /></i><strong>{formatValue(movement?.expected_value, kpi.unit)}</strong></div><div className="bar-row actual"><span>Actual</span><i><b style={{ width: `${movement?.expected_value ? Math.min(100, Math.abs((movement.actual_value / movement.expected_value) * 100)) : 0}%` }} /></i><strong>{formatValue(movement?.actual_value, kpi.unit)}</strong></div><div className="chart-caption"><Database size={14} /> Target date {date} · As of {result?.as_of ? new Date(result.as_of).toLocaleString('en-IN') : 'awaiting run'}</div></div>
+          <div className="hero-summary"><span className="eyebrow">Primary observed KPI</span><h2>{selectedKpiLabel}</h2><div className="hero-number">{formatValue(movement?.actual_value, kpi.unit)}</div><p className={(movement?.delta ?? 0) < 0 ? 'negative' : 'positive'}><ArrowDownRight size={16} /> {formatDelta(movement?.delta, kpi.unit)} versus the engine baseline</p><span className={`evidence-pill ${movement?.is_material ? 'warning' : 'good'}`}>{movement?.is_material ? 'Material movement' : 'Not material'}</span></div>
+          <div className="comparison-chart" role="img" aria-label={`${selectedKpiLabel} actual compared with expected baseline`}><div className="chart-head"><span>Actual vs expected</span><small>No invented trend series</small></div><div className="bar-row"><span>Expected</span><i><b style={{ width: '100%' }} /></i><strong>{formatValue(movement?.expected_value, kpi.unit)}</strong></div><div className="bar-row actual"><span>Actual</span><i><b style={{ width: `${movement?.expected_value ? Math.min(100, Math.abs((movement.actual_value / movement.expected_value) * 100)) : 0}%` }} /></i><strong>{formatValue(movement?.actual_value, kpi.unit)}</strong></div><div className="chart-caption"><Database size={14} /> Target date {date} · As of {result?.as_of ? new Date(result.as_of).toLocaleString('en-IN') : 'awaiting run'}</div></div>
         </section>
 
         <div className="section-heading"><div><h2>What explains the movement?</h2><p>Accounting contributions and diagnostic indicators are deliberately separated.</p></div><button onClick={() => void askQuestion('Explain the difference between contributions and diagnostic drivers.')}><CircleHelp size={15} /> Ask AI</button></div>
@@ -357,7 +384,7 @@ export default function Page() {
       {assistantMode === 'closed' && <Composer value={draft} setValue={setDraft} submit={() => void askQuestion()} disabled={loading} />}
       {assistantMode === 'minimized' && <button className="restore-pill" onClick={() => setAssistantMode('open')}><Bot size={17} /> Ask KPI Assistant</button>}
 
-      {isAssistantOpen && <aside className="assistant-panel" aria-label="KPI assistant"><button className="resize-handle" aria-label="Resize assistant" onPointerDown={beginResize}><GripVertical size={17} /></button><header className="assistant-header"><div className="assistant-title"><span><Bot size={18} /></span><div><strong>KPI Assistant</strong><small>{kpi.label} · {region} · {date}</small></div></div><div className="assistant-actions"><button onClick={() => setPanelWidth(panelWidth === 600 ? 410 : 600)} aria-label="Toggle assistant width"><Maximize2 size={16} /></button><button onClick={() => setAssistantMode('minimized')} aria-label="Minimize assistant"><Minimize2 size={16} /></button><button onClick={() => { setAssistantMode('closed'); setMessages([]); setConversationId(undefined) }} aria-label="Close assistant"><X size={18} /></button></div></header><div className="assistant-context"><Sparkles size={14} /> Grounded in run {result?.run_id ?? 'not available'}</div><div className="conversation">{!messages.length && <div className="assistant-empty"><span><Sparkles size={22} /></span><h2>Ask your marketing analyst</h2><p>I’ll explain the movement, distinguish evidence from hypotheses, and surface safe next steps.</p></div>}{messages.map(message => <article key={message.id} className={`message ${message.role}`}><p>{message.text}</p>{message.citations?.length ? <details><summary>{message.citations.length} evidence reference{message.citations.length === 1 ? '' : 's'}</summary>{message.citations.map((citation, index) => <small key={`${citation.source_path}-${index}`}>{citation.evidence_type}: {citation.source_path}{citation.line_or_row_ref ? ` · ${citation.line_or_row_ref}` : ''}</small>)}</details> : null}{message.limitations?.length ? <div className="limitations"><strong>Limits</strong>{message.limitations.map(item => <small key={item}>{item}</small>)}</div> : null}</article>)}{asking && <div className="thinking"><i /><i /><i /></div>}<div ref={conversationEnd} /></div><div className="assistant-suggestions">{['What changed?', 'Is the cause proven?', 'What should I verify next?'].map(item => <button key={item} onClick={() => void askQuestion(item)}>{item}</button>)}</div><Composer value={draft} setValue={setDraft} submit={() => void askQuestion()} panel disabled={asking} /></aside>}
+      {isAssistantOpen && <aside className="assistant-panel" aria-label="KPI assistant"><button className="resize-handle" aria-label="Resize assistant" onPointerDown={beginResize}><GripVertical size={17} /></button><header className="assistant-header"><div className="assistant-title"><span><Bot size={18} /></span><div><strong>KPI Assistant</strong><small>{selectedKpiLabel} · {region} · {date}</small></div></div><div className="assistant-actions"><button onClick={() => setPanelWidth(panelWidth === 600 ? 410 : 600)} aria-label="Toggle assistant width"><Maximize2 size={16} /></button><button onClick={() => setAssistantMode('minimized')} aria-label="Minimize assistant"><Minimize2 size={16} /></button><button onClick={() => { setAssistantMode('closed'); setMessages([]); setConversationId(undefined) }} aria-label="Close assistant"><X size={18} /></button></div></header><div className="assistant-context"><Sparkles size={14} /> Grounded in run {result?.run_id ?? 'not available'}</div><div className="conversation">{!messages.length && <div className="assistant-empty"><span><Sparkles size={22} /></span><h2>Ask your marketing analyst</h2><p>I’ll explain the movement, distinguish evidence from hypotheses, and surface safe next steps.</p></div>}{messages.map(message => <article key={message.id} className={`message ${message.role}`}><p>{message.text}</p>{message.citations?.length ? <details><summary>{message.citations.length} evidence reference{message.citations.length === 1 ? '' : 's'}</summary>{message.citations.map((citation, index) => <small key={`${citation.source_path}-${index}`}>{citation.evidence_type}: {citation.source_path}{citation.line_or_row_ref ? ` · ${citation.line_or_row_ref}` : ''}</small>)}</details> : null}{message.limitations?.length ? <div className="limitations"><strong>Limits</strong>{message.limitations.map(item => <small key={item}>{item}</small>)}</div> : null}</article>)}{asking && <div className="thinking"><i /><i /><i /></div>}<div ref={conversationEnd} /></div><div className="assistant-suggestions">{['What changed?', 'Is the cause proven?', 'What should I verify next?'].map(item => <button key={item} onClick={() => void askQuestion(item)}>{item}</button>)}</div><Composer value={draft} setValue={setDraft} submit={() => void askQuestion()} panel disabled={asking} /></aside>}
     </main>
   </div>
 }

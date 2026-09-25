@@ -1,3 +1,7 @@
+# HANDOFF: compatibility facade for verification/. Keep these public symbols
+# stable; future policy/query changes belong in verification, not this module.
+# Do not restore the removed positional API with fabricated uncertainty.
+
 """Compatibility imports for the explicit-design verification package.
 
 The previous positional verify_cause API silently passed missing pretrend and

@@ -141,6 +141,29 @@ td strong, td:nth-child(2) { color: var(--text); }
 .run-button:disabled { opacity: .6; }
 .context-strip { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 16px; padding: 10px 13px; border-radius: 8px; background: var(--panel-2); color: var(--muted); font-size: 11px; }
 .context-strip strong { color: var(--text); font-weight: 650; }
+.marketing-brief { margin: 0 0 18px; padding: 19px 20px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
+.briefing-lead { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.briefing-lead h2 { margin: 7px 0; font-size: 18px; }
+.briefing-lead p { max-width: 800px; margin: 0 0 8px; color: var(--text); font-size: 13px; line-height: 1.55; }
+.briefing-lead small { color: var(--muted); font-size: 10px; }
+.funnel-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 18px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.funnel-stage { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; border-right: 1px solid var(--line); background: var(--panel-2); }
+.funnel-stage:last-child { border-right: 0; }
+.funnel-stage > small, .funnel-stage > span { color: var(--muted); font-size: 9px; }
+.funnel-stage > strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.funnel-stage > b { color: var(--text); font-size: 10px; }
+.funnel-stage.down > strong { color: var(--red); }
+.funnel-stage.up > strong { color: var(--green); }
+.funnel-arrow { position: absolute; z-index: 1; right: -8px; top: 45%; color: var(--faint); background: var(--panel); }
+.brief-insights { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.brief-insight { min-width: 0; display: grid; grid-template-columns: 20px minmax(0, 1fr) 26px; align-items: start; gap: 7px; padding: 10px; border-top: 1px solid var(--line); }
+.brief-rank { color: var(--blue); font-size: 9px; font-weight: 700; }
+.brief-insight strong { font-size: 10px; }
+.brief-insight p { margin: 5px 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.brief-insight small { color: var(--faint); font-size: 8px; line-height: 1.4; }
+.brief-insight button { width: 25px; height: 25px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--blue); }
+.brief-limits { margin: 10px 0; color: var(--amber); font-size: 10px; }
+.marketing-brief > .method-note { display: block; margin-top: 9px; }
 .alert { display: flex; align-items: center; gap: 9px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--muted); font-size: 12px; }
 .alert.error { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, var(--line)); }
 .spin { animation: spin 900ms linear infinite; }
@@ -296,6 +319,12 @@ td strong, td:nth-child(2) { color: var(--text); }
   .channel-layout { grid-template-columns: 1fr; }
   .insight-item { flex-direction: column; }
   .insight-actions { justify-content: space-between; text-align: left; }
+  .funnel-strip { grid-template-columns: 1fr; }
+  .funnel-stage { border-right: 0; border-bottom: 1px solid var(--line); }
+  .funnel-stage:last-child { border-bottom: 0; }
+  .funnel-arrow { right: 12px; top: auto; bottom: -8px; transform: rotate(90deg); }
+  .brief-insights { grid-template-columns: 1fr; }
+  .briefing-lead { flex-direction: column; }
 }
 
 @media (max-width: 560px) {

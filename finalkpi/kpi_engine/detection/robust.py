@@ -1,11 +1,22 @@
+# IMPLEMENTATION HANDOFF — primary movement detector
+# Current: scores around a robust center but reports change from the arithmetic
+# mean, using max(30, min_history) prior calendar days. Sustained score uses the
+# seasonal_period as its recent-window length; a constant baseline abstains.
+# Next: resolve comparison window, coverage/calendar, sustained window and static
+# baseline policy separately. Consume a prepared series and shared baseline plan.
+# Keep MAD/IQR scaling constants as method math; define unit-aware scale floors.
+# Check: tiny-scale ratios, constant-to-step changes, missing segment-days,
+# irregular calendars, and seasonal changes. Alert thresholds are heuristic
+# robust-score cutoffs, not calibrated p-values or false-positive guarantees.
+
 """One rolling robust-baseline detector for point and sustained KPI movement."""
 
 import numpy as np
 import pandas as pd
 from typing import Any, Dict, Optional
 
-from kpi_engine.contracts.metrics import daily_values
-from kpi_engine.detection.models import MovementAssessment
+from kpi_engine.contracts.metrics import ComparisonPlan, daily_values
+from kpi_engine.detection.models import DetectionPolicy, MovementAssessment
 
 class RobustBaselineDetector:
     """Rolling robust baseline for isolated and sustained movements.
@@ -15,6 +26,23 @@ class RobustBaselineDetector:
     recent-window median against earlier history. No STL fit or future data is
     used. Thresholds must be calibrated before decision use.
     """
+
+    default_policy = DetectionPolicy()
+
+    @staticmethod
+    def resolve_policy(policy: Optional[DetectionPolicy] = None, contract: Optional[Any] = None) -> DetectionPolicy:
+        if policy is not None:
+            if hasattr(policy, "validate"):
+                policy.validate()
+            return policy
+        fallback = DetectionPolicy(
+            min_history_periods=int(getattr(contract, "min_history_periods", DetectionPolicy.min_history_periods)) if contract is not None else DetectionPolicy.min_history_periods,
+            min_compared_days=DetectionPolicy.min_compared_days,
+            sustained_window_days=int(getattr(contract, "seasonal_period", DetectionPolicy.sustained_window_days)) if contract is not None else DetectionPolicy.sustained_window_days,
+        )
+        if hasattr(fallback, "validate"):
+            fallback.validate()
+        return fallback
 
     @staticmethod
     def calculate_robust_dispersion(series: pd.Series) -> tuple[float, float, str]:
@@ -47,8 +75,11 @@ class RobustBaselineDetector:
         target_date: str,
         dimension_slice: Optional[Dict[str, str]] = None,
         metric_col: str = 'net_sales_revenue',
-        window_days: int = 30
+        window_days: int = 30,
+        comparison_plan: Optional[ComparisonPlan] = None,
+        policy: Optional[DetectionPolicy] = None,
     ) -> MovementAssessment:
+        resolved_policy = self.resolve_policy(policy, kpi_contract)
         filtered_df = df.copy()
 
         if dimension_slice:
@@ -64,21 +95,29 @@ class RobustBaselineDetector:
         daily_series = daily_values(filtered_df, kpi_contract)
         precision = 6 if kpi_contract.aggregation != "sum" else 2
 
+        min_history_periods = kpi_contract.min_history_periods
+        effective_window_days = max(window_days, min_history_periods)
         target_dt = pd.to_datetime(target_date)
+
+        if comparison_plan is not None:
+            target_dt = comparison_plan.target_date
+            baseline = comparison_plan.baseline_series if comparison_plan.baseline_series is not None else daily_values(comparison_plan.baseline_frame, kpi_contract)
+            if target_dt not in daily_series.index:
+                daily_series = daily_series.reindex(pd.Index([target_dt], name='date'))
+        else:
+            baseline = daily_series[
+                (daily_series.index < target_dt) &
+                (daily_series.index >= target_dt - pd.Timedelta(days=effective_window_days))
+            ].dropna()
+
         if target_dt not in daily_series.index:
             return MovementAssessment(
                 target_date=target_date, actual_value=None, expected_value=None,
                 delta=None, z_score=None, mad_score=None,
                 is_statistically_significant=False, is_business_material=False, is_material=False,
-                status="NO_DATA_FOR_DATE"
+                status="NO_DATA_FOR_DATE",
+                policy=resolved_policy,
             )
-
-        # BUGFIX: window_days must be at least the contract's min_history_periods,
-        # or the sparse-history gate below can never be satisfied even for KPIs
-        # with plenty of real history (e.g. min_history_periods=60 > window_days=30
-        # would falsely mark every net_sales_revenue call as insufficient).
-        min_history_periods = kpi_contract.min_history_periods
-        effective_window_days = max(window_days, min_history_periods)
 
         actual_val = float(daily_series.loc[target_dt])
         if not np.isfinite(actual_val):
@@ -87,12 +126,8 @@ class RobustBaselineDetector:
                 delta=None, z_score=None, mad_score=None,
                 is_statistically_significant=False, is_business_material=False,
                 is_material=False, status="NO_DATA_FOR_DATE",
+                policy=resolved_policy,
             )
-
-        baseline = daily_series[
-            (daily_series.index < target_dt) &
-            (daily_series.index >= target_dt - pd.Timedelta(days=effective_window_days))
-        ].dropna()
 
         # Sparse-history / cold-start gate (was previously unimplemented --
         # a 30-day-old product like Beauty would silently get a "normal"
@@ -105,6 +140,7 @@ class RobustBaselineDetector:
                 delta=None, z_score=None, mad_score=None,
                 is_statistically_significant=False, is_business_material=False, is_material=False,
                 status="INSUFFICIENT_HISTORY", baseline_count=int(len(baseline)),
+                policy=resolved_policy,
             )
 
         score_center, dispersion_val, method_used = self.calculate_robust_dispersion(baseline)
@@ -122,6 +158,7 @@ class RobustBaselineDetector:
                 is_material=False, status="UNSCORABLE_BASELINE",
                 dispersion_method=method_used, baseline_count=int(len(baseline)),
                 baseline_center=round(score_center, precision),
+                policy=resolved_policy,
             )
 
         # Decisions use full-precision scores; rounding is only for the payload.
@@ -176,4 +213,5 @@ class RobustBaselineDetector:
             baseline_scale=round(dispersion_val, 6),
             robust_score=round(point_score, 4),
             sustained_score=round(sustained_score, 4) if sustained_score is not None else None,
+            policy=resolved_policy,
         )

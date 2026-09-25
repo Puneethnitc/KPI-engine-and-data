@@ -1,3 +1,14 @@
+# IMPLEMENTATION HANDOFF — orchestration
+# Current: access gate -> CSV normalization -> reconciliation -> movement gate
+# -> accounting bridge -> associations -> optional event verification -> narrative.
+# Next: inject a shared metric-series/query service described in duckdb/README.md.
+# Resolve source, dimensions, periods, baseline and analysis policies from validated
+# contracts. Preserve early exits and evidence labels while migrating one stage
+# at a time. run_diagnosis and verify_event must share the same prepared inputs.
+# Check: current five KPI outputs match before broadening supported source/grain;
+# future or unavailable rows, denied controls and missing coverage still abstain.
+# See IMPLEMENTATION_HANDOFF.md for acceptance criteria and integration consumers.
+
 """As-of KPI diagnosis with explicit boundaries between facts and hypotheses.
 
 The public path stops after correlational ranking until an event exposure and
@@ -15,6 +26,7 @@ import yaml
 from kpi_engine.access import AccessController
 from kpi_engine.action import ActionRecommendationEngine
 from kpi_engine.contracts import KPIRegistry
+from kpi_engine.contracts.metrics import prepare_metric_request
 from kpi_engine.contribute import ContributionScenario, ShapleyContributor
 from kpi_engine.confidence import ConfidenceEngine
 from kpi_engine.decompose import DeterministicDecomposer
@@ -40,6 +52,9 @@ class KPIEnginePipeline:
         feedback_log_path: str = "data/feedback_log.jsonl",
         source_schema_path: Optional[str] = None,
     ):
+        # Setup: source mappings rename fields inside three fixed source roles.
+        # NEXT: replace the role allowlist with a validated source catalog; this
+        # mapping alone cannot describe new grains, dimensions or join semantics.
         self.registry = KPIRegistry(registry_dir)
         source_schemas = {}
         if source_schema_path:
@@ -84,6 +99,8 @@ class KPIEnginePipeline:
         """Allocate an explicitly modeled scenario; not a causal pipeline verdict."""
         if not isinstance(scenario, ContributionScenario):
             raise TypeError("A ContributionScenario is required")
+        # Scenario allocation consumes supplied coalition outcomes. It does not
+        # fit a driver model or infer contribution from correlation coefficients.
         contract = self.registry.get(scenario.kpi_id)
         declared = {driver["id"] for driver in contract.candidate_drivers}
         if set(scenario.drivers) - declared:
@@ -221,6 +238,7 @@ class KPIEnginePipeline:
         force_material: bool = False,
         as_of: Optional[str] = None,
         verification_design: Optional[VerificationDesign] = None,
+        prepared_request: Optional[Any] = None,
     ) -> Dict[str, Any]:
         if bypass_reconciliation or force_material:
             raise ValueError("Demo overrides are not supported in diagnosis")
@@ -285,6 +303,9 @@ class KPIEnginePipeline:
             daily[kpi_id] = daily[contract.value_column]
         daily = daily[daily["date"] <= target].copy()
         scoped = self._slice(daily, dimension_slice)
+        prepared_request = prepared_request or prepare_metric_request(
+            scoped, contract, target, dimension_slice=dimension_slice, as_of=cutoff,
+        )
         if 'marketing_coverage' in scoped.columns:
             available_rows = int((scoped['marketing_coverage'] == 'AVAILABLE').sum())
             target_rows = scoped[scoped['date'] == target]
@@ -324,7 +345,8 @@ class KPIEnginePipeline:
             return self._finalize(result)
 
         assessment = self.detector.evaluate_movement(
-            scoped, contract, target.date().isoformat(), metric_col=kpi_id
+            scoped, contract, target.date().isoformat(), metric_col=kpi_id,
+            comparison_plan=prepared_request.comparison,
         )
         result["movement_assessment"] = asdict(assessment)
         if assessment.status != "OK":
@@ -353,12 +375,11 @@ class KPIEnginePipeline:
 
         # The detector compares the target observation to the preceding
         # arithmetic mean. The bridge uses exactly those same periods.
+        # NEXT: obtain an explicit comparison plan from the metric service and
+        # reuse it in detection AND decomposition; do not configure these apart.
         history_days = max(30, contract.min_history_periods)
-        baseline = scoped[
-            (scoped["date"] < target)
-            & (scoped["date"] >= target - pd.Timedelta(days=history_days))
-        ]
-        current = scoped[scoped["date"] == target]
+        baseline = prepared_request.comparison.baseline_frame.copy()
+        current = prepared_request.comparison.current_frame.copy()
         quantity_col = contract.decomposition.get("quantity_column")
         result["decomposition_status"] = (
             "NOT_APPLICABLE" if not quantity_col else "INSUFFICIENT_COMPONENTS"
@@ -370,6 +391,9 @@ class KPIEnginePipeline:
                 remaining_dims = [name for name in contract.dimensions
                                   if name not in (dimension_slice or {})]
 
+                # Aggregate baseline totals into an average observed day. Missing
+                # segment-days are not validated here; coverage must be checked
+                # before treating an absent segment as a launch/exit or zero.
                 def segment_parts(frame: pd.DataFrame, divisor: int) -> pd.DataFrame:
                     if remaining_dims:
                         parts = frame.groupby(remaining_dims, dropna=False)[
@@ -401,6 +425,8 @@ class KPIEnginePipeline:
                 else:
                     if not bridge.is_identity_held or abs(bridge.total_delta - assessment.delta) > 0.02:
                         raise ValueError("The decomposition does not match the detected movement")
+                    # reference_rate_column labels the derived value/quantity
+                    # rate; the decomposer does not read that source rate column.
                     result["decomposition"] = {
                         **asdict(bridge),
                         "effect_labels": {
@@ -420,6 +446,8 @@ class KPIEnginePipeline:
         # A weekly signal that is not yet available on the target day cannot
         # support a candidate explanation for that target-day movement.
         target_rows = scoped[scoped['date'] == target]
+        # NEXT: availability should be evaluated for each declared lag's period.
+        # This current target-week gate also excludes available prior-week signals.
         unavailable_weekly = [driver_id for driver_id in candidates if (
             driver_specs[driver_id]['source'] == 'marketing_weekly'
             and (

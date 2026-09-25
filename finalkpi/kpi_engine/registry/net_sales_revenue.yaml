@@ -1,3 +1,12 @@
+# HANDOFF: authoritative recorded revenue, summed; formula below is descriptive.
+# NEXT: declare comparison/coverage policies and source-catalog reference; add
+# explicit reconciliation tolerances (currently Python defaults 3.5%, 2.5x).
+# Bridge rate is revenue per unit, derived from totals, not the source aov field.
+# CHECK: recorded revenue remains authoritative; rounding a display rate must
+# not change totals. Currency, refunds, missing segments and precision need rules.
+
+# Identity and current calculation metadata.
+schema_version: 1
 kpi_id: net_sales_revenue
 version: 1
 definition: Daily net sales revenue as recorded in sales_daily; use the source value, not a recomputed rounded product.
@@ -8,6 +17,38 @@ unit: INR
 grain: daily
 source: sales_daily
 dimensions: [region, category]
+source_catalog:
+  source_id: sales_daily
+  format: csv
+  grain: daily
+  dimensions: [region, category]
+  natural_key: [date, region, category]
+  unit: INR
+  fields:
+    date: {type: date, required: true}
+    region: {type: string, required: true}
+    category: {type: string, required: true}
+    available_at: {type: datetime, required: true}
+    net_sales_revenue: {type: float, required: true}
+    units_sold: {type: float, required: false}
+  availability:
+    field: available_at
+    cutoff_policy: as_of
+    timezone: UTC
+  missing_data:
+    null_policy: reject
+    partial_group_policy: reject
+    zero_is_valid: true
+calculation:
+  operator: sum
+  value_column: net_sales_revenue
+  formula: net_sales_revenue
+comparison_policy:
+  period: same_slice_closed_month_only
+  weighting: none
+  completeness: required
+
+# Provisional business/statistical alert policy; requires dataset calibration.
 materiality:
   z_threshold: 2.5
   abs_threshold: 500.0
@@ -15,12 +56,18 @@ seasonal_period: 7
 min_history_periods: 60
 owner: regional_manager
 access_tags: [region_scoped]
+
+# Accounting identity configuration; the rate column supplies a display label.
 decomposition:
   quantity_column: units_sold
   reference_rate_column: aov # Exact bridge derives rate as revenue / units_sold.
+
+# Only comparable period-end finance is supported by the present runtime.
 reconciliation:
   finance_column: net_sales_revenue
   comparison: same_slice_closed_month_only
+
+# Allowed associations; these IDs are hypotheses, not established causal events.
 candidate_drivers:
   - {id: checkout_latency_spike, column: checkout_latency_ms, source: sales_daily, grain: daily, aggregation: mean}
   - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}
