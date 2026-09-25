@@ -13,8 +13,8 @@ from backend.rag_pipeline import DynamicRAGPipeline
 from backend.query_router import DynamicQueryRouter
 from backend.retrieval import ContextBuilder
 from backend.schemas import ChatRequest as RagChatRequest
-from backend.service import diagnose_scope, get_available_filters, get_diagnosis, get_registered_kpis
-from backend.storage import append_message, create_conversation, get_conversation, save_feedback
+from backend.service import authorize_scope, diagnose_scope, get_available_filters, get_authorized_diagnosis, get_diagnosis, get_evidence, get_feedback, get_investigations, get_insights, get_marketing, get_registered_kpis, get_timeseries, identity_persona
+from backend.storage import append_message, create_conversation, get_conversation, review_feedback, save_feedback
 
 app = FastAPI(title="KPI Engine Backend", version="0.1.0")
 app.add_middleware(
@@ -35,14 +35,15 @@ class DiagnosisRequest(BaseModel):
     target_date: str = "2023-07-24"
     region: str = "North"
     category: str = "Electronics"
-    persona: str = "CFO"
+    persona: str = "marketing_manager"
+    user_id: str = "demo-marketing"
 
 
 class ChatRequest(BaseModel):
     run_id: Optional[str] = None
     conversation_id: Optional[str] = None
     question: str
-    user_id: str = "demo-user"
+    user_id: str = "demo-marketing"
     persona: str = "CFO"
     diagnosis_json: Optional[Dict[str, Any]] = None
     active_kpi: Optional[str] = None
@@ -55,11 +56,29 @@ class ChatRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     run_id: str
-    user_id: str = "demo-user"
+    user_id: str = "demo-marketing"
     kpi_id: str
     feedback_type: str
     comments: str = ""
     metadata: Optional[Dict[str, Any]] = None
+    target_type: str = "diagnosis"
+    target_id: Optional[str] = None
+    original_snapshot: Optional[Dict[str, Any]] = None
+
+
+class FeedbackReviewRequest(BaseModel):
+    status: str
+    reviewer: str = "demo-reviewer"
+
+
+def _persona(user_id: str, requested: Optional[str] = None) -> str:
+    try:
+        actual = identity_persona(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Demo authentication is required.") from exc
+    if requested and requested != actual:
+        raise HTTPException(status_code=403, detail="Persona is not authorized for this identity.")
+    return actual
 
 
 @app.on_event("startup")
@@ -92,32 +111,75 @@ def api_filters() -> Dict[str, Any]:
 @app.post("/api/diagnoses")
 def api_diagnoses(payload: DiagnosisRequest) -> Dict[str, Any]:
     try:
+        persona = _persona(payload.user_id, payload.persona)
         return diagnose_scope(
             kpis=payload.kpis,
             target_date=payload.target_date,
             region=payload.region,
             category=payload.category,
-            persona=payload.persona,
+            persona=persona,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/diagnoses/{run_id}")
-def api_diagnosis_run(run_id: str) -> Dict[str, Any]:
-    result = get_diagnosis(run_id)
+def api_diagnosis_run(run_id: str, user_id: str = "demo-marketing") -> Dict[str, Any]:
+    result = get_authorized_diagnosis(run_id, user_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Diagnosis run not found")
     return result
+
+
+@app.get("/api/investigations")
+def api_investigations(limit: int = 100, offset: int = 0, persona: Optional[str] = None, user_id: str = "demo-marketing") -> Dict[str, Any]:
+    return get_investigations(limit=min(limit, 200), offset=max(offset, 0), persona=_persona(user_id, persona))
+
+
+@app.get("/api/kpis/{kpi_id}/timeseries")
+def api_timeseries(kpi_id: str, region: str = "North", category: str = "Electronics", user_id: str = "demo-marketing") -> Dict[str, Any]:
+    try:
+        _persona(user_id)
+        authorize_scope(user_id, region, category)
+        return get_timeseries(kpi_id, region, category)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc: raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/diagnoses/{run_id}/evidence")
+def api_evidence(run_id: str, user_id: str = "demo-marketing") -> Dict[str, Any]:
+    if get_authorized_diagnosis(run_id, user_id) is None:
+        raise HTTPException(status_code=403, detail="Evidence is not available to this identity.")
+    try: return get_evidence(run_id)
+    except ValueError as exc: raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/insights")
+def api_insights(limit: int = 50, offset: int = 0, persona: Optional[str] = None, user_id: str = "demo-marketing") -> Dict[str, Any]:
+    return get_insights(limit=min(limit, 200), offset=max(offset, 0), persona=_persona(user_id, persona))
+
+
+@app.get("/api/marketing")
+def api_marketing(region: str = "North", category: str = "Electronics", user_id: str = "demo-marketing") -> Dict[str, Any]:
+    try:
+        _persona(user_id)
+        authorize_scope(user_id, region, category)
+        return get_marketing(region, category)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/chat")
 def api_chat(payload: ChatRequest) -> Dict[str, Any]:
     try:
         if payload.run_id:
-            saved = get_diagnosis(payload.run_id)
+            actual_persona = _persona(payload.user_id, payload.persona)
+            saved = get_authorized_diagnosis(payload.run_id, payload.user_id)
             if saved is None:
-                raise ValueError(f"Unknown diagnosis run_id: {payload.run_id}")
+                raise HTTPException(status_code=403, detail="Diagnosis run is not available to this identity.")
             run_record = saved.get("result", {})
             diagnosis_json = run_record if run_record else saved.get("diagnosis_json")
             active_kpi = payload.active_kpi or run_record.get("kpi_id") or saved.get("kpi_id")
@@ -126,6 +188,7 @@ def api_chat(payload: ChatRequest) -> Dict[str, Any]:
             active_category = payload.active_category or saved.get("scope", {}).get("category") or run_record.get("segment", {}).get("category") or "ALL"
             as_of_timestamp = payload.as_of_timestamp or run_record.get("as_of") or "2023-07-25T12:00:00"
         else:
+            actual_persona = _persona(payload.user_id, payload.persona)
             diagnosis_json = payload.diagnosis_json
             if diagnosis_json is None:
                 raise ValueError("Either run_id or diagnosis_json is required.")
@@ -145,8 +208,8 @@ def api_chat(payload: ChatRequest) -> Dict[str, Any]:
             active_date=active_date,
             active_region=active_region,
             active_category=active_category,
-            user_persona=payload.persona,
-            user_access_tags=payload.user_access_tags,
+            user_persona=actual_persona,
+            user_access_tags=["public", "internal"],
             as_of_timestamp=as_of_timestamp,
             chat_history=[],
             run_id=payload.run_id,
@@ -160,7 +223,7 @@ def api_chat(payload: ChatRequest) -> Dict[str, Any]:
                 "region": active_region,
                 "category": active_category,
                 "as_of": as_of_timestamp,
-                "persona": payload.persona,
+                "persona": actual_persona,
             })
             append_message(conversation_id, "user", payload.question, response.citations)
             append_message(conversation_id, "assistant", response.answer, response.citations)
@@ -174,9 +237,10 @@ def api_chat(payload: ChatRequest) -> Dict[str, Any]:
 
 
 @app.get("/api/conversations/{conversation_id}")
-def api_conversation(conversation_id: str) -> Dict[str, Any]:
+def api_conversation(conversation_id: str, user_id: str = "demo-marketing") -> Dict[str, Any]:
     result = get_conversation(conversation_id)
-    if result is None:
+    _persona(user_id)
+    if result is None or result.get("user_id") != user_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return result
 
@@ -184,6 +248,9 @@ def api_conversation(conversation_id: str) -> Dict[str, Any]:
 @app.post("/api/feedback")
 def api_feedback(payload: FeedbackRequest) -> Dict[str, Any]:
     try:
+        _persona(payload.user_id)
+        if get_authorized_diagnosis(payload.run_id, payload.user_id) is None:
+            raise HTTPException(status_code=403, detail="Feedback is not available for this diagnosis.")
         return save_feedback(
             run_id=payload.run_id,
             user_id=payload.user_id,
@@ -191,9 +258,32 @@ def api_feedback(payload: FeedbackRequest) -> Dict[str, Any]:
             feedback_type=payload.feedback_type,
             comments=payload.comments,
             metadata=payload.metadata,
+            target_type=payload.target_type,
+            target_id=payload.target_id,
+            snapshot=payload.original_snapshot,
         )
-    except Exception as exc:
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/feedback")
+def api_feedback_list(user_id: str = "demo-marketing") -> Dict[str, Any]:
+    _persona(user_id)
+    return get_feedback(user_id)
+
+
+@app.patch("/api/feedback/{feedback_id}")
+def api_feedback_review(feedback_id: int, payload: FeedbackReviewRequest, user_id: str = "demo-cfo") -> Dict[str, Any]:
+    try:
+        _persona(user_id, "CFO")
+        result = review_feedback(feedback_id, payload.status, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Feedback item not found")
+    return result
 
 
 if __name__ == "__main__":

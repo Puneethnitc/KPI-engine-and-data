@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { DemoProvider } from '../components/app-shell'
 
 export const metadata: Metadata = {
   title: 'Signalcraft — KPI Intelligence',
@@ -41,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        {children}
+        <DemoProvider>{children}</DemoProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

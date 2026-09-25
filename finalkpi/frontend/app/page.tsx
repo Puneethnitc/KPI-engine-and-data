@@ -7,6 +7,8 @@ import {
   Maximize2, Minimize2, Moon, RefreshCw, Send, ShieldAlert, Sparkles,
   Sun, TrendingDown, X,
 } from 'lucide-react'
+import Link from 'next/link'
+import { identityForPersona, useDemoContext } from '../components/app-shell'
 
 type Movement = {
   actual_value: number
@@ -70,7 +72,6 @@ type ChatMessage = {
 type AssistantMode = 'closed' | 'opening' | 'open' | 'minimized'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api/backend'
-const PERSONA = 'marketing_manager'
 const KPIS = [
   { id: 'net_sales_revenue', label: 'Revenue', unit: 'INR', icon: TrendingDown },
   { id: 'orders', label: 'Orders', unit: 'count', icon: BarChart3 },
@@ -148,11 +149,8 @@ function Composer({ value, setValue, submit, panel = false, disabled = false }: 
 }
 
 export default function Page() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const { persona, setPersona, region, setRegion, category, setCategory, date, setDate, theme, setTheme } = useDemoContext()
   const [selected, setSelected] = useState<KpiId>('net_sales_revenue')
-  const [region, setRegion] = useState('North')
-  const [category, setCategory] = useState('Electronics')
-  const [date, setDate] = useState('2023-07-24')
   const [regions, setRegions] = useState(['North', 'South', 'East', 'West'])
   const [categories, setCategories] = useState(['Electronics', 'Apparel', 'Home'])
   const [dates, setDates] = useState(['2023-07-24'])
@@ -173,12 +171,20 @@ export default function Page() {
   const decomposition = result?.decomposition
   const isAssistantOpen = assistantMode === 'opening' || assistantMode === 'open'
 
-  useEffect(() => {
-    const stored = localStorage.getItem('kpi-theme')
-    setTheme(stored === 'light' ? 'light' : 'dark')
-  }, [])
-  useEffect(() => { localStorage.setItem('kpi-theme', theme) }, [theme])
   useEffect(() => { conversationEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, asking])
+  useEffect(() => {
+    const runId = new URLSearchParams(window.location.search).get('runId')
+    if (!runId) return
+    fetch(`${API_BASE}/api/diagnoses/${encodeURIComponent(runId)}?user_id=${identityForPersona(persona)}`)
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('The selected insight is unavailable to this identity.')))
+      .then(payload => {
+        const loaded = payload.result ?? payload
+        setSelected(loaded.kpi_id)
+        setResults(current => ({ ...current, [loaded.kpi_id]: loaded }))
+        setAssistantMode('open')
+      })
+      .catch(requestError => setError(requestError instanceof Error ? requestError.message : 'The selected insight is unavailable.'))
+  }, [persona])
 
   async function loadMetadata() {
     try {
@@ -189,9 +195,10 @@ export default function Page() {
       setCategories(payload.categories ?? categories)
       setDates(payload.dates ?? dates)
       if (payload.default) {
-        setRegion(payload.default.region ?? region)
-        setCategory(payload.default.category ?? category)
-        setDate(payload.default.date ?? date)
+        const params = new URLSearchParams(window.location.search)
+        setRegion(params.get('region') ?? payload.default.region ?? region)
+        setCategory(params.get('category') ?? payload.default.category ?? category)
+        setDate(params.get('date') ?? payload.default.date ?? date)
       }
     } catch {
       // The diagnosis request below displays the actionable connectivity error.
@@ -205,7 +212,7 @@ export default function Page() {
       const response = await fetch(`${API_BASE}/api/diagnoses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kpis: ['all'], target_date: date, region, category, persona: PERSONA }),
+        body: JSON.stringify({ kpis: ['all'], target_date: date, region, category, persona, user_id: identityForPersona(persona) }),
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.detail ?? 'Diagnosis failed')
@@ -220,7 +227,20 @@ export default function Page() {
   }
 
   useEffect(() => { void loadMetadata() }, [])
-  useEffect(() => { void diagnose() }, [region, category, date])
+  useEffect(() => { void diagnose() }, [region, category, date, persona])
+  useEffect(() => {
+    const runId = new URLSearchParams(window.location.search).get('runId')
+    if (!runId) return
+    fetch(`${API_BASE}/api/diagnoses/${encodeURIComponent(runId)}?user_id=${identityForPersona(persona)}`)
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('The selected insight is not available to this identity.')))
+      .then(payload => {
+        const run = payload.result ?? payload
+        setResults(current => ({ ...current, [run.kpi_id]: run }))
+        setSelected(run.kpi_id as KpiId)
+        if (new URLSearchParams(window.location.search).get('assistant') === 'open') setAssistantMode('open')
+      })
+      .catch(requestError => setError(requestError instanceof Error ? requestError.message : 'Could not load the selected insight'))
+  }, [persona])
 
   async function askQuestion(prefill?: string) {
     const question = (prefill ?? draft).trim()
@@ -240,7 +260,7 @@ export default function Page() {
       const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run_id: result.run_id, conversation_id: conversationId, question, persona: PERSONA }),
+        body: JSON.stringify({ run_id: result.run_id, conversation_id: conversationId, question, persona, user_id: identityForPersona(persona) }),
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.detail ?? 'Grounded chat failed')
@@ -286,8 +306,8 @@ export default function Page() {
   return <div className={`app-shell ${theme}`} style={{ '--assistant-width': `${panelWidth}px` } as React.CSSProperties}>
     <header className="topbar">
       <div className="brand"><span className="brand-mark"><BarChart3 size={17} /></span><span>KPI <strong>Intelligence</strong></span></div>
-      <nav className="main-nav" aria-label="Primary navigation"><button className="active">Overview</button><button>Performance</button><button>Campaigns</button><button>Insights</button></nav>
-      <div className="top-actions"><span className="freshness"><i /> Engine data</span><button className="theme-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button><span className="avatar">MM</span></div>
+      <nav className="main-nav" aria-label="Primary navigation"><Link className="active" href="/">Overview</Link><Link href="/performance">Performance</Link><Link href="/campaigns">Campaigns</Link><Link href="/insights">Insights</Link></nav>
+      <div className="top-actions"><span className="freshness"><i /> Engine data</span><label className="persona-control">Demo persona<select value={persona} onChange={event => { setMessages([]); setConversationId(undefined); setPersona(event.target.value) }}><option value="marketing_manager">Marketing Manager</option><option value="CFO">CFO</option></select></label><button className="theme-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button><span className="avatar">{persona === 'CFO' ? 'CF' : 'MM'}</span></div>
     </header>
 
     <main className="workspace" data-ai={isAssistantOpen ? 'open' : assistantMode}>
@@ -331,7 +351,7 @@ export default function Page() {
 
         <section className="card action-card"><div className="section-heading compact"><div><span className="eyebrow">Recommended next step</span><h2>Action within marketing decision rights</h2></div></div>{result?.decision_cards?.length ? <div className="action-list">{result.decision_cards.slice(0, 3).map((action, index) => <article key={`${action.kind}-${index}`}><span>0{index + 1}</span><div><h3>{titleCase(action.kind)}</h3><p>{action.recommendation}</p><small>Owner: {action.owner} · Status: {titleCase(action.status)} · Expected impact: {action.expected_impact == null ? 'not estimated' : formatValue(action.expected_impact, kpi.unit)}</small></div><button onClick={() => void askQuestion(`Explain the evidence and constraints for this action: ${action.recommendation}`)}><ArrowRight size={16} /></button></article>)}</div> : <div className="empty-state">The engine is abstaining from action until the evidence is sufficient.</div>}</section>
 
-        <footer className="source-footer"><span>Run {result?.run_id ?? '—'}</span><span>Source status: {titleCase(result?.reconciliation_verdict?.status)}</span><span>Persona: Marketing manager</span></footer>
+        <footer className="source-footer"><span>Run {result?.run_id ?? '—'}</span><span>Source status: {titleCase(result?.reconciliation_verdict?.status)}</span><span>Persona: {persona === 'CFO' ? 'CFO' : 'Marketing manager'}</span></footer>
       </section>
 
       {assistantMode === 'closed' && <Composer value={draft} setValue={setDraft} submit={() => void askQuestion()} disabled={loading} />}
