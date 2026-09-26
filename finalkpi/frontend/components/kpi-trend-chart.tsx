@@ -261,8 +261,9 @@ export function KpiTrendChart({
         // Normalise deltaY; clamp to prevent jumps from large wheel events.
         const rawDelta = pending.deltaY
         const clampedDelta = Math.max(-MAX_DELTA_PER_FRAME, Math.min(MAX_DELTA_PER_FRAME, rawDelta))
-        // Exponential factor: positive deltaY → zoom in (shrink span).
-        const factor = Math.exp(clampedDelta * ZOOM_SENSITIVITY)
+        // Exponential factor: positive deltaY (scroll down) → zoom in (shrink span).
+        // Negate so Math.exp gives a factor < 1 when scrolling down.
+        const factor = Math.exp(-clampedDelta * ZOOM_SENSITIVITY)
         const nextSpan = Math.max(MIN_WINDOW - 1, Math.min(lastPointIndex, span * factor))
         const anchorIndex = start + pending.anchorRatio * span
         const nextStart = anchorIndex - pending.anchorRatio * nextSpan
