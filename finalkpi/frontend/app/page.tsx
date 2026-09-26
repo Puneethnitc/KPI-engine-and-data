@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { AppHeader, identityForPersona, useDemoContext } from '../components/app-shell'
 import { statusLabel } from '../lib/presentation'
+import { CustomSelect } from '../components/ui/custom-select'
+import { KpiTrendChart } from '../components/kpi-trend-chart'
 
 type Movement = {
   actual_value: number
@@ -315,11 +317,15 @@ export default function Page() {
 
   const contributionRows = useMemo(() => {
     if (!decomposition?.is_identity_held) return []
-    return [
+    const rows = [
       { label: selected === 'orders' ? 'Traffic effect' : 'Volume effect', value: decomposition.volume_effect },
       { label: selected === 'orders' ? 'Conversion effect' : 'Rate / price effect', value: decomposition.price_effect },
       ...(decomposition.mix_effect ? [{ label: 'Mix effect', value: decomposition.mix_effect }] : []),
     ]
+    if (decomposition.residual && Math.abs(decomposition.residual) > 1e-4) {
+      rows.push({ label: 'Residual / Unexplained effect', value: decomposition.residual })
+    }
+    return rows
   }, [decomposition, selected])
   const contributionTotal = contributionRows.reduce((total, item) => total + Math.abs(item.value), 0) || 1
   const materialCount = Object.values(results).filter(item => item.movement_assessment?.is_material).length
@@ -344,11 +350,19 @@ export default function Page() {
       <section className="dashboard-column">
         <div className="page-heading">
           <div><span className="eyebrow"><LayoutDashboard size={14} /> {persona === 'CFO' ? 'Financial reviewer workspace' : 'Marketing manager workspace'}</span><h1>Performance overview</h1><p>What changed, what may explain it, and what to verify next.</p></div>
-          <div className="filter-row">
-            <label>Region<select value={region} onChange={event => setRegion(event.target.value)}>{options.regions.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
-            <label>Category<select value={category} onChange={event => setCategory(event.target.value)}>{options.categories.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
-            <label>Date<select value={date} onChange={event => setDate(event.target.value)}>{options.dates.map(item => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
-            <button className="run-button" disabled={!ready || loading} onClick={() => void diagnose()}><RefreshCw size={15} className={loading ? 'spin' : ''} /> Run</button>
+          <div className="filter-row" style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ width: '130px' }}>
+              <CustomSelect label="Region" ariaLabel="Region" value={region} onChange={setRegion} options={options.regions} />
+            </div>
+            <div style={{ width: '150px' }}>
+              <CustomSelect label="Category" ariaLabel="Category" value={category} onChange={setCategory} options={options.categories} />
+            </div>
+            <div style={{ width: '140px' }}>
+              <CustomSelect label="Date" ariaLabel="Date" value={date} onChange={setDate} options={options.dates} searchable />
+            </div>
+            <button className="run-button" style={{ minHeight: '40px', height: '40px' }} disabled={!ready || loading} onClick={() => void diagnose()}>
+              <RefreshCw size={15} className={loading ? 'spin' : ''} /> Run
+            </button>
           </div>
         </div>
 
@@ -376,9 +390,39 @@ export default function Page() {
           })}
         </section>
 
-        <section className="hero-card card">
-          <div className="hero-summary"><span className="eyebrow">Primary observed KPI</span><h2>{selectedKpiLabel}</h2><div className="hero-number">{formatValue(movement?.actual_value, kpi.unit)}</div><p className={(movement?.delta ?? 0) < 0 ? 'negative' : 'positive'}><ArrowDownRight size={16} /> {formatDelta(movement?.delta, kpi.unit)} versus the engine baseline</p><span className={`evidence-pill ${movement?.is_material ? 'warning' : 'good'}`}>{movement?.is_material ? 'Material movement' : 'Not material'}</span></div>
-          <div className="comparison-chart" role="img" aria-label={`${selectedKpiLabel} actual compared with expected baseline`}><div className="chart-head"><span>Actual vs expected</span><small>No invented trend series</small></div><div className="bar-row"><span>Expected</span><i><b style={{ width: '100%' }} /></i><strong>{formatValue(movement?.expected_value, kpi.unit)}</strong></div><div className="bar-row actual"><span>Actual</span><i><b style={{ width: `${movement?.expected_value ? Math.min(100, Math.abs((movement.actual_value / movement.expected_value) * 100)) : 0}%` }} /></i><strong>{formatValue(movement?.actual_value, kpi.unit)}</strong></div><div className="chart-caption"><Database size={14} /> Target date {date} · As of {result?.as_of ? new Date(result.as_of).toLocaleString('en-IN') : 'awaiting run'}</div></div>
+        <section className="hero-card card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(230px, 0.8fr) minmax(320px, 1.2fr)', gap: '24px', alignItems: 'center' }}>
+            <div className="hero-summary">
+              <span className="eyebrow">Primary observed KPI</span>
+              <h2>{selectedKpiLabel}</h2>
+              <div className="hero-number">{formatValue(movement?.actual_value, kpi.unit)}</div>
+              <p className={(movement?.delta ?? 0) < 0 ? 'negative' : 'positive'}>
+                <ArrowDownRight size={16} /> {formatDelta(movement?.delta, kpi.unit)} versus the engine baseline
+              </p>
+              <span className={`evidence-pill ${movement?.is_material ? 'warning' : 'good'}`}>
+                {movement?.is_material ? 'Material movement' : 'Not material'}
+              </span>
+            </div>
+
+            <div className="comparison-chart" role="img" aria-label={`${selectedKpiLabel} actual compared with expected baseline`}>
+              <div className="chart-head"><span>Target Date Summary</span><small>Actual vs Baseline</small></div>
+              <div className="bar-row"><span>Expected</span><i><b style={{ width: '100%' }} /></i><strong>{formatValue(movement?.expected_value, kpi.unit)}</strong></div>
+              <div className="bar-row actual"><span>Actual</span><i><b style={{ width: `${movement?.expected_value ? Math.min(100, Math.abs((movement.actual_value / movement.expected_value) * 100)) : 0}%` }} /></i><strong>{formatValue(movement?.actual_value, kpi.unit)}</strong></div>
+              <div className="chart-caption"><Database size={14} /> Target date {date} · As of {result?.as_of ? new Date(result.as_of).toLocaleString('en-IN') : 'awaiting run'}</div>
+            </div>
+          </div>
+
+          {/* Real Governed Time-Series Trend Line Chart */}
+          <KpiTrendChart
+            apiBase={API_BASE}
+            kpiId={selected}
+            kpiLabel={selectedKpiLabel}
+            unit={kpi.unit}
+            region={region}
+            category={category}
+            targetDate={date}
+            userId={identityForPersona(persona)}
+          />
         </section>
 
         <div className="section-heading"><div><h2>What explains the movement?</h2><p>Accounting contributions and diagnostic indicators are deliberately separated.</p></div><button onClick={() => void askQuestion('Explain the difference between contributions and diagnostic drivers.')}><CircleHelp size={15} /> Ask AI</button></div>

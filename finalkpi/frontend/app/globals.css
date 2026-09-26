@@ -370,6 +370,20 @@ td strong, td:nth-child(2) { color: var(--text); }
   .table-wrap td:first-child { display: none; }
 }
 
+@keyframes customSelectFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.custom-select-button:hover {
+  border-color: var(--blue) !important;
+}
+
+.custom-select-button:focus-visible {
+  outline: 2px solid var(--blue) !important;
+  outline-offset: 2px;
+}
+
 button, a, select, textarea { outline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--blue); }
 

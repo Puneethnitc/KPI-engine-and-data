@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import AppShell, { API_BASE, identityForPersona, State, useDemoContext } from '../../components/app-shell'
 import { contextHref, isAwaitingReview, isReviewPending, isSourceWarning, reviewStateLabel, statusLabel } from '../../lib/presentation'
 
+import { CustomSelect } from '../../components/ui/custom-select'
+
 type Investigation = { run_id: string; kpi_id: string; target_date: string; actual: number | null; expected: number | null; delta: number | null; is_material: boolean; detector_agreement?: string; reconciliation_status?: string; verdict?: string; confidence_status?: string; review_state: string; owner: string; scope: { region: string; category: string } }
 const label = (id: string) => id.replaceAll('_', ' ').replace(/(^|\s)\S/g, character => character.toUpperCase())
 const number = (value: number | null, unit: string, delta = false) => {
@@ -40,9 +42,27 @@ export default function PerformancePage() {
   const warningCount = visibleItems.filter(item => isSourceWarning(item.reconciliation_status)).length
   const awaitingCount = visibleItems.filter(item => isAwaitingReview(item.review_state)).length
   const owners = [...new Set(items.map(item => item.owner).filter(Boolean))].sort()
+
+  const kpiOptions = [{ value: '', label: 'All KPIs' }, ...[...new Set(items.map(item => item.kpi_id))].map(id => ({ value: id, label: label(id) }))]
+  const ownerOptions = [{ value: '', label: 'All owners' }, ...owners.map(owner => ({ value: owner, label: statusLabel(owner) }))]
+  const confidenceOptions = [{ value: '', label: 'All evidence states' }, ...[...new Set(items.map(item => item.confidence_status).filter((v): v is string => Boolean(v)))].map(val => ({ value: val, label: statusLabel(val) }))]
+
   return <AppShell active="Performance" context="Investigation queue">
     <div className="page-heading route-heading"><div><span className="eyebrow">Decision queue</span><h1>Performance investigations</h1><p>Prioritized movements for {region} · {category} · {date}</p></div><span className="evidence-pill">{visibleItems.length} visible · {items.length} total</span></div>
-    <div className="queue-filters"><label><input type="checkbox" checked={materialOnly} onChange={event => setMaterialOnly(event.target.checked)} /> Material only</label><label><input type="checkbox" checked={awaitingOnly} onChange={event => setAwaitingOnly(event.target.checked)} /> Awaiting review</label><label><input type="checkbox" checked={sourceWarningOnly} onChange={event => setSourceWarningOnly(event.target.checked)} /> Source warning</label><label>KPI<select value={kpiFilter} onChange={event => setKpiFilter(event.target.value)}><option value="">All KPIs</option>{[...new Set(items.map(item => item.kpi_id))].map(id => <option key={id} value={id}>{label(id)}</option>)}</select></label><label>Owner<select value={ownerFilter} onChange={event => setOwnerFilter(event.target.value)}><option value="">All owners</option>{owners.map(owner => <option key={owner} value={owner}>{statusLabel(owner)}</option>)}</select></label><label>Confidence<select value={confidenceFilter} onChange={event => setConfidenceFilter(event.target.value)}><option value="">All evidence states</option>{[...new Set(items.map(item => item.confidence_status).filter((value): value is string => Boolean(value)))].map(value => <option key={value} value={value}>{statusLabel(value)}</option>)}</select></label></div>
+    <div className="queue-filters" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+      <label><input type="checkbox" checked={materialOnly} onChange={event => setMaterialOnly(event.target.checked)} /> Material only</label>
+      <label><input type="checkbox" checked={awaitingOnly} onChange={event => setAwaitingOnly(event.target.checked)} /> Awaiting review</label>
+      <label><input type="checkbox" checked={sourceWarningOnly} onChange={event => setSourceWarningOnly(event.target.checked)} /> Source warning</label>
+      <div style={{ width: '150px' }}>
+        <CustomSelect label="KPI" ariaLabel="Filter by KPI" value={kpiFilter} onChange={setKpiFilter} options={kpiOptions} />
+      </div>
+      <div style={{ width: '150px' }}>
+        <CustomSelect label="Owner" ariaLabel="Filter by Owner" value={ownerFilter} onChange={setOwnerFilter} options={ownerOptions} />
+      </div>
+      <div style={{ width: '170px' }}>
+        <CustomSelect label="Confidence" ariaLabel="Filter by Confidence" value={confidenceFilter} onChange={setConfidenceFilter} options={confidenceOptions} />
+      </div>
+    </div>
     <div className="summary-strip"><div><strong>{material}</strong><span>Material movements</span></div><div><strong>{unresolved}</strong><span>Open investigations</span></div><div><strong>{warningCount}</strong><span>Source warnings</span></div><div><strong>{awaitingCount}</strong><span>Awaiting review</span></div></div>
     {error && <div className="alert error"><AlertTriangle size={17} />{error}</div>}
     {loading ? <State><RefreshCw className="spin" /> Loading governed investigations…</State> : !items.length ? <State><CheckCircle2 size={20} /> No stored investigations yet. Run a diagnosis from Overview to populate this queue.</State> : !visibleItems.length ? <State>No investigations match the current filters.</State> : <div className="table-wrap card"><table><caption className="sr-only">Prioritized investigation queue</caption><thead><tr><th>Priority</th><th>KPI</th><th>Actual</th><th>Expected</th><th>Delta</th><th>Materiality</th><th>Sources</th><th>Evidence</th><th>Owner</th><th>Review</th><th /></tr></thead><tbody>{visibleItems.map((item, index) => { const unit = units[item.kpi_id] ?? 'count'; return <tr key={item.run_id}><td data-label="Priority"><strong>{String(index + 1).padStart(2, '0')}</strong></td><td data-label="KPI">{label(item.kpi_id)}</td><td data-label="Actual">{number(item.actual, unit)}</td><td data-label="Expected">{number(item.expected, unit)}</td><td data-label="Variance" className={(item.delta ?? 0) < 0 ? 'negative' : 'positive'}>{number(item.delta, unit, true)}</td><td data-label="Materiality"><span className={`status ${item.is_material ? 'warn' : 'ok'}`}>{item.is_material ? 'Material' : 'Non-material'}</span></td><td data-label="Sources">{statusLabel(item.reconciliation_status)}</td><td data-label="Evidence">{statusLabel(item.confidence_status ?? item.verdict)}</td><td data-label="Owner">{statusLabel(item.owner)}</td><td data-label="Review">{reviewStateLabel(item.review_state)}</td><td data-label="Details"><Link className="icon-link" href={contextHref(`/performance/${item.run_id}`, { persona, region, category, date })} aria-label={`Open ${label(item.kpi_id)} investigation`}><ArrowRight size={15} /></Link></td></tr>})}</tbody></table></div>}

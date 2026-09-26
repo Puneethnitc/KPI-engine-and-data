@@ -81,11 +81,19 @@ export function useDemoContext() {
   return value
 }
 
+import { CustomSelect } from './ui/custom-select'
+
 export function AppHeader({ active }: { active: string }) {
   const demo = useDemoContext()
   const [menuOpen, setMenuOpen] = useState(false)
   const queryHref = (path: string) => contextHref(path, demo)
   const activeLabel = active === 'Overview' ? 'Overview' : active
+
+  const personaOptions = demo.options.personas.map(option => ({
+    value: option,
+    label: option === 'CFO' ? 'CFO' : option.replaceAll('_', ' ').replace(/(^|\s)\S/g, character => character.toUpperCase()),
+  }))
+
   return <>
     <header className="topbar">
       <Link className="brand" href={queryHref('/')}><span className="brand-mark"><BarChart3 size={17} /></span><span>KPI <strong>Intelligence</strong></span></Link>
@@ -93,7 +101,18 @@ export function AppHeader({ active }: { active: string }) {
       <nav className={`main-nav ${menuOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
         {[['/', 'Overview'], ['/performance', 'Performance'], ['/campaigns', 'Campaigns'], ['/insights', 'Insights']].map(([href, label]) => <Link key={href} className={activeLabel === label ? 'active' : ''} href={queryHref(href)} onClick={() => setMenuOpen(false)}>{label}</Link>)}
       </nav>
-      <div className="top-actions"><label className="persona-control">Demo persona<select value={demo.persona} onChange={event => demo.setPersona(event.target.value)}>{demo.options.personas.map(option => <option key={option} value={option}>{option === 'CFO' ? 'CFO' : option.replaceAll('_', ' ').replace(/(^|\s)\S/g, character => character.toUpperCase())}</option>)}</select></label><button className="theme-button" onClick={() => demo.setTheme(demo.theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{demo.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button><span className="avatar">{demo.persona === 'CFO' ? 'CF' : 'MM'}</span></div>
+      <div className="top-actions">
+        <div className="persona-control" style={{ minWidth: '150px' }}>
+          <CustomSelect
+            ariaLabel="Demo persona"
+            value={demo.persona}
+            onChange={demo.setPersona}
+            options={personaOptions}
+          />
+        </div>
+        <button className="theme-button" onClick={() => demo.setTheme(demo.theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{demo.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
+        <span className="avatar">{demo.persona === 'CFO' ? 'CF' : 'MM'}</span>
+      </div>
     </header>
     <div className="mobile-page-scope"><strong>{activeLabel}</strong><span>{demo.region} · {demo.category} · {demo.date}</span></div>
   </>
@@ -103,7 +122,18 @@ export default function AppShell({ children, active, context }: { children: Reac
   const demo = useDemoContext()
   return <div className={`app-shell ${demo.theme}`} data-context-ready={demo.ready}>
     <AppHeader active={active} />
-    {active !== 'Overview' && <div className="shared-scope-bar" aria-label="Current business scope"><span>{demo.region} · {demo.category} · {demo.date}</span><select aria-label="Region" value={demo.region} onChange={event => demo.setRegion(event.target.value)}>{demo.options.regions.map(value => <option key={value}>{value}</option>)}</select><select aria-label="Category" value={demo.category} onChange={event => demo.setCategory(event.target.value)}>{demo.options.categories.map(value => <option key={value}>{value}</option>)}</select><select aria-label="Date" value={demo.date} onChange={event => demo.setDate(event.target.value)}>{demo.options.dates.map(value => <option key={value}>{value}</option>)}</select></div>}
+    {active !== 'Overview' && <div className="shared-scope-bar" aria-label="Current business scope">
+      <span>{demo.region} · {demo.category} · {demo.date}</span>
+      <div style={{ width: '130px' }}>
+        <CustomSelect ariaLabel="Region" value={demo.region} onChange={demo.setRegion} options={demo.options.regions} />
+      </div>
+      <div style={{ width: '150px' }}>
+        <CustomSelect ariaLabel="Category" value={demo.category} onChange={demo.setCategory} options={demo.options.categories} />
+      </div>
+      <div style={{ width: '140px' }}>
+        <CustomSelect ariaLabel="Date" value={demo.date} onChange={demo.setDate} options={demo.options.dates} searchable />
+      </div>
+    </div>}
     {context && <div className="route-context">Active scope: {context} · {demo.persona === 'CFO' ? 'CFO review' : 'Marketing Manager workspace'}</div>}
     <main className="workspace"><section className="dashboard-column">{children}</section></main>
   </div>

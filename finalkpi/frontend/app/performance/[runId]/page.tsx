@@ -5,6 +5,7 @@ import { ArrowLeft, BookOpen, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import AppShell, { API_BASE, identityForPersona, State, useDemoContext } from '../../../components/app-shell'
 import { contextHref, statusLabel } from '../../../lib/presentation'
+import { CustomSelect } from '../../../components/ui/custom-select'
 
 type Run = { run_id: string; kpi_id: string; target_date: string; as_of: string; verdict: string; narrative: string; persona: string; segment: { region: string; category: string }; movement_assessment?: { actual_value: number; expected_value: number; delta: number; is_material: boolean }; reconciliation_verdict?: { status: string }; decomposition?: { is_identity_held: boolean; volume_effect: number; price_effect: number; mix_effect: number }; correlational_candidates?: { driver_id: string; max_correlation: number; claim_type: string }[]; confidence?: { status: string; reasons?: string[] }; decision_cards?: { recommendation: string; owner: string; expected_impact: number | null }[] }
 type Evidence = { claim: string; source_name: string; source_grain: string; source_freshness: string; row_reference: string; analytical_method: string; claim_type: string; access_classification: string }
@@ -30,6 +31,30 @@ export default function DetailPage({ params }: { params: Promise<{ runId: string
     <section className="detail-grid"><article className="card detail-card"><span className="eyebrow">Accounting contribution</span><h2>{run.decomposition?.is_identity_held ? 'Identity reconciled' : 'Unavailable'}</h2><p>{run.decomposition ? `Volume ${run.decomposition.volume_effect.toFixed(2)} · Rate/price ${run.decomposition.price_effect.toFixed(2)} · Mix ${run.decomposition.mix_effect.toFixed(2)}` : 'No exact bridge is available for this KPI.'}</p></article><article className="card detail-card"><span className="eyebrow">Diagnostic indicators</span>{run.correlational_candidates?.slice(0, 3).map(candidate => <p key={candidate.driver_id}><strong>{candidate.driver_id.replaceAll('_', ' ')}</strong> · correlation {candidate.max_correlation.toFixed(2)} · {candidate.claim_type}</p>) ?? <p>No diagnostic indicator passed the checks.</p>}</article></section>
     <section className="card detail-card"><span className="eyebrow"><BookOpen size={14} /> Evidence lineage</span>{evidence.slice(0, 8).map((item, index) => <div className="evidence-row" key={`${item.source_name}-${index}`}><CheckCircle2 size={15} /><div><strong>{item.source_name}</strong><p>{item.claim_type} · {item.source_grain} · {item.row_reference || 'reference unavailable'}</p><small>{item.analytical_method} · fresh {item.source_freshness} · access {item.access_classification}</small></div></div>)}</section>
     <section className="card detail-card"><span className="eyebrow">Recommended next check</span>{run.decision_cards?.length ? run.decision_cards.map((card, index) => <p key={index}><strong>{card.owner}:</strong> {card.recommendation} <small>Expected impact: {card.expected_impact == null ? 'not estimated' : card.expected_impact}</small></p>) : <p>The engine abstains until more evidence is available.</p>}</section>
-    <section className="card detail-card"><span className="eyebrow">Feedback and correction</span><h2>Review this diagnosis</h2><div className="feedback-form"><select value={feedbackType} onChange={event => setFeedbackType(event.target.value)}><option value="accurate">Accurate</option><option value="inaccurate">Inaccurate</option><option value="useful">Useful</option><option value="not_useful">Not useful</option><option value="accept_recommendation">Accept recommendation</option><option value="reject_recommendation">Reject recommendation</option></select><textarea value={feedbackNote} onChange={event => setFeedbackNote(event.target.value)} placeholder="Optional correction or note" aria-label="Feedback note" /><button className="run-button" onClick={() => void submitFeedback()}>Submit feedback</button></div>{feedbackStatus && <p>{feedbackStatus}</p>}</section>
+
+    <section className="card detail-card">
+      <span className="eyebrow">Feedback and correction</span>
+      <h2>Review this diagnosis</h2>
+      <div className="feedback-form" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ width: '220px' }}>
+          <CustomSelect
+            ariaLabel="Feedback rating"
+            value={feedbackType}
+            onChange={setFeedbackType}
+            options={[
+              { value: 'accurate', label: 'Accurate' },
+              { value: 'inaccurate', label: 'Inaccurate' },
+              { value: 'useful', label: 'Useful' },
+              { value: 'not_useful', label: 'Not useful' },
+              { value: 'accept_recommendation', label: 'Accept recommendation' },
+              { value: 'reject_recommendation', label: 'Reject recommendation' },
+            ]}
+          />
+        </div>
+        <textarea value={feedbackNote} onChange={event => setFeedbackNote(event.target.value)} placeholder="Optional correction or note" aria-label="Feedback note" style={{ minWidth: '240px', minHeight: '40px', height: '40px' }} />
+        <button className="run-button" style={{ minHeight: '40px', height: '40px' }} onClick={() => void submitFeedback()}>Submit feedback</button>
+      </div>
+      {feedbackStatus && <p style={{ marginTop: '8px', fontSize: '12px', color: 'var(--muted)' }}>{feedbackStatus}</p>}
+    </section>
   </AppShell>
 }
