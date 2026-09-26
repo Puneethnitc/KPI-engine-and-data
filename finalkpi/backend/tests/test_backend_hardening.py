@@ -100,6 +100,19 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(len(brief["ranked_insights"]), 5)
         self.assertIn("not proof of cause", brief["summary"].lower())
 
+    def test_multiple_positive_signal_stories_have_unique_kpi_specific_ids(self):
+        results = {}
+        results.update(self._result("traffic_total", 50, True))
+        results.update(self._result("units_sold", 20, True))
+        results.update(self._result("net_sales_revenue", 1000, True))
+        brief = build_marketing_brief(results, {"region": "North", "category": "Electronics", "target_date": "2023-07-24"})
+        positive_stories = [s for s in brief["stories"] if s["id"].startswith("POSITIVE_SIGNAL_")]
+        self.assertGreater(len(positive_stories), 1)
+        story_ids = [s["id"] for s in brief["stories"]]
+        self.assertEqual(len(story_ids), len(set(story_ids)), "Every story ID in the brief must be unique")
+        for story in positive_stories:
+            self.assertIn(story["affected_kpis"][0], story["id"], "Positive signal story ID must include its corresponding KPI ID")
+
 
 if __name__ == "__main__":
     unittest.main()

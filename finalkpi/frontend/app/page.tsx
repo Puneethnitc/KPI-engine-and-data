@@ -376,7 +376,36 @@ export default function Page() {
             const unit = registeredKpis.find(item => item.kpi_id === stage.kpi_id)?.unit ?? 'count'
             return <article className={`funnel-stage ${stage.direction}`} key={stage.kpi_id}><small>{stage.stage}</small><strong>{formatValue(stage.actual, unit)}</strong><span>{formatDelta(stage.delta, unit)} · {stage.material ? 'material' : stage.status === 'OK' ? 'not material' : titleCase(stage.status)}</span><b>{stage.label}</b>{index < marketingBrief.funnel.length - 1 && <ArrowRight className="funnel-arrow" size={15} />}</article>
           })}</div>
-          <div className="brief-insights">{briefStories.slice(0, 5).map((story, index) => <article className="brief-insight story-card" key={story.id}><span className="brief-rank">{String(index + 1).padStart(2, '0')}</span><div><strong>{story.title}</strong><p>{story.what_changed}</p><small>{story.affected_kpis.map(kpiLabel).join(' · ')} · {story.evidence_strength} · {statusLabelForBrief(story.confidence_status)}</small><p className="story-impact">{story.business_impact}</p>{story.recommended_action && <p>Next: {story.recommended_action.recommendation} · Owner {statusLabel(story.recommended_action.owner)}</p>}<small>{story.causal_boundary}</small>{story.technical_details?.filter(Boolean).length ? <details className="technical-details"><summary>View evidence details</summary>{story.technical_details.filter(Boolean).map((detail, detailIndex) => <p key={`${story.id}-detail-${detailIndex}`}>{detail}</p>)}</details> : null}</div><button onClick={() => { setSelected((story.affected_kpis[0] ?? selected) as KpiId); setDraft(`Explain the ${story.title.toLowerCase()} story and supporting evidence.`); setAssistantMode('open') }} aria-label={`Investigate ${story.title}`}><ArrowRight size={17} /></button></article>)}{!hasPositiveOpportunity && <p className="brief-no-positive">No verified positive opportunity was identified in this scope.</p>}</div>
+          <div className="brief-insights">
+            {briefStories.slice(0, 5).map((story, index) => {
+              const storyKey = [story.id, ...(story.affected_kpis ?? []), index].join('-')
+              return (
+                <article className="brief-insight story-card" key={storyKey}>
+                  <span className="brief-rank">{String(index + 1).padStart(2, '0')}</span>
+                  <div>
+                    <strong>{story.title}</strong>
+                    <p>{story.what_changed}</p>
+                    <small>{story.affected_kpis.map(kpiLabel).join(' · ')} · {story.evidence_strength} · {statusLabelForBrief(story.confidence_status)}</small>
+                    <p className="story-impact">{story.business_impact}</p>
+                    {story.recommended_action && <p>Next: {story.recommended_action.recommendation} · Owner {statusLabel(story.recommended_action.owner)}</p>}
+                    <small>{story.causal_boundary}</small>
+                    {story.technical_details?.filter(Boolean).length ? (
+                      <details className="technical-details">
+                        <summary>View evidence details</summary>
+                        {story.technical_details.filter(Boolean).map((detail, detailIndex) => (
+                          <p key={`${storyKey}-detail-${detailIndex}`}>{detail}</p>
+                        ))}
+                      </details>
+                    ) : null}
+                  </div>
+                  <button onClick={() => { setSelected((story.affected_kpis[0] ?? selected) as KpiId); setDraft(`Explain the ${story.title.toLowerCase()} story and supporting evidence.`); setAssistantMode('open') }} aria-label={`Investigate ${story.title}`}>
+                    <ArrowRight size={17} />
+                  </button>
+                </article>
+              )
+            })}
+            {!hasPositiveOpportunity && <p className="brief-no-positive">No verified positive opportunity was identified in this scope.</p>}
+          </div>
           {marketingBrief.uncertainty.length > 0 && <details className="brief-limits"><summary>Evidence limitations ({marketingBrief.uncertainty.length})</summary><p>{marketingBrief.uncertainty.map(statusLabelForBrief).join(' · ')}</p></details>}
           <details className="brief-method"><summary>Method and evidence details</summary><p>{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</p><small>Raw assessment: {result?.verdict} · {result?.confidence?.status ?? 'NOT_ASSESSED'} · {result?.causal_verdict ?? 'UNTESTABLE'}</small></details>
         </section>}

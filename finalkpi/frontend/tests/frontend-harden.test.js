@@ -209,4 +209,20 @@ describe('Frontend Hardening & KPI Trend Logic', () => {
     assert.strictEqual(res200.isAccessDenied, false, '200 HTTP status returns data')
   })
 
+  it('duplicate story IDs generate unique composite React keys', () => {
+    const briefStories = [
+      { id: 'POSITIVE_SIGNAL', affected_kpis: ['traffic_total'], title: 'Positive signal 1' },
+      { id: 'POSITIVE_SIGNAL', affected_kpis: ['units_sold'], title: 'Positive signal 2' },
+    ]
+
+    const keys = briefStories.map((story, index) =>
+      [story.id, ...(story.affected_kpis ?? []), index].join('-')
+    )
+
+    assert.strictEqual(keys.length, 2)
+    assert.notStrictEqual(keys[0], keys[1], 'Composite story keys must be unique even if story IDs are identical')
+    assert.strictEqual(keys[0], 'POSITIVE_SIGNAL-traffic_total-0')
+    assert.strictEqual(keys[1], 'POSITIVE_SIGNAL-units_sold-1')
+  })
+
 })
