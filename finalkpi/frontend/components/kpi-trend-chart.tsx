@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { Calendar, RefreshCw, ShieldAlert } from 'lucide-react'
 import {
   buildContiguousSegments,
@@ -26,6 +26,16 @@ export type KpiTrendChartProps = {
   userId: string
 }
 
+// ── Zoom/pan tuning constants ─────────────────────────────────────────────
+// Sensitivity for scroll-to-zoom. Smaller = gentler. Tuned against recording.
+const ZOOM_SENSITIVITY = 0.0015
+// Maximum normalised delta applied per animation frame (prevents large jumps).
+const MAX_DELTA_PER_FRAME = 80
+// Minimum visible window (observations).
+const MIN_WINDOW = 7
+// Damping factor applied to wheel-based panning (1 = no damping).
+const PAN_DAMPING = 0.8
+
 export function KpiTrendChart({
   apiBase,
   kpiId,
@@ -41,14 +51,29 @@ export function KpiTrendChart({
   const [error, setError] = useState<string | null>(null)
   const [isAccessDenied, setIsAccessDenied] = useState(false)
 
-  // Zoom & Pan Range state (indices into points array)
+  // Integer viewport bounds exposed to React (used for rendering slice).
+  // We keep fractional precision in vpRef and only round when committing.
   const [rangeStart, setRangeStart] = useState<number>(0)
   const [rangeEnd, setRangeEnd] = useState<number>(0)
+
+  // Fractional (floating-point) viewport – the true source of truth during
+  // wheel and drag interactions.  React state is derived from this on each rAF.
+  const vpRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 })
+
+  // Pending accumulated wheel deltas waiting for the next animation frame.
+  const pendingWheelRef = useRef<{ deltaY: number; deltaX: number; anchorRatio: number | null } | null>(null)
+  const rafIdRef = useRef<number | null>(null)
+
   const [hoveredPoint, setHoveredPoint] = useState<TimeseriesPoint | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const scrubberRef = useRef<HTMLDivElement>(null)
+  const panRef = useRef<{ clientX: number; start: number; end: number } | null>(null)
+  const scrubRef = useRef<{ pointerOffset: number } | null>(null)
+  const [isPanning, setIsPanning] = useState(false)
+  const [isScrubbing, setIsScrubbing] = useState(false)
   const [chartWidth, setChartWidth] = useState<number>(650)
 
   // Fetch real timeseries from backend with persona userId
@@ -77,11 +102,14 @@ export function KpiTrendChart({
         setData(payload)
         const pts = payload.points || []
 
-        // Requirement 2: Open chart at the latest 90 days by default
+        // Open chart at the latest 90 days by default
         const total = pts.length
         const defaultStart = Math.max(0, total - 90)
+        const defaultEnd = Math.max(0, total - 1)
+        // Sync fractional ref so wheel/drag handlers start from a consistent state.
+        vpRef.current = { start: defaultStart, end: defaultEnd }
         setRangeStart(defaultStart)
-        setRangeEnd(Math.max(0, total - 1))
+        setRangeEnd(defaultEnd)
       })
       .catch(err => {
         if (!isMounted) return
@@ -95,6 +123,16 @@ export function KpiTrendChart({
       isMounted = false
     }
   }, [apiBase, kpiId, region, category, targetDate, userId])
+
+  // Cancel any pending rAF on unmount to prevent state updates after unmount.
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current != null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+    }
+  }, [])
 
   // ResizeObserver for responsive SVG width
   useEffect(() => {
@@ -118,37 +156,40 @@ export function KpiTrendChart({
     return rawPoints.slice(start, end + 1)
   }, [rawPoints, rangeStart, rangeEnd])
 
-  // Zoom Actions
+  // Zoom Actions – route through applyFractionalVp to keep vpRef in sync.
   function handleZoomIn() {
     if (!rawPoints.length) return
-    const currentLen = rangeEnd - rangeStart + 1
-    if (currentLen <= 7) return
-    const delta = Math.floor(currentLen * 0.2)
-    setRangeStart(prev => Math.min(prev + Math.floor(delta / 2), rangeEnd - 6))
-    setRangeEnd(prev => Math.max(prev - Math.ceil(delta / 2), rangeStart + 6))
+    const { start, end } = vpRef.current
+    const span = end - start
+    if (span <= MIN_WINDOW) return
+    const shrink = span * 0.2
+    applyFractionalVp(start + shrink / 2, end - shrink / 2)
   }
 
   function handleZoomOut() {
     if (!rawPoints.length) return
-    const currentLen = rangeEnd - rangeStart + 1
-    const delta = Math.max(4, Math.floor(currentLen * 0.25))
-    setRangeStart(prev => Math.max(0, prev - Math.floor(delta / 2)))
-    setRangeEnd(prev => Math.min(rawPoints.length - 1, prev + Math.ceil(delta / 2)))
+    const { start, end } = vpRef.current
+    const span = Math.max(1, end - start)
+    const grow = Math.max(4, span * 0.25)
+    applyFractionalVp(start - grow / 2, end + grow / 2)
   }
 
-  // Requirement 2: Reset returns to default 90-day range
+  // Reset returns to default 90-day range
   function handleResetZoom() {
     if (!rawPoints.length) return
     const total = rawPoints.length
     const defaultStart = Math.max(0, total - 90)
+    const defaultEnd = total - 1
+    vpRef.current = { start: defaultStart, end: defaultEnd }
     setRangeStart(defaultStart)
-    setRangeEnd(Math.max(0, total - 1))
+    setRangeEnd(defaultEnd)
   }
 
   function handlePreset(days: number) {
     if (!rawPoints.length) return
     const endIdx = rawPoints.length - 1
     const startIdx = Math.max(0, endIdx - days + 1)
+    vpRef.current = { start: startIdx, end: endIdx }
     setRangeStart(startIdx)
     setRangeEnd(endIdx)
   }
@@ -158,6 +199,189 @@ export function KpiTrendChart({
   const height = 280
   const innerWidth = Math.max(200, chartWidth - padding.left - padding.right)
   const innerHeight = height - padding.top - padding.bottom
+
+  const lastPointIndex = Math.max(0, rawPoints.length - 1)
+  const visibleSpan = Math.max(0, rangeEnd - rangeStart)
+  const isFullRange = rangeStart === 0 && rangeEnd >= lastPointIndex
+
+  // ── Fractional viewport helpers ─────────────────────────────────────────
+  // Commit fractional vpRef values into integer React state for rendering.
+  function commitVp() {
+    const { start, end } = vpRef.current
+    // Round to nearest integer for array slice, never invert the span.
+    const rs = Math.max(0, Math.round(start))
+    const re = Math.max(rs + MIN_WINDOW - 1, Math.min(lastPointIndex, Math.round(end)))
+    setRangeStart(rs)
+    setRangeEnd(re)
+  }
+
+  // Clamp and write fractional viewport then commit.
+  function applyFractionalVp(start: number, end: number) {
+    if (!rawPoints.length) return
+    const span = Math.max(MIN_WINDOW - 1, end - start)
+    // Clamp so we never exceed [0, lastPointIndex].
+    const clampedStart = Math.max(0, Math.min(start, lastPointIndex - span))
+    const clampedEnd = Math.min(lastPointIndex, clampedStart + span)
+    vpRef.current = { start: clampedStart, end: clampedEnd }
+    commitVp()
+  }
+
+  function setClampedRange(start: number, end: number) {
+    applyFractionalVp(start, end)
+  }
+
+  function panToStart(start: number) {
+    const span = vpRef.current.end - vpRef.current.start
+    applyFractionalVp(start, start + span)
+  }
+
+  // ── rAF-batched wheel handler ────────────────────────────────────────────
+  // Accumulate wheel deltas and apply at most one viewport update per frame.
+  function scheduleWheelFrame() {
+    if (rafIdRef.current != null) return // already scheduled
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null
+      const pending = pendingWheelRef.current
+      if (!pending || rawPoints.length < 2) return
+      pendingWheelRef.current = null
+
+      const { start, end } = vpRef.current
+      const span = end - start
+
+      if (pending.anchorRatio === null) {
+        // ── Pan branch ───────────────────────────────────────────────────
+        // Normalise deltaX for panning; apply mild damping.
+        const rawDelta = pending.deltaX
+        // Clamp so one burst of momentum doesn't teleport the window.
+        const clampedDelta = Math.max(-MAX_DELTA_PER_FRAME, Math.min(MAX_DELTA_PER_FRAME, rawDelta))
+        const panOffset = (clampedDelta / Math.max(1, innerWidth)) * Math.max(1, span) * PAN_DAMPING
+        applyFractionalVp(start + panOffset, end + panOffset)
+      } else {
+        // ── Zoom branch ──────────────────────────────────────────────────
+        // Normalise deltaY; clamp to prevent jumps from large wheel events.
+        const rawDelta = pending.deltaY
+        const clampedDelta = Math.max(-MAX_DELTA_PER_FRAME, Math.min(MAX_DELTA_PER_FRAME, rawDelta))
+        // Exponential factor: positive deltaY → zoom in (shrink span).
+        const factor = Math.exp(clampedDelta * ZOOM_SENSITIVITY)
+        const nextSpan = Math.max(MIN_WINDOW - 1, Math.min(lastPointIndex, span * factor))
+        const anchorIndex = start + pending.anchorRatio * span
+        const nextStart = anchorIndex - pending.anchorRatio * nextSpan
+        applyFractionalVp(nextStart, nextStart + nextSpan)
+      }
+    })
+  }
+
+  function handleChartWheel(event: WheelEvent<HTMLDivElement>) {
+    if (rawPoints.length < 2) return
+    event.preventDefault()
+
+    // ── Normalize wheel delta by deltaMode ──────────────────────────────
+    // DOM_DELTA_PIXEL = 0 (default, trackpad), DOM_DELTA_LINE = 1, DOM_DELTA_PAGE = 2
+    const linePixels = 16   // approximate pixels per line
+    const pagePixels = 600  // approximate pixels per page
+    const multiplier = event.deltaMode === 1 ? linePixels : event.deltaMode === 2 ? pagePixels : 1
+    const normY = event.deltaY * multiplier
+    const normX = event.deltaX * multiplier
+
+    const isPanGesture = event.shiftKey || (Math.abs(normX) > Math.abs(normY))
+
+    if (isPanGesture) {
+      // Accumulate panning delta; anchorRatio=null signals pan branch.
+      const delta = event.shiftKey ? normY : normX
+      if (pendingWheelRef.current) {
+        pendingWheelRef.current.deltaX += delta
+      } else {
+        pendingWheelRef.current = { deltaY: 0, deltaX: delta, anchorRatio: null }
+      }
+    } else {
+      // Accumulate zooming delta.  Anchor ratio is captured from the first
+      // event in the batch; this keeps zoom stable during rapid gestures.
+      const bounds = event.currentTarget.getBoundingClientRect()
+      // Correctly account for left padding when computing anchor.
+      const plotX = Math.max(0, Math.min(innerWidth, event.clientX - bounds.left - padding.left))
+      const anchorRatio = Math.max(0, Math.min(1, plotX / innerWidth))
+      if (pendingWheelRef.current && pendingWheelRef.current.anchorRatio !== null) {
+        pendingWheelRef.current.deltaY += normY
+        // keep the first anchor; it's stable enough for a single gesture burst
+      } else {
+        pendingWheelRef.current = { deltaY: normY, deltaX: 0, anchorRatio }
+      }
+    }
+
+    scheduleWheelFrame()
+  }
+
+  function handleChartPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return
+    // Capture fractional viewport at drag start.
+    panRef.current = { clientX: event.clientX, start: vpRef.current.start, end: vpRef.current.end }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsPanning(true)
+  }
+
+  function handleChartPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const pan = panRef.current
+    if (!pan) return
+    // 1:1 proportional panning: pointer movement / plot width × visible span.
+    const span = pan.end - pan.start
+    const indexDelta = ((pan.clientX - event.clientX) / Math.max(1, innerWidth)) * Math.max(1, span)
+    applyFractionalVp(pan.start + indexDelta, pan.end + indexDelta)
+  }
+
+  function finishChartPan(event: PointerEvent<HTMLDivElement>) {
+    if (!panRef.current) return
+    panRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    setIsPanning(false)
+  }
+
+  function scrubberStartForClientX(clientX: number, pointerOffset = visibleSpan / 2) {
+    const rail = scrubberRef.current
+    if (!rail || rawPoints.length < 2) return
+    const bounds = rail.getBoundingClientRect()
+    const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width))
+    panToStart(ratio * lastPointIndex - pointerOffset)
+  }
+
+  function handleScrubberPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || rawPoints.length < 2) return
+    const rail = scrubberRef.current
+    if (!rail) return
+    const bounds = rail.getBoundingClientRect()
+    const pointerIndex = Math.max(0, Math.min(lastPointIndex, ((event.clientX - bounds.left) / bounds.width) * lastPointIndex))
+    const clickedWindow = pointerIndex >= rangeStart && pointerIndex <= rangeEnd
+    const pointerOffset = clickedWindow ? pointerIndex - rangeStart : visibleSpan / 2
+    scrubRef.current = { pointerOffset }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsScrubbing(true)
+    scrubberStartForClientX(event.clientX, pointerOffset)
+  }
+
+  function handleScrubberPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!scrubRef.current) return
+    scrubberStartForClientX(event.clientX, scrubRef.current.pointerOffset)
+  }
+
+  function finishScrubbing(event: PointerEvent<HTMLDivElement>) {
+    if (!scrubRef.current) return
+    scrubRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    setIsScrubbing(false)
+  }
+
+  function handleScrubberKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const step = Math.max(1, Math.round(Math.max(1, visibleSpan) * (event.key.startsWith('Page') ? 0.5 : 0.1)))
+    if (event.key === 'ArrowLeft' || event.key === 'PageUp') panToStart(rangeStart - step)
+    else if (event.key === 'ArrowRight' || event.key === 'PageDown') panToStart(rangeStart + step)
+    else if (event.key === 'Home') panToStart(0)
+    else if (event.key === 'End') panToStart(lastPointIndex - visibleSpan)
+    else return
+    event.preventDefault()
+  }
 
   const { minY, maxY, pointsWithCoords } = useMemo(() => {
     if (!visiblePoints.length) {
@@ -397,7 +621,15 @@ export function KpiTrendChart({
       </div>
 
       {/* SVG Chart Body */}
-      <div style={{ position: 'relative', width: '100%', height: `${height}px` }}>
+      <div
+        className={`trend-chart-plot${isPanning ? ' is-panning' : ''}`}
+        style={{ position: 'relative', width: '100%', height: `${height}px` }}
+        onWheel={handleChartWheel}
+        onPointerDown={handleChartPointerDown}
+        onPointerMove={handleChartPointerMove}
+        onPointerUp={finishChartPan}
+        onPointerCancel={finishChartPan}
+      >
         <svg
           ref={svgRef}
           width="100%"
@@ -570,7 +802,6 @@ export function KpiTrendChart({
                     width={Math.max(20, innerWidth / pointsWithCoords.length)}
                     height={innerHeight}
                     fill="transparent"
-                    style={{ cursor: 'pointer' }}
                     onMouseEnter={() => {
                       setHoveredPoint(item.pt)
                       if (svgRef.current) {
@@ -680,33 +911,37 @@ export function KpiTrendChart({
         )}
       </div>
 
-      {/* Range Slider Brush */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: 'var(--muted)' }}>
-        <span>Timeline Slider:</span>
-        <input
-          type="range"
-          min={0}
-          max={Math.max(0, rawPoints.length - 1)}
-          value={rangeStart}
-          onChange={e => {
-            const val = parseInt(e.target.value, 10)
-            if (val < rangeEnd) setRangeStart(val)
-          }}
-          aria-label="Start Date Slider"
-          style={{ flex: 1, height: '4px', accentColor: 'var(--blue)', cursor: 'pointer' }}
-        />
-        <input
-          type="range"
-          min={0}
-          max={Math.max(0, rawPoints.length - 1)}
-          value={rangeEnd}
-          onChange={e => {
-            const val = parseInt(e.target.value, 10)
-            if (val > rangeStart) setRangeEnd(val)
-          }}
-          aria-label="End Date Slider"
-          style={{ flex: 1, height: '4px', accentColor: 'var(--blue)', cursor: 'pointer' }}
-        />
+      {/* Compact timeline navigator: no native range sliders or duplicate handles. */}
+      <div className="trend-chart-navigator">
+        <div
+          ref={scrubberRef}
+          className={`trend-chart-scrubber${isScrubbing ? ' is-scrubbing' : ''}`}
+          role="scrollbar"
+          tabIndex={0}
+          aria-label="Visible chart period"
+          aria-orientation="horizontal"
+          aria-valuemin={0}
+          aria-valuemax={lastPointIndex}
+          aria-valuenow={rangeStart}
+          aria-valuetext={`${visiblePoints[0]?.observation_date ?? 'No start date'} to ${visiblePoints[visiblePoints.length - 1]?.observation_date ?? 'no end date'}`}
+          onKeyDown={handleScrubberKeyDown}
+          onPointerDown={handleScrubberPointerDown}
+          onPointerMove={handleScrubberPointerMove}
+          onPointerUp={finishScrubbing}
+          onPointerCancel={finishScrubbing}
+        >
+          <span
+            className="trend-chart-scrubber-window"
+            style={{
+              left: `${lastPointIndex ? (rangeStart / lastPointIndex) * 100 : 0}%`,
+              width: `${lastPointIndex ? Math.max(2, (visibleSpan / lastPointIndex) * 100) : 100}%`,
+            }}
+          />
+        </div>
+        <div className="trend-chart-interaction-help">
+          <span>{visiblePoints[0]?.observation_date} – {visiblePoints[visiblePoints.length - 1]?.observation_date}</span>
+          <span>Scroll to zoom · Shift-scroll or drag to move · Hover to read</span>
+        </div>
       </div>
 
       {/* Requirement 3: Traceability Metadata Subcomponent */}
