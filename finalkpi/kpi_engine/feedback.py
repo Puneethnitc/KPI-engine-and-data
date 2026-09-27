@@ -32,7 +32,7 @@ class FeedbackRecord:
 class FeedbackLogger:
     """Legacy JSONL correction logger; the live feedback API uses SQLite."""
 
-    def __init__(self, log_filepath: str = "data/feedback_log.jsonl"):
+    def __init__(self, log_filepath: str = "runtime/feedback_log.jsonl"):
         self.log_filepath = log_filepath
 
     def log_feedback(

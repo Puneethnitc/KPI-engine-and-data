@@ -22,7 +22,7 @@ ACCESS_CSV = str(ROOT / "data" / "access_control.csv")
 SALES_CSV = str(ROOT / "data" / "sales_daily.csv")
 MARKETING_CSV = str(ROOT / "data" / "marketing_weekly.csv")
 FINANCE_CSV = str(ROOT / "data" / "finance_monthly.csv")
-FEEDBACK_LOG_PATH = str(ROOT / "data" / "feedback_log.jsonl")
+FEEDBACK_LOG_PATH = str(RUNTIME_DIR / "feedback_log.jsonl")
 DB_PATH = Path(os.getenv("KPI_BACKEND_DB", RUNTIME_DIR / "kpi_backend.sqlite3"))
 
 DEFAULT_PERSONA = os.getenv("KPI_DEMO_PERSONA", "CFO")

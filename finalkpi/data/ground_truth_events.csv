@@ -1,0 +1,7 @@
+event_id,region,category,start_date,end_date,true_driver_ids,direction,is_decoy
+EVT01,North,Electronics,2023-07-20,2023-08-13,ad_spend_drop,-1,false
+EVT02,ALL,Home,2023-10-28,2023-11-06,price_discount,1,false
+EVT03,South,Apparel,2024-02-05,2024-02-16,stock_availability,-1,false
+EVT04,ALL,ALL,2024-05-15,2024-05-18,checkout_latency_spike,-1,false
+EVT05,East,Electronics,2024-07-14,2024-07-29,,0,true
+EVT06,ALL,Apparel,2023-04-11,2023-04-23,weather_temp,1,false

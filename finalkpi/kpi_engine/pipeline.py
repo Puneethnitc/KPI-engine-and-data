@@ -51,7 +51,7 @@ class KPIEnginePipeline:
         evidence_csv: str,
         groq_api_key: Optional[str] = None,
         access_csv: Optional[str] = None,
-        feedback_log_path: str = "data/feedback_log.jsonl",
+        feedback_log_path: str = "runtime/feedback_log.jsonl",
         source_schema_path: Optional[str] = None,
     ):
         # Setup: source mappings rename fields inside three fixed source roles.
