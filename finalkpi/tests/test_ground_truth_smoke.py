@@ -73,12 +73,24 @@ class GroundTruthSmokeTest(unittest.TestCase):
         # couple of the 5 real (non-decoy) events. This documents the known
         # flaw (F-R1/F-R2/F-R3); Stage 3 must raise this bound.
         self.assertLessEqual(attribution["events_with_any_top1_hit"], 2)
+        # Direction-aware hits (correct id AND correct sign) can only be a
+        # subset of naive hits (F-R2/F-R3: some "hits" are wrong-signed).
+        self.assertLessEqual(
+            attribution["events_with_any_top1_direction_hit"], attribution["events_with_any_top1_hit"]
+        )
         self.assertEqual(attribution["events_scored"], 5)
 
+        # Stage 0 baseline: EVT05 (event_present=False) never counts toward
+        # recall or driver accuracy; it is reported separately below.
+        self.assertNotIn("EVT05", detection["recall_per_event"])
+        self.assertNotIn("EVT05", attribution["per_event"])
+
+        decoy = metrics["decoy"]
         # Stage 0 baseline: the decoy (EVT05) still surfaces a confident-
         # looking top driver because nothing checks whether it truly moved.
         # Stage 3/7 must bring this down; Stage 0 only records it.
-        self.assertEqual(attribution["decoy_cases"], 1)
+        self.assertEqual(decoy["cases"], 1)
+        self.assertIsNotNone(decoy["confident_driver_rate"])
 
         causal = metrics["causal"]
         self.assertIn("EVT01", causal["verdict_counts_per_event"])

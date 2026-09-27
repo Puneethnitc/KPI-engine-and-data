@@ -45,6 +45,9 @@ NEGATIVE_DATE_START = "2023-04-01"
 NEGATIVE_DATE_END = "2024-12-20"
 NEGATIVE_REGIONS = ["North", "South", "East", "West"]
 NEGATIVE_CATEGORIES = ["Apparel", "Electronics", "Home"]
+# Emitted for every negative slice-day (not just revenue), so false-alarm rate
+# and per-weekday breakdowns can be checked on the other core KPIs too.
+NEGATIVE_KPIS = ["net_sales_revenue", "orders", "units_sold"]
 
 CORE_KPIS = ["net_sales_revenue", "orders", "units_sold"]
 
@@ -125,7 +128,7 @@ def build_negative_rows(events: pd.DataFrame) -> list[dict]:
     rng = np.random.default_rng(SEED)
     per_weekday = -(-NEGATIVE_TARGET // 7)  # ceil
     seen: set[tuple[str, str, str]] = set()
-    rows = []
+    slice_days: list[tuple[str, str, str]] = []
     for weekday in range(7):
         candidates = list(by_weekday[weekday])
         rng.shuffle(candidates)
@@ -140,22 +143,28 @@ def build_negative_rows(events: pd.DataFrame) -> list[dict]:
                 continue
             seen.add(key)
             picked += 1
+            slice_days.append(key)
+    slice_days.sort()
+
+    # Every KPI for a given slice-day shares one split assignment, so the
+    # same quiet day is never split dev for one KPI and holdout for another.
+    rows = []
+    for index, (day, region, category) in enumerate(slice_days):
+        split = "dev" if index % 2 == 0 else "holdout"
+        for kpi_id in NEGATIVE_KPIS:
             rows.append(dict(
-                case_id=f"NEG-{key[0]}-{region}-{category}",
-                kpi_id="net_sales_revenue",
-                date=key[0],
+                case_id=f"NEG-{day}-{region}-{category}-{kpi_id}",
+                kpi_id=kpi_id,
+                date=day,
                 region=region,
                 category=category,
                 event_present=False,
                 true_driver_id="",
-                split="",  # assigned below
+                split=split,
                 reviewer=REVIEWER,
                 event_id="",
                 is_decoy=False,
             ))
-    rows.sort(key=lambda r: r["case_id"])
-    for index, row in enumerate(rows):
-        row["split"] = "dev" if index % 2 == 0 else "holdout"
     return rows
 
 

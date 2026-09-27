@@ -11,6 +11,14 @@ import json
 import os
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
+from pathlib import Path
+
+# Absolute so a relative default never writes a stray runtime/ directory
+# wherever the caller's cwd happens to be; this mirrors backend/config.py's
+# RUNTIME_DIR, which is already gitignored.
+DEFAULT_FEEDBACK_LOG_PATH = str(
+    Path(__file__).resolve().parents[1] / "backend" / "runtime" / "feedback_log.jsonl"
+)
 
 
 # Stored feedback shape; corrections are proposed evidence for later review.
@@ -32,7 +40,7 @@ class FeedbackRecord:
 class FeedbackLogger:
     """Legacy JSONL correction logger; the live feedback API uses SQLite."""
 
-    def __init__(self, log_filepath: str = "runtime/feedback_log.jsonl"):
+    def __init__(self, log_filepath: str = DEFAULT_FEEDBACK_LOG_PATH):
         self.log_filepath = log_filepath
 
     def log_feedback(

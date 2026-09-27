@@ -32,7 +32,7 @@ from kpi_engine.contribute import ContributionScenario, ShapleyContributor
 from kpi_engine.confidence import ConfidenceEngine
 from kpi_engine.decompose import DeterministicDecomposer
 from kpi_engine.detection import AnomalyDetector
-from kpi_engine.feedback import FeedbackLogger
+from kpi_engine.feedback import DEFAULT_FEEDBACK_LOG_PATH, FeedbackLogger
 from kpi_engine.normalize import DataNormalizer
 from kpi_engine.narrative import NarrativeEngine
 from kpi_engine.processing_transparency import build_processing_transparency
@@ -51,7 +51,7 @@ class KPIEnginePipeline:
         evidence_csv: str,
         groq_api_key: Optional[str] = None,
         access_csv: Optional[str] = None,
-        feedback_log_path: str = "runtime/feedback_log.jsonl",
+        feedback_log_path: str = DEFAULT_FEEDBACK_LOG_PATH,
         source_schema_path: Optional[str] = None,
     ):
         # Setup: source mappings rename fields inside three fixed source roles.
