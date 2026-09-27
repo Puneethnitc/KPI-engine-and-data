@@ -4,7 +4,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const BACKEND_URL = process.env.KPI_BACKEND_URL ?? 'http://127.0.0.1:8000'
-const ALLOWED_ROOTS = new Set(['filters', 'kpis', 'diagnoses', 'chat', 'conversations', 'feedback', 'investigations', 'insights', 'marketing'])
+const ALLOWED_ROOTS = new Set(['filters', 'kpis', 'diagnoses', 'chat', 'conversations', 'feedback', 'improvement-proposals', 'candidate-artifacts', 'proposal-evaluations', 'investigations', 'insights', 'marketing', 'demo-scenarios'])
 
 async function proxy(request: NextRequest) {
   const segments = request.nextUrl.pathname

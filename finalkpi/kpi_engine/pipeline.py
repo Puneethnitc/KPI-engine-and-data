@@ -17,6 +17,7 @@ eligible control group are supplied. It never promotes a correlation to cause.
 
 from dataclasses import asdict
 from pathlib import Path
+import time
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -34,6 +35,7 @@ from kpi_engine.detection import AnomalyDetector
 from kpi_engine.feedback import FeedbackLogger
 from kpi_engine.normalize import DataNormalizer
 from kpi_engine.narrative import NarrativeEngine
+from kpi_engine.processing_transparency import build_processing_transparency
 from kpi_engine.rank import CorrelationalRanker
 from kpi_engine.rank import DriverExclusion
 from kpi_engine.reconcile import SourceReconciler
@@ -109,8 +111,136 @@ class KPIEnginePipeline:
             raise ValueError("Scenario unit does not match the KPI contract")
         return asdict(self.contributor.quantify(scenario))
 
+    @staticmethod
+    def _build_evidence_profile(result: Dict[str, Any]) -> Dict[str, Any]:
+        movement = result.get("movement_assessment") or {}
+        verdict = result.get("verdict")
+
+        if verdict == "ACCESS_DENIED":
+            movement_status = "UNAUTHORIZED"
+        elif not movement or movement.get("status") != "OK":
+            movement_status = "INSUFFICIENT"
+        elif verdict == "SEASONAL_REVIEW" or (not movement.get("is_material") and movement.get("detector_agreement") == "SEASONAL_ONLY"):
+            movement_status = "SEASONAL_REVIEW"
+        elif not movement.get("is_material"):
+            movement_status = "NOT_MATERIAL"
+        elif movement.get("detector_agreement") == "BOTH":
+            movement_status = "CONFIRMED_BOTH"
+        elif movement.get("detector_agreement") == "ROBUST_ONLY":
+            movement_status = "ROBUST_ONLY"
+        else:
+            movement_status = "INSUFFICIENT"
+
+        movement_limitations = []
+        if movement and movement.get("status") == "OK":
+            if not movement.get("is_statistically_significant"):
+                movement_limitations.append("Movement did not pass the statistical z-score threshold")
+            if not movement.get("is_business_material"):
+                movement_limitations.append("Movement did not pass the absolute business materiality threshold")
+            if movement.get("detector_agreement") == "ROBUST_ONLY":
+                movement_limitations.append("Seasonal MSTL detector did not confirm the robust point anomaly")
+            elif movement.get("detector_agreement") == "SEASONAL_ONLY":
+                movement_limitations.append("Primary robust detector did not confirm the seasonal anomaly")
+        else:
+            movement_limitations.append("Insufficient historical observations to score baseline")
+
+        recon = result.get("reconciliation_verdict") or {}
+        recon_status = recon.get("status", "NOT_ASSESSED")
+        details = recon.get("details") or {}
+
+        if recon_status == "CONTRADICTED":
+            sq_status = "CONTRADICTED"
+        elif recon_status == "DRIFT":
+            sq_status = "DRIFT"
+        elif details.get("quality_flag"):
+            sq_status = "QUALITY_FAILED"
+        elif recon_status == "NOT_AVAILABLE_FOR_PERIOD":
+            sq_status = "LIMITED"
+        elif recon_status in ("AGREED", "NOT_APPLICABLE"):
+            sq_status = "READY"
+        else:
+            sq_status = "NOT_ASSESSED"
+
+        sq_limitations = []
+        if details.get("reason"):
+            sq_limitations.append(details["reason"])
+        elif recon_status == "NOT_AVAILABLE_FOR_PERIOD":
+            sq_limitations.append("Independent finance comparison unavailable for requested period")
+        elif recon_status == "NOT_APPLICABLE":
+            sq_limitations.append("No independent second-source comparison configured for this KPI")
+
+        candidates = result.get("correlational_candidates") or []
+        exclusions = result.get("driver_exclusions") or []
+
+        if candidates:
+            driver_status = "CANDIDATES_FOUND"
+        elif exclusions or verdict in ("MATERIAL_CAUSE_UNVERIFIED", "EVENT_ASSESSED_CAUSE_UNVERIFIED"):
+            driver_status = "NO_CANDIDATE_PASSED"
+        else:
+            driver_status = "INSUFFICIENT_DATA"
+
+        driver_limitations = [
+            "Lagged correlation indicates co-movement, not causal attribution",
+            "Optimal lag selected over candidate search window without multiple-testing penalty",
+        ]
+        if not candidates and exclusions:
+            driver_limitations.append("No candidate driver met the minimum correlation threshold of 0.3")
+
+        confidence = result.get("confidence") or {}
+        causal_status = confidence.get("status", "NOT_ASSESSED")
+        reasons = confidence.get("reasons") or ()
+        causal_limitations = list(reasons)
+        if causal_status == "NOT_ASSESSED":
+            causal_limitations.append("No approved server-side causal comparison design was supplied")
+
+        return {
+            "movement": {
+                "status": movement_status,
+                "detector_agreement": movement.get("detector_agreement", "NEITHER"),
+                "statistical_materiality": bool(movement.get("is_statistically_significant")),
+                "business_materiality": bool(movement.get("is_business_material")),
+                "baseline_count": movement.get("baseline_count"),
+                "limitations": movement_limitations,
+            },
+            "source_quality": {
+                "status": sq_status,
+                "freshness": [{"source": result.get("kpi_id", "sales_daily"), "as_of": result.get("as_of")}],
+                "coverage": [result["source_coverage"]] if result.get("source_coverage") else [],
+                "limitations": sq_limitations,
+            },
+            "driver_evidence": {
+                "status": driver_status,
+                "method": "lagged first-difference correlation",
+                "candidates": candidates,
+                "exclusions": exclusions,
+                "limitations": driver_limitations,
+            },
+            "causal_evidence": {
+                "status": causal_status,
+                "reason_code": reasons[0] if reasons else "NO_DESIGN",
+                "sub_scores": confidence.get("sub_scores") or {
+                    "outcome_window_coverage": None,
+                    "temporal_precedence": None,
+                    "did_interval_precision": None,
+                },
+                "limitations": causal_limitations,
+            },
+        }
+
     def _finalize(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        causal_design_approved = bool(result.pop("_causal_design_approved", False))
+        decision_started = time.monotonic_ns()
+        result["confidence_profile"] = self.confidence_engine.build_profile(
+            result,
+            causal_design_approved=causal_design_approved,
+        )
+        result["confidence_deprecated"] = True
+        result["evidence_profile"] = self._build_evidence_profile(result)
         result["decision_cards"] = self.recommender.recommend(result)
+        if result["confidence_profile"]["overall"]["status"] == "CONFLICTING_EVIDENCE":
+            result["decision_cards"] = []
+        self._record_runtime(result, "confidence_and_actions", "BUSINESS_RULE", "rules_and_evidence_scoring", decision_started)
+        narrative_started = time.monotonic_ns()
         rendered = self.narrator.render(result)
         result["narrative"] = rendered["text"]
         result["narrative_claims"] = rendered["claims"]
@@ -118,6 +248,12 @@ class KPIEnginePipeline:
         result["grounding_errors"] = rendered["rejected_claims"]
         result["narrative_method"] = rendered["method"]
         result["llm_status"] = rendered["llm_status"]
+        result["narrative_runtime"] = rendered.get("runtime_telemetry")
+        self._record_runtime(result, "narrative_synthesis", "DETERMINISTIC", "evidence_bound_template", narrative_started)
+        result["processing_transparency"] = build_processing_transparency(
+            result,
+            causal_design_approved=causal_design_approved,
+        )
         return result
 
     @staticmethod
@@ -128,6 +264,44 @@ class KPIEnginePipeline:
                 raise ValueError(f"Unknown dimension: {key}")
             result = result[result[key] == value]
         return result
+
+    @staticmethod
+    def _attach_monthly_driver_values(
+        frame: pd.DataFrame,
+        finance: pd.DataFrame,
+        driver_specs: Dict[str, Dict[str, Any]],
+        dimension_slice: Optional[Dict[str, str]],
+    ) -> pd.DataFrame:
+        monthly_specs = [
+            spec for spec in driver_specs.values()
+            if spec.get("source") == "finance_monthly" and spec.get("grain") == "monthly"
+        ]
+        if not monthly_specs or finance.empty:
+            return frame
+        required_columns = {spec["column"] for spec in monthly_specs}
+        if not required_columns.issubset(finance.columns):
+            return frame
+
+        finance_rows = finance.copy()
+        if "month_end" in finance_rows and not frame.empty:
+            target_date = pd.to_datetime(frame["date"]).max()
+            finance_rows = finance_rows[pd.to_datetime(finance_rows["month_end"]) <= target_date]
+        for dimension, value in (dimension_slice or {}).items():
+            if dimension in finance_rows:
+                finance_rows = finance_rows[finance_rows[dimension] == value]
+        finance_rows["_driver_month"] = pd.to_datetime(finance_rows["date"]).dt.to_period("M").dt.to_timestamp()
+        key_columns = ["_driver_month", *[key for key in ("region", "category") if key in finance_rows.columns]]
+        selected_columns = {}
+        for spec in monthly_specs:
+            source_column = spec["column"]
+            selected_columns[source_column] = f"finance_monthly_{source_column}"
+        finance_rows = finance_rows[[*key_columns, *selected_columns]].rename(columns=selected_columns)
+        if finance_rows.duplicated(key_columns).any():
+            raise ValueError("finance_monthly driver alignment is not unique at month and scope grain")
+        ranked = frame.copy()
+        ranked["_driver_month"] = pd.to_datetime(ranked["date"]).dt.to_period("M").dt.to_timestamp()
+        merged = ranked.merge(finance_rows, on=key_columns, how="left", validate="many_to_one")
+        return merged.drop(columns=["_driver_month"])
 
     def verify_event(
         self,
@@ -167,10 +341,17 @@ class KPIEnginePipeline:
                 return self._finalize(result)
 
         contract = self.registry.get(kpi_id)
+        contract_snapshot = self.registry.semantic_snapshot(
+            kpi_id,
+            allowed_roles=sorted(set(self.access_controller.df["owner_role"].astype(str))),
+        )
+        result["contract_snapshot"] = contract_snapshot
+        result["contract_version"] = contract.version
+        result["contract_hash"] = contract_snapshot["governance"]["contract_hash"]
         if contract.source != "sales_daily" or contract.grain != "daily":
             raise ValueError("Event verification currently supports daily sales KPIs only")
         unsupported = {driver["source"] for driver in contract.candidate_drivers} - {
-            "sales_daily", "marketing_weekly"
+            "sales_daily", "marketing_weekly", "finance_monthly"
         }
         if unsupported:
             raise ValueError(f"Unsupported driver sources: {sorted(unsupported)}")
@@ -178,7 +359,9 @@ class KPIEnginePipeline:
             sales_csv,
             marketing_csv if any(driver["source"] == "marketing_weekly"
                                  for driver in contract.candidate_drivers) else None,
-            finance_csv if contract.reconciliation is not None else None,
+            finance_csv if contract.reconciliation is not None or any(
+                driver["source"] == "finance_monthly" for driver in contract.candidate_drivers
+            ) else None,
             as_of=cutoff,
         )
         if contract.aggregation == "sum" and contract.value_column != kpi_id:
@@ -187,8 +370,9 @@ class KPIEnginePipeline:
             daily[kpi_id] = daily[contract.value_column]
         daily = daily[daily["date"] <= end].copy()
         if contract.reconciliation is None:
-            reconciliation = self.reconciler.not_reconciled(
-                f"No comparable second source is declared for {kpi_id}"
+            reconciliation = self.reconciler.not_applicable(
+                f"No comparable second-source measure is declared for {kpi_id}; "
+                "cross-source comparison is not expected for this KPI."
             )
         else:
             reconciliation = self.reconciler.reconcile_mtd(
@@ -200,9 +384,81 @@ class KPIEnginePipeline:
                 contradiction_multiple=contract.reconciliation.get("contradiction_multiple", 2.5),
                 target_date=end.date().isoformat(),
                 dimension_slice=verification_design.treated_slice,
+                mode=contract.reconciliation.get("mode", "closed_period"),
+                as_of=cutoff.isoformat() if cutoff else None,
+                require_matching_coverage=contract.reconciliation.get("require_matching_coverage", True),
             )
         result["reconciliation_verdict"] = asdict(reconciliation)
+
+        # Build exact source evidence bound to this run
+        from kpi_engine.evidence import SourceEvidenceBuilder
+        builder = SourceEvidenceBuilder()
+
+        # Load raw frames for metadata extraction
+        sales_df = self.normalizer.load_and_normalize_sales(sales_csv, as_of=cutoff)
+
+        marketing_df = None
+        if marketing_csv and any(driver['source'] == 'marketing_weekly' for driver in contract.candidate_drivers):
+            marketing_df = self.normalizer._read_source(marketing_csv, "marketing_weekly")
+            self.normalizer._require_columns(marketing_df, "marketing_weekly", ("week_start", "region", "category", "available_at"))
+            marketing_df['week_start'] = pd.to_datetime(marketing_df['week_start'], errors='coerce')
+            marketing_df['available_at'] = pd.to_datetime(marketing_df['available_at'], errors='coerce')
+            marketing_df = marketing_df[marketing_df['available_at'] <= cutoff].copy()
+
+        finance_df = None
+        if finance_csv and (contract.reconciliation is not None or any(
+            driver["source"] == "finance_monthly" for driver in contract.candidate_drivers
+        )):
+            finance_df = self.normalizer.load_and_normalize_finance(finance_csv, as_of=cutoff)
+
+        result["source_evidence"] = builder.build(
+            result=result,
+            scope=verification_design.treated_slice,
+            sales_frame=sales_df,
+            marketing_frame=marketing_df,
+            finance_frame=finance_df,
+            sales_path=sales_csv,
+            marketing_path=marketing_csv if marketing_df is not None else None,
+            finance_path=finance_csv if finance_df is not None else None,
+        )
+
+        driver_specs = {item["id"]: item for item in contract.candidate_drivers}
+        event_rank_frame = self._attach_monthly_driver_values(
+            daily, finance, driver_specs, verification_design.treated_slice,
+        )
+        driver_columns = {
+            driver_id: f"finance_monthly_{spec['column']}"
+            if spec.get("source") == "finance_monthly" else spec["column"]
+            for driver_id, spec in driver_specs.items()
+        }
+        event_driver_evaluation = self.ranker.evaluate_candidates(
+            event_rank_frame,
+            kpi_id,
+            list(driver_specs),
+            target_date=end.date().isoformat(),
+            driver_columns=driver_columns,
+            contract=contract,
+            scope=verification_design.treated_slice,
+            as_of=cutoff.isoformat(),
+        )
+        result["driver_analysis"] = event_driver_evaluation.driver_analysis
+        result["correlational_candidates"] = [asdict(item) for item in event_driver_evaluation.candidates]
+        result["driver_exclusions"] = [asdict(item) for item in event_driver_evaluation.exclusions]
+
+        # Only CONTRADICTED is a hard gate. NOT_APPLICABLE and NOT_AVAILABLE_FOR_PERIOD
+        # are informational; diagnosis continues for those statuses.
         if reconciliation.status == "CONTRADICTED":
+            result["driver_analysis"] = self.ranker.excluded_analysis(
+                contract,
+                target_kpi=kpi_id,
+                target_date=end.date().isoformat(),
+                scope=verification_design.treated_slice,
+                reason_code="BLOCKED_BY_RECONCILIATION",
+                reason="Contradictory source reconciliation blocks driver interpretation.",
+                status="BLOCKED",
+            )
+            result["correlational_candidates"] = []
+            result["driver_exclusions"] = result["driver_analysis"]["excluded_drivers"]
             result.update(verdict="CONTRADICTED", narrative="Source systems disagree; verify postings first.")
             return self._finalize(result)
         if verification_design.driver_id not in {
@@ -239,6 +495,7 @@ class KPIEnginePipeline:
         as_of: Optional[str] = None,
         verification_design: Optional[VerificationDesign] = None,
         prepared_request: Optional[Any] = None,
+        approved_causal_design: bool = False,
     ) -> Dict[str, Any]:
         if bypass_reconciliation or force_material:
             raise ValueError("Demo overrides are not supported in diagnosis")
@@ -263,20 +520,31 @@ class KPIEnginePipeline:
             "decomposition_status": "NOT_EVALUATED",
             "correlational_candidates": [],
             "driver_exclusions": [],
+            "driver_analysis": None,
             "causal_verdict": None,
             "causal_verification": None,
             "confidence": None,
             "decision_cards": [],
             "grounding_passed": True,
             "telemetry": None,
+            "_causal_design_approved": approved_causal_design and verification_design is not None,
         }
 
+        stage_started = time.monotonic_ns()
         access = self.access_controller.check(persona, dimension_slice)
+        self._record_runtime(result, "authorization", "BUSINESS_RULE", "role_and_row_scope_policy", stage_started)
         if not access.allowed:
             result.update(verdict="ACCESS_DENIED", narrative=access.reason)
             return self._finalize(result)
 
         contract = self.registry.get(kpi_id)
+        contract_snapshot = self.registry.semantic_snapshot(
+            kpi_id,
+            allowed_roles=sorted(set(self.access_controller.df["owner_role"].astype(str))),
+        )
+        result["contract_snapshot"] = contract_snapshot
+        result["contract_version"] = contract.version
+        result["contract_hash"] = contract_snapshot["governance"]["contract_hash"]
         if contract.source != "sales_daily":
             raise ValueError(
                 f"Unsupported primary KPI source: {contract.source}. "
@@ -286,15 +554,18 @@ class KPIEnginePipeline:
             raise ValueError(f"Unsupported grain for this pipeline: {contract.grain}")
         unsupported_drivers = {
             driver['source'] for driver in contract.candidate_drivers
-        } - {'sales_daily', 'marketing_weekly'}
+        } - {'sales_daily', 'marketing_weekly', 'finance_monthly'}
         if unsupported_drivers:
             raise ValueError(f"Unsupported driver sources: {sorted(unsupported_drivers)}")
 
+        stage_started = time.monotonic_ns()
         daily, finance = self.normalizer.align_sources(
             sales_csv,
             marketing_csv if any(driver['source'] == 'marketing_weekly'
                                  for driver in contract.candidate_drivers) else None,
-            finance_csv if contract.reconciliation is not None else None,
+            finance_csv if contract.reconciliation is not None or any(
+                driver['source'] == 'finance_monthly' for driver in contract.candidate_drivers
+            ) else None,
             as_of=cutoff,
         )
         if contract.aggregation == "sum" and contract.value_column != kpi_id:
@@ -320,10 +591,13 @@ class KPIEnginePipeline:
                     'UNAVAILABLE_OR_MISSING'
                 ),
             }
+        self._record_runtime(result, "source_preparation", "DETERMINISTIC", "grain_cadence_and_as_of_alignment", stage_started)
 
+        stage_started = time.monotonic_ns()
         if contract.reconciliation is None:
-            reconciliation = self.reconciler.not_reconciled(
-                f"No comparable second source is declared for {kpi_id}"
+            reconciliation = self.reconciler.not_applicable(
+                f"No comparable second-source measure is declared for {kpi_id}; "
+                "cross-source comparison is not expected for this KPI."
             )
         else:
             reconciliation = self.reconciler.reconcile_mtd(
@@ -335,26 +609,114 @@ class KPIEnginePipeline:
                 contradiction_multiple=contract.reconciliation.get("contradiction_multiple", 2.5),
                 target_date=target.date().isoformat(),
                 dimension_slice=dimension_slice,
+                mode=contract.reconciliation.get("mode", "closed_period"),
+                as_of=cutoff.isoformat() if cutoff else None,
+                require_matching_coverage=contract.reconciliation.get("require_matching_coverage", True),
             )
         result["reconciliation_verdict"] = asdict(reconciliation)
+        self._record_runtime(result, "reconciliation", "DETERMINISTIC", "independent_source_comparison", stage_started)
+
+        # Build exact source evidence bound to this run
+        from kpi_engine.evidence import SourceEvidenceBuilder
+        builder = SourceEvidenceBuilder()
+
+        # Load raw frames for metadata extraction
+        sales_df = self.normalizer.load_and_normalize_sales(sales_csv, as_of=cutoff)
+
+        marketing_df = None
+        if marketing_csv and any(driver['source'] == 'marketing_weekly' for driver in contract.candidate_drivers):
+            marketing_df = self.normalizer._read_source(marketing_csv, "marketing_weekly")
+            self.normalizer._require_columns(marketing_df, "marketing_weekly", ("week_start", "region", "category", "available_at"))
+            marketing_df['week_start'] = pd.to_datetime(marketing_df['week_start'], errors='coerce')
+            marketing_df['available_at'] = pd.to_datetime(marketing_df['available_at'], errors='coerce')
+            marketing_df = marketing_df[marketing_df['available_at'] <= cutoff].copy()
+
+        finance_df = None
+        if finance_csv and (contract.reconciliation is not None or any(
+            driver['source'] == 'finance_monthly' for driver in contract.candidate_drivers
+        )):
+            finance_df = self.normalizer.load_and_normalize_finance(finance_csv, as_of=cutoff)
+
+        result["source_evidence"] = builder.build(
+            result=result,
+            scope=dimension_slice or {},
+            sales_frame=sales_df,
+            marketing_frame=marketing_df,
+            finance_frame=finance_df,
+            sales_path=sales_csv,
+            marketing_path=marketing_csv if marketing_df is not None else None,
+            finance_path=finance_csv if finance_df is not None else None,
+        )
+
+        # Only CONTRADICTED is a hard gate. Continue for NOT_APPLICABLE,
+        # NOT_AVAILABLE_FOR_PERIOD, AGREED, and DRIFT.
         if reconciliation.status == "CONTRADICTED":
+            result["driver_analysis"] = self.ranker.excluded_analysis(
+                contract,
+                target_kpi=kpi_id,
+                target_date=target.date().isoformat(),
+                scope=dimension_slice,
+                reason_code="BLOCKED_BY_RECONCILIATION",
+                reason="Contradictory source reconciliation blocks driver interpretation.",
+                status="BLOCKED",
+            )
+            result["driver_exclusions"] = result["driver_analysis"]["excluded_drivers"]
             result.update(
                 verdict="CONTRADICTED",
                 narrative="The source systems disagree about this movement. Check the postings before diagnosing a cause.",
             )
             return self._finalize(result)
 
+        stage_started = time.monotonic_ns()
         assessment = self.detector.evaluate_movement(
             scoped, contract, target.date().isoformat(), metric_col=kpi_id,
             comparison_plan=prepared_request.comparison,
         )
         result["movement_assessment"] = asdict(assessment)
+        self._record_runtime(result, "movement_detection", "STATISTICAL", "statistical_and_business_materiality", stage_started)
         if assessment.status != "OK":
+            result["driver_analysis"] = self.ranker.excluded_analysis(
+                contract,
+                target_kpi=kpi_id,
+                target_date=target.date().isoformat(),
+                scope=dimension_slice,
+                reason_code="INSUFFICIENT_HISTORY",
+                reason="The KPI history did not meet the movement-analysis baseline requirement.",
+                status="INSUFFICIENT_EVIDENCE",
+            )
+            result["driver_exclusions"] = result["driver_analysis"]["excluded_drivers"]
             result.update(
                 verdict=assessment.status,
                 narrative=f"This KPI cannot be assessed yet: {assessment.status.lower().replace('_', ' ')}.",
             )
             return self._finalize(result)
+
+        driver_specs = {driver["id"]: driver for driver in contract.candidate_drivers}
+        governed_driver_ids = list(driver_specs)
+        unknown_drivers = set(candidate_drivers or []) - set(governed_driver_ids)
+        if unknown_drivers:
+            raise ValueError(f"Drivers not declared for {kpi_id}: {sorted(unknown_drivers)}")
+        if candidate_drivers is not None and set(candidate_drivers) != set(governed_driver_ids):
+            raise ValueError("Candidate driver selection must match the complete governed KPI driver set")
+        stage_started = time.monotonic_ns()
+        evaluation = self.ranker.evaluate_candidates(
+            self._attach_monthly_driver_values(scoped, finance, driver_specs, dimension_slice),
+            kpi_id,
+            governed_driver_ids,
+            target_date=target.date().isoformat(),
+            driver_columns={
+                driver_id: f"finance_monthly_{spec['column']}"
+                if spec.get("source") == "finance_monthly" else spec["column"]
+                for driver_id, spec in driver_specs.items()
+            },
+            contract=contract,
+            scope=dimension_slice,
+            as_of=cutoff.isoformat(),
+        )
+        result["driver_analysis"] = evaluation.driver_analysis
+        result["correlational_candidates"] = [asdict(candidate) for candidate in evaluation.candidates]
+        result["driver_exclusions"] = [asdict(exclusion) for exclusion in evaluation.exclusions]
+        self._record_runtime(result, "driver_analysis", "STATISTICAL", "governed_lagged_association_ranking", stage_started)
         if not assessment.is_material:
             if assessment.detector_agreement == "SEASONAL_ONLY":
                 result.update(
@@ -377,6 +739,7 @@ class KPIEnginePipeline:
         # arithmetic mean. The bridge uses exactly those same periods.
         # NEXT: obtain an explicit comparison plan from the metric service and
         # reuse it in detection AND decomposition; do not configure these apart.
+        stage_started = time.monotonic_ns()
         history_days = max(30, contract.min_history_periods)
         baseline = prepared_request.comparison.baseline_frame.copy()
         current = prepared_request.comparison.current_frame.copy()
@@ -436,38 +799,9 @@ class KPIEnginePipeline:
                         },
                     }
                     result["decomposition_status"] = "IDENTITY_HELD"
+        self._record_runtime(result, "contribution_analysis", "DETERMINISTIC", "deterministic_accounting_bridge", stage_started)
 
-        driver_specs = {driver["id"]: driver for driver in contract.candidate_drivers}
-        driver_columns = {driver_id: spec["column"] for driver_id, spec in driver_specs.items()}
-        candidates = candidate_drivers if candidate_drivers is not None else list(driver_columns)
-        unknown_drivers = set(candidates) - set(driver_columns)
-        if unknown_drivers:
-            raise ValueError(f"Drivers not declared for {kpi_id}: {sorted(unknown_drivers)}")
-        # A weekly signal that is not yet available on the target day cannot
-        # support a candidate explanation for that target-day movement.
-        target_rows = scoped[scoped['date'] == target]
-        # NEXT: availability should be evaluated for each declared lag's period.
-        # This current target-week gate also excludes available prior-week signals.
-        unavailable_weekly = [driver_id for driver_id in candidates if (
-            driver_specs[driver_id]['source'] == 'marketing_weekly'
-            and (
-                target_rows.empty
-                or driver_specs[driver_id]['column'] not in target_rows.columns
-                or not target_rows[driver_specs[driver_id]['column']].notna().all()
-            )
-        )]
-        candidates = [driver_id for driver_id in candidates if driver_id not in unavailable_weekly]
-        evaluation = self.ranker.evaluate_candidates(
-            scoped, kpi_id, candidates, target_date=target.date().isoformat(),
-            driver_columns=driver_columns, contract=contract,
-        )
-        result["correlational_candidates"] = [asdict(candidate) for candidate in evaluation.candidates]
-        result["driver_exclusions"] = [asdict(exclusion) for exclusion in (
-            [DriverExclusion(
-                driver_id, "UNAVAILABLE_AT_TARGET",
-                "Weekly driver report was not available for the target slice at the as-of cutoff",
-            ) for driver_id in unavailable_weekly] + evaluation.exclusions
-        )]
+        stage_started = time.monotonic_ns()
         if verification_design is None:
             verification = CausalVerificationResult(
                 "", "UNTESTABLE", "NO_DESIGN",
@@ -501,6 +835,7 @@ class KPIEnginePipeline:
         result["causal_verdict"] = verification.verdict
         result["causal_verification"] = asdict(verification)
         result["confidence"] = asdict(self.confidence_engine.assess(verification))
+        self._record_runtime(result, "causal_verification", "CAUSAL", "predeclared_observational_design", stage_started)
         delta_display = f"{assessment.delta:.6f}" if contract.aggregation != "sum" else f"{assessment.delta:.2f}"
         result.update(
             verdict="MATERIAL_CAUSE_UNVERIFIED",
@@ -512,3 +847,12 @@ class KPIEnginePipeline:
             ),
         )
         return self._finalize(result)
+    @staticmethod
+    def _record_runtime(result: Dict[str, Any], stage: str, processing_type: str,
+                        method: str, started_ns: int) -> None:
+        result.setdefault("_runtime_stages", []).append({
+            "stage": stage,
+            "processing_type": processing_type,
+            "method": method,
+            "latency_ms": max(0.0, (time.monotonic_ns() - started_ns) / 1_000_000),
+        })

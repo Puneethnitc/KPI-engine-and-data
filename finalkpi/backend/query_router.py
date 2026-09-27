@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
+import time
 
 from backend.schemas import QueryIntent, RouterAnalysis
-
-try:
-    from openai import OpenAI
-except Exception:  # pragma: no cover
-    OpenAI = None
+from backend.llm_config import create_llm_client
 
 ROUTER_PROMPT = """You are a query routing module for a KPI Diagnostic RAG engine.
 Analyze the user question dynamically and classify its primary intent.
@@ -35,7 +31,7 @@ Respond strictly in JSON matching this schema:
 
 class DynamicQueryRouter:
     def __init__(self):
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "mock-key")) if OpenAI is not None else None
+        self.client, self.llm_settings = create_llm_client()
 
     def route(self, question: str, active_kpi: str) -> RouterAnalysis:
         if self.client is None:
@@ -46,11 +42,14 @@ class DynamicQueryRouter:
                 requires_diagnosis_json=True,
                 requires_vector_docs=True,
                 requires_data_rows=False,
+                runtime_telemetry={"status": "SKIPPED", "latency_ms": 0, "model_calls": 0,
+                                   "usage_source": "NOT_APPLICABLE"},
             )
 
+        started = time.monotonic_ns()
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.llm_settings.model,
                 messages=[
                     {"role": "system", "content": ROUTER_PROMPT},
                     {"role": "user", "content": f"Active KPI: {active_kpi}\nQuestion: {question}"},
@@ -59,6 +58,16 @@ class DynamicQueryRouter:
                 temperature=0.0,
             )
             data = json.loads(response.choices[0].message.content)
+            usage = getattr(response, "usage", None)
+            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            data["runtime_telemetry"] = {
+                "status": "COMPLETED", "latency_ms": (time.monotonic_ns() - started) / 1_000_000,
+                "model_calls": 1, "provider": self.llm_settings.provider,
+                "model": self.llm_settings.model, "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "usage_source": "PROVIDER_REPORTED" if input_tokens is not None and output_tokens is not None else "UNAVAILABLE",
+            }
             return RouterAnalysis(**data)
         except Exception:
             return RouterAnalysis(
@@ -68,4 +77,10 @@ class DynamicQueryRouter:
                 requires_diagnosis_json=True,
                 requires_vector_docs=True,
                 requires_data_rows=False,
+                runtime_telemetry={
+                    "status": "FALLBACK", "latency_ms": (time.monotonic_ns() - started) / 1_000_000,
+                    "model_calls": 1, "provider": self.llm_settings.provider,
+                    "model": self.llm_settings.model, "input_tokens": None, "output_tokens": None,
+                    "usage_source": "UNAVAILABLE", "reason_code": "ROUTER_FALLBACK",
+                },
             )

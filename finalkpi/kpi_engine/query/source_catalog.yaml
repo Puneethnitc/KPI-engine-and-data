@@ -4,6 +4,10 @@ sources:
     table_name: sales_daily
     file_path: ../../data/sales_daily.csv
     grain: daily
+    version: "1"
+    refresh_cadence: Daily, available T+1 business day
+    access_classification: internal
+    lineage_reference: data/sales_daily.csv
     date_column: date
     dimensions:
       - region
@@ -29,27 +33,57 @@ sources:
       net_sales_revenue:
         type: float
         required: true
+        unit: INR
       orders:
         type: float
         required: true
+        unit: count
       units_sold:
         type: float
         required: false
+        unit: units
+      aov:
+        type: float
+        required: false
+        unit: INR/unit (derived compatibility field)
       traffic_total:
         type: float
         required: true
+        unit: visits
       conversion_rate:
         type: float
         required: false
+        unit: orders_per_visit (derived ratio of sums)
       marketing_spend:
         type: float
         required: false
+        unit: INR/week (weekly driver; not a daily additive field)
+      checkout_latency_ms:
+        type: float
+        required: false
+        unit: ms
+      competitor_price_index:
+        type: float
+        required: false
+        unit: index
+      lost_units_stockout:
+        type: float
+        required: false
+        unit: units/day
+      traffic_online:
+        type: float
+        required: false
+        unit: visits/day
 
   marketing_weekly:
     source_id: marketing_weekly
     table_name: marketing_weekly
     file_path: ../../data/marketing_weekly.csv
     grain: weekly
+    version: "1"
+    refresh_cadence: Weekly, T+3 business days after week end
+    access_classification: internal
+    lineage_reference: data/marketing_weekly.csv
     date_column: week_start
     dimensions:
       - region
@@ -75,15 +109,37 @@ sources:
       marketing_spend:
         type: float
         required: true
+        unit: INR/week
+      checkout_latency_ms:
+        type: float
+        required: false
+        unit: ms
+      competitor_price_index:
+        type: float
+        required: false
+        unit: index
+      lost_units_stockout:
+        type: float
+        required: false
+        unit: units/week
+      traffic_online:
+        type: float
+        required: false
+        unit: visits/week
       traffic_total:
         type: float
         required: true
+        unit: visits/week
 
   finance_monthly:
     source_id: finance_monthly
     table_name: finance_monthly
     file_path: ../../data/finance_monthly.csv
     grain: monthly
+    version: "1"
+    refresh_cadence: Monthly, T+5 business days after month close
+    access_classification: restricted
+    lineage_reference: data/finance_monthly.csv
     date_column: month_start
     dimensions:
       - region
@@ -113,6 +169,7 @@ sources:
       net_sales_revenue:
         type: float
         required: true
+        unit: INR
       revision:
         type: int
         required: true

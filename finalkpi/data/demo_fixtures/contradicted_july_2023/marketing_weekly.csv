@@ -1,0 +1,7 @@
+week_start,week_end,region,category,marketing_spend,adstock_marketing,email_sends,traffic_organic,traffic_paid,traffic_direct,traffic_total,source_system,grain,available_at
+2023-06-26,2023-07-02,North,Electronics,5415.01,1710.57,19000,4019.1,1754.1,201.1,5974.3,ad_platform_export,weekly,2023-07-04 09:00:00
+2023-07-03,2023-07-09,North,Electronics,5402.05,1715.2528571428572,21000,3920.6,1798.9,205.2,5924.6,ad_platform_export,weekly,2023-07-11 09:00:00
+2023-07-10,2023-07-16,North,Electronics,5445.4,1726.1114285714286,22000,3930.2,1786.5,232.8,5949.5,ad_platform_export,weekly,2023-07-18 09:00:00
+2023-07-17,2023-07-23,North,Electronics,4017.03,1463.7985714285714,16000,3995.2,1537.1,156.2,5688.7,ad_platform_export,weekly,2023-07-25 09:00:00
+2023-07-24,2023-07-30,North,Electronics,953.27,374.9842857142857,19000,3830.9,488.1,210.1,4529.1,ad_platform_export,weekly,2023-08-01 09:00:00
+2023-07-31,2023-08-06,North,Electronics,526.4,174.52,12000,3782.1,241.6,127.1,4151.0,ad_platform_export,weekly,2023-08-08 09:00:00

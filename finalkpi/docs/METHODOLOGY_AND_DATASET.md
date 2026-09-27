@@ -58,19 +58,20 @@ absence as zero spend.
 
 ### 3. Source reconciliation
 
-Where a comparable finance posting exists, the same month and slice are
-compared:
+Heterogeneous source unification (joining daily sales, weekly marketing, monthly finance) occurs during governed normalization and alignment. In contrast, cross-source reconciliation is an optional same-measure comparison against an independent system of record (such as monthly finance).
+
+Only `net_sales_revenue` declares a comparable finance measure. The other four KPIs (`orders`, `units_sold`, `traffic_total`, `conversion_rate`) return `NOT_APPLICABLE` and proceed through detection and ranking without finance files or warnings.
+
+Where a comparable finance posting exists (`net_sales_revenue`), the same month and slice are compared:
 
 `gap_% = 100 × |sales_total − finance_total| / |sales_total|`.
 
-The contract's default tolerance is 3.5%; `AGREED` is within tolerance,
-`DRIFT` is above tolerance up to 8.75% (2.5 × tolerance), and
-`CONTRADICTED` is above that. A contradiction stops diagnosis. A missing or
-non-comparable posting yields `NOT_RECONCILED`, **not** agreement. The current
-finance extract has no timestamped provisional snapshots suitable for
-historical open-month comparisons, so the default 2023-07-24 run is
-`NOT_RECONCILED`. This is a conservative gate, not evidence that finance
-disagreed.
+The canonical cross-source comparison statuses are:
+- **`NOT_APPLICABLE`**: No comparable second-source measure is declared.
+- **`NOT_AVAILABLE_FOR_PERIOD`**: A comparator is declared, but no valid matching period/as-of snapshot exists for the requested target date (e.g., mid-month evaluation).
+- **`AGREED`**: Comparable values agree within tolerance (default 3.5%).
+- **`DRIFT`**: Values differ beyond agreement tolerance but below contradiction boundary (up to 8.75%). Conclusions are qualified but non-blocking.
+- **`CONTRADICTED`**: Evidence conflicts beyond contradiction boundary (>8.75%). This acts as the sole hard gate blocking downstream driver attribution.
 
 ### 4. Detection and materiality
 

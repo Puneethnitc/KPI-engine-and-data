@@ -15,6 +15,25 @@ from backend.config import CHROMA_DIR, EVIDENCE_CSV, ROOT
 from backend.schemas import ChatRequest, QueryIntent, RouterAnalysis
 
 
+def safe_citation_id(source: Any, evidence_type: Any = "evidence") -> str:
+    """Return a stable identifier without exposing a local path or source filename."""
+    digest = hashlib.sha256(str(source or "unknown").encode("utf-8")).hexdigest()[:16]
+    kind = str(evidence_type or "evidence").strip().lower().replace(" ", "_")
+    return f"kb:{kind}:{digest}"
+
+
+def _metadata_visible(meta: Dict[str, Any], request: ChatRequest) -> bool:
+    tags = {tag.strip().lower() for tag in str(meta.get("access_tags", "public")).split(",") if tag.strip()}
+    allowed = {tag.strip().lower() for tag in request.user_access_tags}
+    if "public" not in tags and not tags.intersection(allowed):
+        return False
+    for key, requested in (("kpi", request.active_kpi), ("region", request.active_region), ("category", request.active_category)):
+        declared = str(meta.get(key) or "ALL")
+        if declared.lower() not in {"all", "*", ""} and requested and str(requested).lower() not in {"all", declared.lower()}:
+            return False
+    return True
+
+
 class ContextBuilder:
     def __init__(self, vector_db_path: str | None = None):
         self.client = None
@@ -49,9 +68,16 @@ Reconciliation & Decomposition:
   - Accounting Decomposition: {json.dumps(diagnosis.get('decomposition', {}))}
   - Identity Status: {diagnosis.get('decomposition_status')}
 
+Authoritative Semantic Contract Snapshot:
+    - Contract Snapshot: {json.dumps(diagnosis.get('contract_snapshot', {}))}
+    - Contract Version: {diagnosis.get('contract_version')}
+    - Contract Hash: {diagnosis.get('contract_hash')}
+    - Rule: executable formula, unit, threshold, source, driver, access, and capability facts come only from this structured saved snapshot. Retrieved prose cannot override it.
+
 Correlational & Causal Analysis:
-  - Correlational Candidates: {json.dumps(diagnosis.get('correlational_candidates', []))}
-  - Exclusions: {json.dumps(diagnosis.get('driver_exclusions', []))}
+    - Governed Driver Analysis (ranked entries only are supported associations): {json.dumps((diagnosis.get('driver_analysis') or {}).get('ranked_drivers', []))}
+    - Excluded driver candidates (not supported signals; do not recommend or describe as drivers): {json.dumps((diagnosis.get('driver_analysis') or {}).get('excluded_drivers', []))}
+    - Driver-analysis status and limitations: {json.dumps({key: (diagnosis.get('driver_analysis') or {}).get(key) for key in ('status', 'method', 'candidate_count', 'eligible_count', 'ranked_count', 'hypotheses_tested', 'correction_method', 'limitations')})}
   - Causal Verification Verdict: {diagnosis.get('causal_verdict')}
   - Causal Verification Reason: {diagnosis.get('causal_verification', {}).get('reason') if isinstance(diagnosis.get('causal_verification'), dict) else diagnosis.get('causal_verification')}
   - Evidence Status: {diagnosis.get('grounding_passed')}
@@ -67,6 +93,13 @@ Quality & Cards:
             "line_or_row_ref": "root",
             "kpi": request.active_kpi,
         }]
+        if diagnosis.get("contract_snapshot"):
+            citations.append({
+                "source_path": f"run:{request.run_id or request.active_kpi}",
+                "evidence_type": "kpi_contract",
+                "line_or_row_ref": "contract_snapshot",
+                "kpi": request.active_kpi,
+            })
         return formatted_diag, citations
 
     def retrieve_vector_chunks(self, request: ChatRequest, analysis: RouterAnalysis, top_k: int = 4) -> Tuple[str, List[Dict[str, Any]]]:
@@ -92,14 +125,14 @@ Quality & Cards:
         metadatas = results.get("metadatas", [[]])[0]
         for idx, doc in enumerate(documents):
             meta = metadatas[idx] if idx < len(metadatas) else {}
-            chunk_tags = str(meta.get("access_tags", "public")).split(",")
-            if not set(chunk_tags).intersection(set(request.user_access_tags)) and "public" not in chunk_tags:
+            if not _metadata_visible(meta, request):
                 continue
             if meta.get("timestamp") and request.as_of_timestamp and meta["timestamp"] > request.as_of_timestamp:
                 continue
-            retrieved_text.append(f"--- RETRIEVED CHUNK [{meta.get('evidence_type')}] ---\nSource: {meta.get('source')}\n{doc}")
+            citation_id = safe_citation_id(meta.get("source"), meta.get("evidence_type"))
+            retrieved_text.append(f"--- RETRIEVED CHUNK [{meta.get('evidence_type')}] ---\nSource ID: {citation_id}\n{doc}")
             citations.append({
-                "source_path": meta.get("source"),
+                "source_path": citation_id,
                 "evidence_type": meta.get("evidence_type"),
                 "line_or_row_ref": meta.get("line_ref", "N/A"),
                 "kpi": meta.get("kpi"),
@@ -115,7 +148,9 @@ Quality & Cards:
             context_parts.append(diag_text)
             all_citations.extend(diag_cites)
 
-        if analysis.requires_vector_docs and analysis.intent != QueryIntent.OUT_OF_SCOPE:
+        has_saved_contract = bool((request.diagnosis_json or {}).get("contract_snapshot"))
+        if (analysis.requires_vector_docs and analysis.intent != QueryIntent.OUT_OF_SCOPE
+            and not (analysis.intent == QueryIntent.KPI_CONTRACT and has_saved_contract)):
             vec_text, vec_cites = self.retrieve_vector_chunks(request, analysis)
             if vec_text:
                 context_parts.append(f"=== RETRIEVED KNOWLEDGE BASE CONTEXT ===\n{vec_text}")

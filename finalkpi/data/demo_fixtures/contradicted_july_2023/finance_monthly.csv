@@ -1,0 +1,2 @@
+region,category,month_start,net_sales_revenue,units_sold,month_end,closes_at,status,source_system,grain
+North,Electronics,2023-07-01,373467.45,1493.4,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly

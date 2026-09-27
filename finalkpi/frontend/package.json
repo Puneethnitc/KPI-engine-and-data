@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test tests/frontend-harden.test.js"
+    "test": "node --experimental-strip-types --test tests/*.test.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

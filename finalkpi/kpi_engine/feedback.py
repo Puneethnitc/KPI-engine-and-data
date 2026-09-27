@@ -30,7 +30,7 @@ class FeedbackRecord:
 
 # Persistence boundary; callers choose the destination through configuration.
 class FeedbackLogger:
-    """Append proposed corrections without mutating historical output."""
+    """Legacy JSONL correction logger; the live feedback API uses SQLite."""
 
     def __init__(self, log_filepath: str = "data/feedback_log.jsonl"):
         self.log_filepath = log_filepath

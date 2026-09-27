@@ -8,36 +8,26 @@
 schema_version: 1
 kpi_id: orders
 version: 1
+display_name: Orders
+status: ACTIVE
 definition: Daily orders as recorded in sales_daily; synthetic source values may be fractional.
+business_purpose: Track completed orders as the operational count outcome, separate from financial revenue.
+steward: Operations data steward
+tags: [funnel, orders, daily]
 value_column: orders
 aggregation: sum
 formula: orders # Authoritative source value; displayed conversion_rate may be rounded.
 unit: count
+precision: 2
+aggregation_notes: [Sum recorded orders; synthetic fixture values can be fractional.]
 grain: daily
 source: sales_daily
 dimensions: [region, category]
-source_catalog:
-  source_id: sales_daily
-  format: csv
-  grain: daily
-  dimensions: [region, category]
-  natural_key: [date, region, category]
-  unit: count
-  fields:
-    date: {type: date, required: true}
-    region: {type: string, required: true}
-    category: {type: string, required: true}
-    available_at: {type: datetime, required: true}
-    orders: {type: float, required: true}
-    traffic_total: {type: float, required: false}
-  availability:
-    field: available_at
-    cutoff_policy: as_of
-    timezone: UTC
-  missing_data:
-    null_policy: reject
-    partial_group_policy: reject
-    zero_is_valid: true
+supported_rollups: [region, category, month]
+calendar: Gregorian
+timezone: UTC
+null_policy: reject incomplete primary observations
+zero_policy: recorded zero remains zero; missing observations are not imputed
 calculation:
   operator: sum
   value_column: orders
@@ -51,6 +41,10 @@ comparison_policy:
 materiality:
   z_threshold: 2.5
   abs_threshold: 5.0
+statistical_method: robust rolling baseline z-score with seasonal MSTL review
+detector_agreement_rule: materially alert on the robust detector; seasonal-only movement is review-only
+threshold_status: PROVISIONAL
+calibration_reference: null
 seasonal_period: 7
 min_history_periods: 30
 owner: ops_lead
@@ -61,11 +55,16 @@ decomposition:
   quantity_column: traffic_total
   reference_rate_column: conversion_rate # Exact bridge derives rate as orders / traffic_total.
 reconciliation: null # Finance has no comparable orders posting.
+driver_method: native-grain first-difference lagged Pearson association; ranking index is exploratory
+driver_limitations: [No multiple-testing correction, no seasonal adjustment, marginal associations do not separate interacting drivers, correlation is not contribution or causation.]
+decomposition_limitations: [Traffic multiplied by a derived conversion rate reconciles orders as an accounting identity, not a causal effect.]
+source_catalog_version: "1"
+policy_reference: data/access_control.csv
 
 # NEXT: add per-driver lag/window/weight policy instead of shared Python defaults.
 candidate_drivers:
-  - {id: checkout_latency_spike, column: checkout_latency_ms, source: sales_daily, grain: daily, aggregation: mean}
-  - {id: competitor_price_cut, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean}
-  - {id: ad_spend_drop, column: marketing_spend, source: marketing_weekly, grain: weekly, aggregation: sum}
-  - {id: stockout, column: lost_units_stockout, source: sales_daily, grain: daily, aggregation: sum}
-  - {id: traffic_drop, column: traffic_online, source: sales_daily, grain: daily, aggregation: sum}
+  - {id: checkout_latency_spike, display_name: Checkout latency, unit: ms, controllability: controllable, column: checkout_latency_ms, source: sales_daily, grain: daily, aggregation: mean, allowed_lags: [0, 1, 2, 3, 4, 5, 6, 7], min_pairs: 14, minimum_coverage: 0.6}
+  - {id: competitor_price_cut, display_name: Competitor price index, unit: index, controllability: contextual, column: competitor_price_index, source: sales_daily, grain: daily, aggregation: mean, allowed_lags: [0, 1, 2, 3, 4, 5, 6, 7], min_pairs: 14, minimum_coverage: 0.6}
+  - {id: ad_spend_drop, display_name: Marketing spend, unit: INR/week, controllability: controllable, column: marketing_spend, source: marketing_weekly, grain: weekly, aggregation: sum, allowed_lags: [0, 7], min_pairs: 8, minimum_coverage: 0.6}
+  - {id: stockout, display_name: Stockout units, unit: units/day, controllability: controllable, column: lost_units_stockout, source: sales_daily, grain: daily, aggregation: sum, allowed_lags: [0, 1, 2, 3, 4, 5, 6, 7], min_pairs: 14, minimum_coverage: 0.6}
+  - {id: traffic_drop, display_name: Online traffic, unit: visits/day, controllability: controllable, column: traffic_online, source: sales_daily, grain: daily, aggregation: sum, allowed_lags: [0, 1, 2, 3, 4, 5, 6, 7], min_pairs: 14, minimum_coverage: 0.6}

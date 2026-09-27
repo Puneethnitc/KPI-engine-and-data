@@ -16,6 +16,8 @@ language cannot pass merely because some matching token exists elsewhere.
 
 from dataclasses import asdict, dataclass, replace
 import json
+import os
+import time
 from typing import Any, Callable
 from urllib.request import Request, urlopen
 
@@ -46,9 +48,23 @@ class NarrativeEngine:
         self.llm_client = llm_client
 
     @staticmethod
-    def _variants(claim: GroundedClaim, payload: dict[str, Any]) -> tuple[str, ...]:
+    def _variants(claim: 'GroundedClaim', payload: dict) -> tuple[str, ...]:
+        reconciliation = payload.get('reconciliation_verdict') or {}
+        recon_status = reconciliation.get('status', '')
         alternatives = {
-            "SOURCE_STATUS": lambda: f"The source comparison is {payload['reconciliation_verdict']['status']}.",
+            "SOURCE_STATUS": lambda: (
+                f"No independent comparison is configured for {payload.get('kpi_id', 'this KPI')}."
+                if recon_status == "NOT_APPLICABLE" else
+                "Independent finance comparison was not available for this period; "
+                "the movement is based on the governed operational source."
+                if recon_status == "NOT_AVAILABLE_FOR_PERIOD" else
+                f"The comparable source agrees within tolerance (gap: {reconciliation.get('gap_pct', 'n/a')}%)."
+                if recon_status == "AGREED" else
+                f"The comparable source shows a gap of {reconciliation.get('gap_pct', 'n/a')}% — "
+                "within DRIFT range; conclusions are qualified."
+                if recon_status == "DRIFT" else
+                f"The source comparison is {recon_status}."
+            ),
             "OBSERVED_MOVEMENT": lambda: (
                 f"On {payload['target_date']}, {payload['kpi_id']} moved by "
                 f"{payload['movement_assessment']['delta']} in its declared unit."
@@ -74,8 +90,11 @@ class NarrativeEngine:
             return self.llm_client(options)
         if not self.api_key:
             raise RuntimeError("No LLM provider configured")
+        endpoint = f"{os.getenv('GROQ_BASE_URL', 'https://api.groq.com/openai/v1').rstrip('/')}" \
+            "/chat/completions"
+        model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
         body = json.dumps({
-            "model": "openai/gpt-oss-20b",
+            "model": model,
             "temperature": 0,
             "response_format": {"type": "json_object"},
             "messages": [
@@ -87,17 +106,25 @@ class NarrativeEngine:
                 {"role": "user", "content": json.dumps({"options": options})},
             ],
         }).encode("utf-8")
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         request = Request(
-            "https://api.groq.com/openai/v1/chat/completions", data=body,
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            endpoint, data=body,
+            headers=headers,
             method="POST",
         )
         with urlopen(request, timeout=5) as response:
             answer = json.load(response)
-        return json.loads(answer["choices"][0]["message"]["content"])
+        selected = json.loads(answer["choices"][0]["message"]["content"])
+        usage = answer.get("usage") or {}
+        if isinstance(selected, dict) and usage:
+            selected["_usage"] = {
+                "input_tokens": usage.get("prompt_tokens"),
+                "output_tokens": usage.get("completion_tokens"),
+            }
+        return selected
 
     @staticmethod
-    def _claims(payload: dict[str, Any]) -> tuple[GroundedClaim, ...]:
+    def _claims(payload: dict[str, Any]) -> tuple['GroundedClaim', ...]:
         claims = []
         verdict = payload.get("verdict")
         reconciliation = payload.get("reconciliation_verdict")
@@ -108,8 +135,32 @@ class NarrativeEngine:
             ),)
         if reconciliation is not None:
             status = reconciliation["status"]
+            # Per-status source claim wording
+            if status == "NOT_APPLICABLE":
+                claim_text = (
+                    f"No independent comparison is configured for {payload.get('kpi_id', 'this KPI')}; "
+                    "movement is based on the governed operational source."
+                )
+            elif status == "NOT_AVAILABLE_FOR_PERIOD":
+                claim_text = (
+                    "Independent finance comparison was not available for this period; "
+                    "the movement is based on the governed operational source."
+                )
+            elif status == "AGREED":
+                recon = payload.get('reconciliation_verdict') or {}
+                gap = recon.get('gap_pct', 'n/a')
+                claim_text = f"The comparable source agrees within tolerance (gap: {gap}%)."
+            elif status == "DRIFT":
+                recon = payload.get('reconciliation_verdict') or {}
+                gap = recon.get('gap_pct', 'n/a')
+                claim_text = (
+                    f"The comparable source shows a gap of {gap}% — "
+                    "within DRIFT range; conclusions are qualified."
+                )
+            else:  # CONTRADICTED or unknown
+                claim_text = f"Source reconciliation status: {status}."
             claims.append(GroundedClaim(
-                f"Source reconciliation status: {status}.",
+                claim_text,
                 ("reconciliation_verdict.status",), "SOURCE_STATUS",
             ))
         if verdict == "CONTRADICTED":
@@ -158,12 +209,27 @@ class NarrativeEngine:
                 ("decomposition_status", "decomposition.total_delta",
                  "decomposition.is_identity_held"), "ACCOUNTING_NOT_CAUSAL",
             ))
-        for index, candidate in enumerate(payload.get("correlational_candidates", [])):
-            claims.append(GroundedClaim(
-                f"{candidate['driver_id']} is a correlational candidate, not an established cause.",
-                (f"correlational_candidates.{index}.driver_id",
-                 f"correlational_candidates.{index}.claim_type"), "CORRELATIONAL",
-            ))
+        driver_analysis = payload.get("driver_analysis") or {}
+        ranked_drivers = driver_analysis.get("ranked_drivers") or payload.get("correlational_candidates", [])
+        if driver_analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE"}:
+            ranked_drivers = []
+        for index, candidate in enumerate(ranked_drivers):
+            if driver_analysis:
+                evidence_paths = (
+                    f"driver_analysis.ranked_drivers.{index}.driver_id",
+                    f"driver_analysis.ranked_drivers.{index}.relationship_type",
+                )
+            else:
+                evidence_paths = (
+                    f"correlational_candidates.{index}.driver_id",
+                    f"correlational_candidates.{index}.claim_type",
+                )
+            claim_text = (
+                f"{candidate.get('display_name', candidate['driver_id'])} is a ranked association only, not an accounting contribution or causal estimate."
+                if driver_analysis else
+                f"{candidate['driver_id']} is a correlational candidate, not an established cause."
+            )
+            claims.append(GroundedClaim(claim_text, evidence_paths, "CORRELATIONAL"))
         verification = payload.get("causal_verification")
         if verification is not None:
             status = verification["verdict"]
@@ -199,9 +265,16 @@ class NarrativeEngine:
             payload.get("decomposition") or {}
         ).get("is_identity_held"):
             errors.append("Accounting identity is not supported")
-        for candidate in payload.get("correlational_candidates", []):
+        driver_analysis = payload.get("driver_analysis") or {}
+        ranked_drivers = driver_analysis.get("ranked_drivers") or payload.get("correlational_candidates", [])
+        if driver_analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE"}:
+            ranked_drivers = []
+        for candidate in ranked_drivers:
             if candidate.get("claim_type") != "CORRELATIONAL":
-                errors.append("Driver ranking is not labeled correlational")
+                if candidate.get("relationship_type") != "ASSOCIATION":
+                    errors.append("Driver ranking is not labeled association-only")
+        if driver_analysis.get("status") == "BLOCKED" and driver_analysis.get("ranked_drivers"):
+            errors.append("Blocked driver analysis contains ranked drivers")
         verification = payload.get("causal_verification")
         if verification and verification.get("verdict") != payload.get("causal_verdict"):
             errors.append("Causal verdict conflicts with verification evidence")
@@ -232,10 +305,26 @@ class NarrativeEngine:
             return asdict(NarrativeResult("", (), False, errors))
         status = "NOT_REQUESTED"
         method = "deterministic_evidence_template"
+        runtime = {
+            "attempted": False, "latency_ms": 0.0, "provider": None, "model": None,
+            "model_calls": 0, "input_tokens": 0, "output_tokens": 0,
+            "usage_source": "NOT_APPLICABLE",
+        }
         if claims and payload.get("verdict") != "ACCESS_DENIED" and (self.llm_client or self.api_key):
+            started = time.monotonic_ns()
+            runtime.update({
+                "attempted": True, "provider": "groq" if self.api_key else "injected",
+                "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b") if self.api_key else "injected",
+                "model_calls": 1,
+            })
             try:
                 options = [list(self._variants(claim, payload)) for claim in claims]
                 proposal = self._request_llm(options)
+                usage = proposal.pop("_usage", None) if isinstance(proposal, dict) else None
+                if isinstance(usage, dict) and usage.get("input_tokens") is not None and usage.get("output_tokens") is not None:
+                    runtime.update(input_tokens=int(usage["input_tokens"]), output_tokens=int(usage["output_tokens"]), usage_source="PROVIDER_REPORTED")
+                else:
+                    runtime.update(input_tokens=None, output_tokens=None, usage_source="UNAVAILABLE")
                 selections = proposal.get("variants") if isinstance(proposal, dict) and set(proposal) == {"variants"} else None
                 if (not isinstance(selections, list) or len(selections) != len(claims)
                         or any(type(choice) is not int or choice < 0 or choice >= len(options[index])
@@ -251,6 +340,11 @@ class NarrativeEngine:
                         status = "REJECTED"
             except Exception:
                 status = "ERROR_FALLBACK"
-        return asdict(NarrativeResult(
+                runtime.update(input_tokens=None, output_tokens=None, usage_source="UNAVAILABLE")
+            finally:
+                runtime["latency_ms"] = round(max(0.0, (time.monotonic_ns() - started) / 1_000_000), 3)
+        rendered = asdict(NarrativeResult(
             " ".join(item.text for item in claims), claims, True, (), method, status,
         ))
+        rendered["runtime_telemetry"] = runtime
+        return rendered

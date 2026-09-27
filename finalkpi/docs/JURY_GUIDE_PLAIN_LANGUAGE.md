@@ -102,24 +102,24 @@ sales is available by the default next-day-noon cutoff, but that week's
 marketing report is not. The marketing driver is marked unavailable rather
 than “zero.”
 
-### 3. Reconciliation: do two systems agree?
+### 3. Source alignment vs. reconciliation: do two systems agree?
 
-**Formula:**
+**Meaning:** Unifying heterogeneous sources (daily sales, weekly marketing, monthly finance) happens during governed data alignment. Reconciliation is an optional same-measure comparison when a KPI declares an independent comparator (e.g., monthly finance ledger).
+
+Only `net_sales_revenue` declares a comparable finance measure. The other four KPIs (`orders`, `units_sold`, `traffic_total`, `conversion_rate`) return `NOT_APPLICABLE` and proceed through detection without finance files or source warnings.
+
+For `net_sales_revenue`, the engine compares the *same month and region/category slice* when a comparable finance posting is available:
 
 `gap % = 100 × |sales total − finance total| / |sales total|`.
 
-The engine compares the *same month and region/category slice*, only when a
-comparable finance posting is available. It reports `AGREED`, `DRIFT`,
-`CONTRADICTED`, or `NOT_RECONCILED`. A contradiction stops diagnosis.
+Canonical statuses:
+- **`NOT_APPLICABLE`**: No comparable second-source measure declared.
+- **`NOT_AVAILABLE_FOR_PERIOD`**: Comparator declared, but matching period/as-of snapshot unavailable (e.g. mid-month diagnosis).
+- **`AGREED`**: Values agree within tolerance (default 3.5%).
+- **`DRIFT`**: Values differ beyond tolerance up to contradiction boundary (8.75%). Non-blocking warning.
+- **`CONTRADICTED`**: Evidence conflicts beyond contradiction boundary (>8.75%). Hard gate stopping downstream driver attribution.
 
-**Why:** It is risky to explain a revenue drop if the sales system and ledger
-disagree about whether the drop happened.
-
-**Other option:** Treat a missing finance figure as agreement, or compare a
-partial sales month with a full finance month. Both would create a false
-answer. Our finance file lacks timestamped provisional snapshots for honest
-historical open-month comparison, so the July 2023 example correctly says
-`NOT_RECONCILED`, not “agreed.”
+**Why:** Heterogeneous data must be aligned to diagnose, but cross-source comparison is only meaningful when both systems record the same measure. Only a true contradiction should block diagnosis.
 
 ### 4. Detection: is the movement unusual and meaningful?
 

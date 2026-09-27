@@ -11,6 +11,8 @@ class SourceFieldSpec:
     field_type: str = "float"
     required: bool = True
     nullable: bool = False
+    unit: Optional[str] = None
+    description: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,10 @@ class SourceCatalogEntry:
     natural_key: Tuple[str, ...]
     revision_column: Optional[str] = None
     fields: Dict[str, SourceFieldSpec] = field(default_factory=dict)
+    refresh_cadence: Optional[str] = None
+    access_classification: str = "internal"
+    lineage_reference: Optional[str] = None
+    version: str = "1"
 
 
 @dataclass(frozen=True)

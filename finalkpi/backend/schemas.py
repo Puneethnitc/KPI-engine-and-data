@@ -9,6 +9,11 @@ from pydantic import BaseModel, Field
 class EngineLabel(str, Enum):
     CORRELATIONAL = "CORRELATIONAL"
     NOT_RECONCILED = "NOT_RECONCILED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    NOT_AVAILABLE_FOR_PERIOD = "NOT_AVAILABLE_FOR_PERIOD"
+    AGREED = "AGREED"
+    DRIFT = "DRIFT"
+    CONTRADICTED = "CONTRADICTED"
     INCONCLUSIVE = "INCONCLUSIVE"
     MATERIAL_CAUSE_UNVERIFIED = "MATERIAL_CAUSE_UNVERIFIED"
     RECONCILED = "RECONCILED"
@@ -40,6 +45,7 @@ class RouterAnalysis(BaseModel):
     requires_diagnosis_json: bool = True
     requires_vector_docs: bool = True
     requires_data_rows: bool = False
+    runtime_telemetry: Optional[Dict[str, Any]] = None
 
 
 class ChatRequest(BaseModel):
@@ -63,3 +69,4 @@ class ChatResponse(BaseModel):
     evidence_status: str = Field(..., description="Exact engine status label verbatim.")
     limitations: List[str] = Field(..., description="Known risks, gaps, or verification constraints.")
     suggested_followups: List[str] = Field(..., description="Safe, context-relevant follow-up prompts.")
+    runtime_telemetry: Optional[Dict[str, Any]] = None

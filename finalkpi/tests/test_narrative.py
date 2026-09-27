@@ -65,6 +65,30 @@ class NarrativeTests(unittest.TestCase):
         self.assertTrue(rendered["grounding_passed"])
         self.assertNotIn("Secret", rendered["text"])
 
+    def test_blocked_driver_analysis_never_renders_legacy_or_excluded_driver(self):
+        payload = {
+            "kpi_id": "orders",
+            "target_date": "2023-07-24",
+            "verdict": "CONTRADICTED",
+            "reconciliation_verdict": {"status": "CONTRADICTED"},
+            "driver_analysis": {
+                "status": "BLOCKED",
+                "ranked_drivers": [],
+                "excluded_drivers": [{
+                    "driver_id": "stockout",
+                    "reason_code": "BLOCKED_BY_RECONCILIATION",
+                    "reason": "Sources contradict",
+                }],
+            },
+            "correlational_candidates": [
+                {"driver_id": "stockout", "claim_type": "CORRELATIONAL"}
+            ],
+        }
+        rendered = self.engine.render(payload)
+        self.assertTrue(rendered["grounding_passed"])
+        self.assertNotIn("stockout", rendered["text"])
+        self.assertIn("no cause is diagnosed", rendered["text"])
+
     def test_llm_may_select_only_approved_wording(self):
         engine = NarrativeEngine(llm_client=lambda options: {
             "variants": [len(group) - 1 for group in options]

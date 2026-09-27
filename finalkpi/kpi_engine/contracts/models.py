@@ -10,6 +10,7 @@
 # metric needs configuration only, and unsupported methods fail explicitly.
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Dict, List, Optional
 
 
@@ -59,8 +60,30 @@ class CalculationDefinition:
                 raise ValueError(f"KPI {kpi_id}: ratio requires numerator and denominator columns.")
             if self.numerator_column == self.denominator_column:
                 raise ValueError(f"KPI {kpi_id}: ratio numerator and denominator must differ.")
+        if self.operator in {"sum", "mean"} and not self.value_column:
+            raise ValueError(f"KPI {kpi_id}: {self.operator} requires value_column.")
         if self.operator == "weighted_mean" and not self.weight_column:
             raise ValueError(f"KPI {kpi_id}: weighted_mean requires weight_column.")
+        if self.operator == "weighted_mean" and not self.value_column:
+            raise ValueError(f"KPI {kpi_id}: weighted_mean requires value_column.")
+        if self.formula:
+            allowed_fields = {
+                field_name for field_name in (
+                    (self.numerator_column, self.denominator_column)
+                    if self.operator == "ratio_of_sums" else
+                    (self.value_column, self.weight_column)
+                ) if field_name
+            }
+            formula_expression = self.formula.split("#", 1)[0]
+            tokens = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", formula_expression))
+            operator_tokens = {"sum", "mean", "weighted_mean", "ratio_of_sums", "null", "where"}
+            unknown_tokens = tokens - allowed_fields - operator_tokens
+            missing_fields = allowed_fields
+            if unknown_tokens or not missing_fields.issubset(tokens):
+                raise ValueError(
+                    f"KPI {kpi_id}: formula fields must match executable {self.operator} inputs; "
+                    f"unknown={sorted(unknown_tokens)}, missing={sorted(missing_fields - tokens)}."
+                )
 
 
 @dataclass
@@ -237,6 +260,31 @@ class KPIContract:
     calculation: Optional[CalculationDefinition] = None
     comparison_policy: Optional[ComparisonPolicy] = None
     missing_data_policy: Optional[MissingDataPolicy] = None
+    display_name: Optional[str] = None
+    status: str = "ACTIVE"
+    business_purpose: Optional[str] = None
+    steward: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    precision: int = 2
+    aggregation_notes: List[str] = field(default_factory=list)
+    supported_rollups: List[str] = field(default_factory=list)
+    calendar: str = "Gregorian"
+    timezone: str = "UTC"
+    null_policy: Optional[str] = None
+    zero_policy: Optional[str] = None
+    statistical_method: str = "robust rolling baseline with seasonal forecast review"
+    detector_agreement_rule: str = "material alert uses robust detector; seasonal-only signal requires review"
+    threshold_status: str = "PROVISIONAL"
+    calibration_reference: Optional[str] = None
+    driver_method: str = "native-grain first-difference lagged Pearson association"
+    driver_limitations: List[str] = field(default_factory=list)
+    decomposition_limitations: List[str] = field(default_factory=list)
+    effective_from: Optional[str] = None
+    effective_to: Optional[str] = None
+    approved_by: Optional[str] = None
+    change_reason: Optional[str] = None
+    source_catalog_version: str = "source-catalog-v1"
+    policy_reference: str = "access_control.csv"
 
     def resolved_calculation(self) -> CalculationDefinition:
         if self.calculation is not None:
@@ -309,5 +357,37 @@ class KPIContract:
                 raise ValueError(f"KPI {self.kpi_id}: each candidate driver needs id, column, source, grain.")
             if driver.get("aggregation", "mean") not in {"mean", "sum"}:
                 raise ValueError(f"KPI {self.kpi_id}: candidate driver aggregation must be mean or sum.")
-            if driver["grain"] not in {"daily", "weekly"}:
+            if driver["grain"] not in {"daily", "weekly", "monthly"}:
                 raise ValueError(f"KPI {self.kpi_id}: unsupported candidate driver grain.")
+            if driver.get("controllability", "contextual") not in {"controllable", "contextual"}:
+                raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} has invalid controllability.")
+            if driver.get("expected_direction") not in {None, "positive", "negative"}:
+                raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} has invalid expected_direction.")
+            if driver.get("min_pairs") is not None and int(driver["min_pairs"]) <= 0:
+                raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} min_pairs must be positive.")
+            if driver.get("minimum_coverage") is not None and not 0 < float(driver["minimum_coverage"]) <= 1:
+                raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} minimum_coverage must be in (0, 1].")
+            if driver.get("allowed_lags") is not None:
+                lags = driver["allowed_lags"]
+                if not isinstance(lags, (list, tuple)) or not lags or any(type(lag) is not int or lag < 0 for lag in lags):
+                    raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} allowed_lags must be nonnegative integer values.")
+        if self.status not in {"ACTIVE", "DRAFT", "DEPRECATED"}:
+            raise ValueError(f"KPI {self.kpi_id}: status must be ACTIVE, DRAFT, or DEPRECATED.")
+        if self.threshold_status not in {"PROVISIONAL", "VALIDATED"}:
+            raise ValueError(f"KPI {self.kpi_id}: threshold_status must be PROVISIONAL or VALIDATED.")
+        if not self.owner or not self.access_tags:
+            raise ValueError(f"KPI {self.kpi_id}: owner and access_tags are required.")
+        allowed_access_tags = {"public", "internal", "restricted", "region_scoped"}
+        unknown_tags = set(self.access_tags) - allowed_access_tags
+        if unknown_tags:
+            raise ValueError(f"KPI {self.kpi_id}.access_tags: unknown access tags {sorted(unknown_tags)}.")
+        if any(not isinstance(tag, str) or not tag for tag in self.tags):
+            raise ValueError(f"KPI {self.kpi_id}.tags: tags must be nonempty strings.")
+        if any(not isinstance(note, str) or not note for note in self.aggregation_notes):
+            raise ValueError(f"KPI {self.kpi_id}.aggregation_notes: notes must be nonempty strings.")
+        if any(not isinstance(dimension, str) or not dimension for dimension in self.supported_rollups):
+            raise ValueError(f"KPI {self.kpi_id}.supported_rollups: values must be nonempty strings.")
+        if self.status == "ACTIVE" and not (self.business_purpose or self.definition).strip():
+            raise ValueError(f"KPI {self.kpi_id}.business_purpose: active contracts require a purpose.")
+        if self.precision < 0:
+            raise ValueError(f"KPI {self.kpi_id}: precision cannot be negative.")

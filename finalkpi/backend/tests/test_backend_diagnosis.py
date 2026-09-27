@@ -1,11 +1,9 @@
-import importlib
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from backend import config as backend_config
 from backend.service import diagnose_scope, get_registered_kpis
 from backend import storage as backend_storage
 
@@ -14,6 +12,21 @@ ENGINE_ROOT = ROOT.parent
 
 
 class BackendDiagnosisApiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._database_directory = tempfile.TemporaryDirectory()
+        cls._database_patch = patch.object(
+            backend_storage,
+            "DB_PATH",
+            Path(cls._database_directory.name) / "kpi_backend.sqlite3",
+        )
+        cls._database_patch.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._database_patch.stop()
+        cls._database_directory.cleanup()
+
     def test_registered_kpis_match_engine_registry(self):
         kpis = get_registered_kpis()
         self.assertEqual(
@@ -35,10 +48,9 @@ class BackendDiagnosisApiTests(unittest.TestCase):
             json.dumps(result, allow_nan=False)
 
     def test_fresh_database_returns_none_without_crashing(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["KPI_BACKEND_DB"] = str(Path(tmpdir) / "kpi_backend.sqlite3")
-            importlib.reload(backend_config)
-            importlib.reload(backend_storage)
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            backend_storage, "DB_PATH", Path(tmpdir) / "kpi_backend.sqlite3"
+        ):
             self.assertIsNone(backend_storage.get_run("missing-run-id"))
 
 

@@ -7,6 +7,7 @@ from kpi_engine.verification.did import CausalVerifier
 from kpi_engine.verification.models import (
     CausalVerificationResult, VerificationDesign, VerificationSensitivityResult,
 )
+from kpi_engine.verification.registry import resolve_governed_design
 
 __all__ = ["CausalVerifier", "CausalVerificationResult", "VerificationDesign",
-           "VerificationSensitivityResult"]
+           "VerificationSensitivityResult", "resolve_governed_design"]

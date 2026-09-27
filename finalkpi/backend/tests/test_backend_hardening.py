@@ -1,4 +1,7 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pandas as pd
 from fastapi import HTTPException
@@ -6,9 +9,25 @@ from fastapi import HTTPException
 from backend.app import DiagnosisRequest, api_diagnoses, api_timeseries
 from backend.config import SALES_CSV
 from backend.service import build_marketing_brief, get_timeseries
+from backend import storage as backend_storage
 
 
 class BackendHardeningTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._database_directory = TemporaryDirectory()
+        cls._database_patch = patch.object(
+            backend_storage,
+            "DB_PATH",
+            Path(cls._database_directory.name) / "kpi_backend.sqlite3",
+        )
+        cls._database_patch.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._database_patch.stop()
+        cls._database_directory.cleanup()
+
     def test_all_supported_timeseries_are_non_empty(self):
         for kpi_id in ("net_sales_revenue", "orders", "units_sold", "traffic_total", "conversion_rate"):
             with self.subTest(kpi_id=kpi_id):
@@ -100,18 +119,31 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(len(brief["ranked_insights"]), 5)
         self.assertIn("not proof of cause", brief["summary"].lower())
 
-    def test_multiple_positive_signal_stories_have_unique_kpi_specific_ids(self):
+    def test_connected_positive_signals_are_grouped_without_generic_impact_copy(self):
         results = {}
         results.update(self._result("traffic_total", 50, True))
         results.update(self._result("units_sold", 20, True))
         results.update(self._result("net_sales_revenue", 1000, True))
         brief = build_marketing_brief(results, {"region": "North", "category": "Electronics", "target_date": "2023-07-24"})
-        positive_stories = [s for s in brief["stories"] if s["id"].startswith("POSITIVE_SIGNAL_")]
-        self.assertGreater(len(positive_stories), 1)
-        story_ids = [s["id"] for s in brief["stories"]]
-        self.assertEqual(len(story_ids), len(set(story_ids)), "Every story ID in the brief must be unique")
-        for story in positive_stories:
-            self.assertIn(story["affected_kpis"][0], story["id"], "Positive signal story ID must include its corresponding KPI ID")
+        positive_stories = [s for s in brief["stories"] if s["id"] == "FUNNEL_GROWTH"]
+        self.assertEqual(len(positive_stories), 1)
+        story = positive_stories[0]
+        self.assertEqual(set(story["affected_kpis"]), {"traffic_total", "units_sold", "net_sales_revenue"})
+        self.assertIn("Observed revenue uplift (+1000.00 INR)", story["business_impact"])
+        self.assertIn("must not be summed", story["business_impact"])
+        self.assertIn("does not establish causal", story["causal_boundary"])
+        self.assertNotIn("Directional opportunity; no incremental impact estimated.", str(brief))
+
+    def test_single_positive_signal_has_kpi_specific_impact_and_is_not_automatically_an_opportunity(self):
+        brief = build_marketing_brief(
+            self._result("traffic_total", 50, False),
+            {"region": "North", "category": "Electronics", "target_date": "2023-07-24"},
+        )
+        story = next(s for s in brief["stories"] if s["id"] == "POSITIVE_SIGNAL_traffic_total")
+        self.assertIn("Traffic increased by 50.00 visits", story["business_impact"])
+        self.assertIn("incrementality were not assessed", story["business_impact"])
+        self.assertIn("does not establish marketing attribution", story["causal_boundary"])
+        self.assertFalse(brief["positive_opportunity"])
 
 
 if __name__ == "__main__":

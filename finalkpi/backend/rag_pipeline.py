@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import json
-import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
 
-try:
-    from openai import OpenAI
-except Exception:  # pragma: no cover
-    OpenAI = None
+from backend.llm_config import create_llm_client
+from backend.llm_config import get_model_economics, get_runtime_limits
+from backend.runtime_telemetry import RuntimeTelemetry, estimate_cost_usd
 
 from kpi_engine.access import AccessController
 from kpi_engine.contracts import KPIRegistry
@@ -21,14 +20,14 @@ from kpi_engine.query.service import QueryService
 from backend.prompts import SYSTEM_PROMPT
 from backend.query_router import DynamicQueryRouter
 from backend.schemas import ChatRequest, ChatResponse, Citation, QueryIntent
-from backend.retrieval import ContextBuilder
+from backend.retrieval import ContextBuilder, safe_citation_id
 
 
 class DynamicRAGPipeline:
     def __init__(self, router: DynamicQueryRouter, context_builder: ContextBuilder):
         self.router = router
         self.cb = context_builder
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "mock-key")) if OpenAI is not None else None
+        self.client, self.llm_settings = create_llm_client()
 
     def _diagnosis_verdict(self, request: ChatRequest) -> str:
         diagnosis = request.diagnosis_json or {}
@@ -41,7 +40,7 @@ class DynamicRAGPipeline:
     def _contract_citation(self, kpi_id: str) -> Citation:
         contract_path = Path(__file__).resolve().parents[1] / "kpi_engine" / "registry" / f"{kpi_id}.yaml"
         return Citation(
-            source_path=str(contract_path),
+            source_path=safe_citation_id(contract_path, "kpi_contract"),
             evidence_type="kpi_contract",
             line_or_row_ref="definition",
             kpi=kpi_id,
@@ -139,11 +138,14 @@ class DynamicRAGPipeline:
             return ChatResponse(answer=answer, citations=citations, evidence_status=verdict, limitations=limitations, suggested_followups=suggested)
 
         if "cause" in question or ("traffic" in question and "drop" in question):
-            correlational = diagnosis.get("correlational_candidates", [])
+            driver_analysis = diagnosis.get("driver_analysis") or {}
+            correlational = driver_analysis.get("ranked_drivers", [])
+            if driver_analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE"}:
+                correlational = []
             causal = diagnosis.get("causal_verdict") or "UNTESTABLE"
-            candidate = correlational[0].get("driver_id") if correlational else "traffic_drop"
+            candidate = correlational[0].get("display_name", correlational[0].get("driver_id")) if correlational else "no eligible driver"
             answer = (
-                f"The diagnosis does not prove that traffic caused the revenue drop. The engine status is {verdict}, and the strongest correlational signal is {candidate}; "
+                f"The diagnosis does not prove that a driver caused the KPI movement. The engine status is {verdict}, and the strongest eligible association is {candidate}; "
                 f"that is not the same as established causality. The causal verification label remains {causal}. This is not proven causation."
             )
             limitations = ["Correlation is not proof of causation.", "No approved causal design or counterfactual was supplied in the engine result."]
@@ -185,10 +187,30 @@ class DynamicRAGPipeline:
         )
 
     def run(self, request: ChatRequest) -> ChatResponse:
+        telemetry = RuntimeTelemetry(limits=get_runtime_limits())
         analysis = self.router.route(request.question, request.active_kpi)
+        router_runtime = analysis.runtime_telemetry or {}
+        router_calls = int(router_runtime.get("model_calls", 0))
+        economics = get_model_economics()
+        telemetry.add_stage(
+            stage="query_routing", processing_type="LLM" if router_calls else "DETERMINISTIC",
+            method="intent_classification", latency_ms=router_runtime.get("latency_ms", 0),
+            status=router_runtime.get("status", "COMPLETED"), model_calls=router_calls,
+            provider=router_runtime.get("provider"), model=router_runtime.get("model"),
+            input_tokens=router_runtime.get("input_tokens"), output_tokens=router_runtime.get("output_tokens"),
+            usage_source=router_runtime.get("usage_source", "NOT_APPLICABLE"),
+            estimated_cost_usd=estimate_cost_usd(
+                router_runtime.get("input_tokens"), router_runtime.get("output_tokens"),
+                economics.get("input_usd_per_million_tokens"), economics.get("output_usd_per_million_tokens"),
+            ), details={"reason_code": router_runtime.get("reason_code")},
+        )
+
+        def finish(response: ChatResponse) -> ChatResponse:
+            response.runtime_telemetry = telemetry.finalize()
+            return response
 
         if analysis.intent == QueryIntent.OUT_OF_SCOPE:
-            return ChatResponse(
+            return finish(ChatResponse(
                 answer="I can only answer questions related to local KPI contracts, methodology, diagnosis runs, and source data summaries. The question provided is outside my available evidence scope.",
                 citations=[],
                 evidence_status="INSUFFICIENT_EVIDENCE",
@@ -198,7 +220,7 @@ class DynamicRAGPipeline:
                     f"What is the definition of {request.active_kpi}?",
                     "What methodology was used for reconciliation?",
                 ],
-            )
+            ))
 
         context_str, default_citations = self.cb.build_dynamic_context(request, analysis)
 
@@ -236,7 +258,10 @@ class DynamicRAGPipeline:
             metric_summary = self._metric_summary(request)
             if metric_summary:
                 evidence_status = self._diagnosis_verdict(request)
-                return ChatResponse(
+                telemetry.add_stage(stage="answer_generation", processing_type="DETERMINISTIC",
+                                    method="metric_service_direct_answer", latency_ms=0,
+                                    status="COMPLETED")
+                return finish(ChatResponse(
                     answer=metric_summary,
                     citations=[Citation(**c) for c in default_citations] if default_citations else [
                         Citation(source_path=f"source/{request.active_kpi}", evidence_type="data_summary", line_or_row_ref="metric_service", kpi=request.active_kpi)
@@ -247,7 +272,7 @@ class DynamicRAGPipeline:
                         "What changed versus the baseline for this KPI?",
                         "How does this compare to the diagnosis verdict?",
                     ],
-                )
+                ))
 
         user_prompt = f"""DYNAMIC INTENT: {analysis.intent}
 {intent_instruction}
@@ -263,10 +288,13 @@ Respond using the required JSON schema with exact engine status labels.
 
         try:
             if self.client is None:
-                return self._fallback_answer(request, analysis, default_citations)
+                telemetry.add_stage(stage="answer_generation", processing_type="DETERMINISTIC",
+                                    method="evidence_bound_fallback", latency_ms=0, status="FALLBACK")
+                return finish(self._fallback_answer(request, analysis, default_citations))
 
+            answer_started = time.monotonic_ns()
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.llm_settings.model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -275,15 +303,40 @@ Respond using the required JSON schema with exact engine status labels.
                 temperature=0.0,
             )
             result_json = json.loads(response.choices[0].message.content)
-            raw_citations = result_json.get("citations", [])
-            citations = [Citation(**c) for c in raw_citations] if raw_citations else [Citation(**c) for c in default_citations]
+            usage = getattr(response, "usage", None)
+            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            telemetry.add_stage(
+                stage="answer_generation", processing_type="LLM", method="grounded_rag_answer",
+                latency_ms=(time.monotonic_ns() - answer_started) / 1_000_000,
+                provider=self.llm_settings.provider, model=self.llm_settings.model, model_calls=1,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                usage_source="PROVIDER_REPORTED" if input_tokens is not None and output_tokens is not None else "UNAVAILABLE",
+                estimated_cost_usd=estimate_cost_usd(
+                    input_tokens, output_tokens, economics.get("input_usd_per_million_tokens"),
+                    economics.get("output_usd_per_million_tokens"),
+                ),
+            )
+            # Model-supplied paths are untrusted. Preserve only safe server citations.
+            citations = [Citation(**c) for c in default_citations]
             evidence_status = result_json.get("evidence_status") or self._diagnosis_verdict(request)
-            return ChatResponse(
+            return finish(ChatResponse(
                 answer=result_json.get("answer", "Unable to formulate answer."),
                 citations=citations,
                 evidence_status=evidence_status,
                 limitations=result_json.get("limitations", []),
                 suggested_followups=result_json.get("suggested_followups", []),
-            )
+            ))
         except Exception as exc:
-            return self._fallback_answer(request, analysis, default_citations)
+            latency = (time.monotonic_ns() - answer_started) / 1_000_000 if "answer_started" in locals() else 0
+            telemetry.add_stage(
+                stage="answer_generation", processing_type="LLM" if self.client else "DETERMINISTIC",
+                method="grounded_rag_answer", latency_ms=latency, status="FALLBACK",
+                provider=self.llm_settings.provider if self.llm_settings else None,
+                model=self.llm_settings.model if self.llm_settings else None,
+                model_calls=1 if self.client else 0, input_tokens=None, output_tokens=None,
+                usage_source="UNAVAILABLE" if self.client else "NOT_APPLICABLE",
+                estimated_cost_usd=None if self.client else 0,
+                details={"reason_code": "ANSWER_FALLBACK"},
+            )
+            return finish(self._fallback_answer(request, analysis, default_citations))

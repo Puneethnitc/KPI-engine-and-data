@@ -1,0 +1,10 @@
+# Explicit demonstration fixture — not part of production source configuration.
+# Sales rows are the July 2023 North/Electronics operational slice. Finance
+# revenue is inflated so the governed reconciler must return CONTRADICTED.
+fixture_id: contradicted_july_2023
+label: Simulated demonstration data
+target_date: "2023-07-31"
+as_of: "2023-08-06T12:00:00"
+region: North
+category: Electronics
+purpose: Conflicting closed-period sales vs finance totals beyond the contradiction boundary.

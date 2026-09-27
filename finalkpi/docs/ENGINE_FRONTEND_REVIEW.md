@@ -13,7 +13,7 @@ This is a review note, not a request to change the engine's statistical or causa
 
 1. **Prototype access control.** The caller supplies a persona such as `CFO`; there is no authenticated identity binding. The CSV role map is a local demonstration guard, not production authorization.
 2. **Limited primary-source support.** Contracts can describe more source types than the public diagnosis path runs. Primary KPI diagnosis currently accepts daily `sales_daily` data only.
-3. **Historical reconciliation limit.** Finance data without an as-of snapshot cannot establish an open-month historical comparison. The engine returns `NOT_RECONCILED`, which is safe but limits coverage.
+3. **Refined reconciliation model.** Cross-source reconciliation is an optional same-measure comparison (currently applicable to `net_sales_revenue`). KPIs without a comparable finance measure (`orders`, `units_sold`, `traffic_total`, `conversion_rate`) return `NOT_APPLICABLE` and proceed through diagnosis without warnings. Mid-period revenue evaluation returns `NOT_AVAILABLE_FOR_PERIOD` as a transparent limitation. `DRIFT` provides qualified conclusions, while `CONTRADICTED` acts as the sole hard gate.
 4. **No causal proof.** Ranked drivers are correlations. DiD is available only for a predeclared observational design with controls and returns conditional support or abstention, never proof of a material cause.
 5. **No production persistence or service boundary.** Files are local CSVs; feedback is a local JSONL log; there is no database, job queue, audit store, or authenticated HTTP API.
 6. **Dependency reproducibility.** Python dependencies have lower bounds but no lock file, so a later installation can select newer numerical-library versions.

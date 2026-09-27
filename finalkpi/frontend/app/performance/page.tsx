@@ -28,7 +28,21 @@ export default function PerformancePage() {
   const [kpiFilter, setKpiFilter] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
   const [confidenceFilter, setConfidenceFilter] = useState('')
-  useEffect(() => { if (!options.dates.length) return; setLoading(true); Promise.all([fetch(`${API_BASE}/api/investigations?persona=${encodeURIComponent(persona)}&user_id=${identityForPersona(persona)}`), fetch(`${API_BASE}/api/kpis`)]).then(async ([runsResponse, kpisResponse]) => { if (!runsResponse.ok || !kpisResponse.ok) throw new Error('Could not load the governed investigation metadata'); const [runs, kpis] = await Promise.all([runsResponse.json(), kpisResponse.json()]); setItems((runs.items ?? []).filter((item: Investigation) => item.scope.region === region && item.scope.category === category && item.target_date === date)); setUnits(Object.fromEntries((kpis.items ?? []).map((item: { kpi_id: string; unit: string }) => [item.kpi_id, item.unit]))) }).catch(requestError => setError(requestError.message)).finally(() => setLoading(false)) }, [persona, region, category, date, options.dates.length])
+  useEffect(() => {
+    if (!options.dates.length) return
+    const identity = identityForPersona(persona)
+    setLoading(true)
+    setError('')
+    Promise.all([
+      fetch(`${API_BASE}/api/investigations?persona=${encodeURIComponent(persona)}&user_id=${encodeURIComponent(identity)}`),
+      fetch(`${API_BASE}/api/kpis?user_id=${encodeURIComponent(identity)}&region=${encodeURIComponent(region)}&category=${encodeURIComponent(category)}`),
+    ]).then(async ([runsResponse, kpisResponse]) => {
+      if (!runsResponse.ok || !kpisResponse.ok) throw new Error('Could not load the governed investigation metadata')
+      const [runs, kpis] = await Promise.all([runsResponse.json(), kpisResponse.json()])
+      setItems((runs.items ?? []).filter((item: Investigation) => item.scope.region === region && item.scope.category === category && item.target_date === date))
+      setUnits(Object.fromEntries((kpis.items ?? []).map((item: { kpi_id: string; unit: string }) => [item.kpi_id, item.unit])))
+    }).catch(requestError => setError(requestError.message)).finally(() => setLoading(false))
+  }, [persona, region, category, date, options.dates.length])
   const visibleItems = items.filter(item =>
     (!materialOnly || item.is_material) &&
     (!awaitingOnly || isAwaitingReview(item.review_state)) &&

@@ -6,11 +6,31 @@ import { BarChart3, Moon, Sun } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createContext, useContext } from 'react'
 import { contextHref } from '../lib/presentation'
+import { DemoScenario, identityForPersona as identityFromPersona, personaLabel } from '../lib/demo-scenarios'
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api/backend'
-export const identityForPersona = (persona: string) => persona === 'CFO' ? 'demo-cfo' : 'demo-marketing'
+export const identityForPersona = identityFromPersona
 
-type DemoContextValue = { ready: boolean; persona: string; setPersona: (value: string) => void; region: string; setRegion: (value: string) => void; category: string; setCategory: (value: string) => void; date: string; setDate: (value: string) => void; theme: 'dark' | 'light'; setTheme: (value: 'dark' | 'light') => void; options: { personas: string[]; regions: string[]; categories: string[]; dates: string[] } }
+type DemoContextValue = {
+  ready: boolean
+  persona: string
+  setPersona: (value: string) => void
+  region: string
+  setRegion: (value: string) => void
+  category: string
+  setCategory: (value: string) => void
+  date: string
+  setDate: (value: string) => void
+  theme: 'dark' | 'light'
+  setTheme: (value: 'dark' | 'light') => void
+  options: { personas: string[]; regions: string[]; categories: string[]; dates: string[] }
+  scenarioId: string
+  scenarios: DemoScenario[]
+  activeScenario: DemoScenario | null
+  scenarioLocked: boolean
+  selectScenario: (scenarioId: string) => void
+  returnToManual: () => void
+}
 const DemoContext = createContext<DemoContextValue | null>(null)
 
 export function DemoProvider({ children }: { children: React.ReactNode }) {
@@ -23,6 +43,12 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
   const [date, setDate] = useState('2023-07-24')
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const [allowed, setAllowed] = useState<{ personas: string[]; regions: string[]; categories: string[]; dates: string[] }>({ personas: [], regions: [], categories: [], dates: [] })
+
+  const [scenarios, setScenarios] = useState<DemoScenario[]>([])
+  const [scenarioId, setScenarioId] = useState('')
+  const [activeScenario, setActiveScenario] = useState<DemoScenario | null>(null)
+  const [manualScope, setManualScope] = useState<{ persona: string, region: string, category: string, date: string } | null>(null)
+
   useEffect(() => {
     let stored: Record<string, string> = {}
     try { stored = JSON.parse(sessionStorage.getItem('kpi-scope') || '{}') as Record<string, string> } catch { sessionStorage.removeItem('kpi-scope') }
@@ -42,6 +68,11 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
       setRegion(choose('region', allowedValues.regions, payload.default?.region))
       setCategory(choose('category', allowedValues.categories, payload.default?.category))
       setDate(choose('date', allowedValues.dates, payload.default?.date))
+
+      fetch(`${API_BASE}/api/demo-scenarios`, { cache: 'no-store' }).then(res => res.ok ? res.json() : Promise.reject(new Error('Scenarios unavailable'))).then(data => {
+        setScenarios(data.items || [])
+      }).catch(console.error)
+
     }).catch(() => {
       const params = new URLSearchParams(window.location.search)
       const safeRegion = stored.region || 'North'
@@ -55,14 +86,18 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
     }).finally(() => setHydrated(true))
   }, [])
   useEffect(() => {
-    sessionStorage.setItem('kpi-scope', JSON.stringify({ persona, region, category, date }))
+    if (!scenarioId) {
+      sessionStorage.setItem('kpi-scope', JSON.stringify({ persona, region, category, date }))
+    }
     if (hydrated) {
-      router.replace(contextHref(pathname, { persona, region, category, date }), { scroll: false })
+      const runId = new URLSearchParams(window.location.search).get('run_id')
+      router.replace(contextHref(pathname, { persona, region, category, date }, runId ? { run_id: runId } : {}), { scroll: false })
     }
   }, [persona, region, category, date, hydrated, pathname, router])
   useEffect(() => localStorage.setItem('kpi-theme', theme), [theme])
   useEffect(() => {
     const restoreUrlScope = () => {
+      if (scenarioId) return
       const params = new URLSearchParams(window.location.search)
       if (params.get('persona') && allowed.personas.includes(params.get('persona')!)) setPersona(params.get('persona')!)
       if (params.get('region') && allowed.regions.includes(params.get('region')!)) setRegion(params.get('region')!)
@@ -71,8 +106,43 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener('popstate', restoreUrlScope)
     return () => window.removeEventListener('popstate', restoreUrlScope)
-  }, [allowed])
-  return <DemoContext.Provider value={{ ready: hydrated, persona, setPersona, region, setRegion, category, setCategory, date, setDate, theme, setTheme, options: allowed }}>{children}</DemoContext.Provider>
+  }, [allowed, scenarioId])
+
+  const selectScenario = (id: string) => {
+    if (!id) {
+      returnToManual()
+      return
+    }
+    const scenario = scenarios.find(s => s.scenario_id === id)
+    if (!scenario) return
+    if (!scenarioId) {
+      setManualScope({ persona, region, category, date })
+    }
+    setScenarioId(id)
+    setActiveScenario(scenario)
+    setPersona(scenario.persona)
+    setRegion(scenario.region)
+    setCategory(scenario.category)
+    setDate(scenario.target_date)
+  }
+
+  const returnToManual = () => {
+    setScenarioId('')
+    setActiveScenario(null)
+    if (manualScope) {
+      setPersona(manualScope.persona)
+      setRegion(manualScope.region)
+      setCategory(manualScope.category)
+      setDate(manualScope.date)
+      setManualScope(null)
+    }
+  }
+
+  const contextValue: DemoContextValue = {
+    ready: hydrated, persona, setPersona, region, setRegion, category, setCategory, date, setDate,
+    theme, setTheme, options: allowed, scenarioId, scenarios, activeScenario, scenarioLocked: !!scenarioId, selectScenario, returnToManual
+  }
+  return <DemoContext.Provider value={contextValue}>{children}</DemoContext.Provider>
 }
 
 export function useDemoContext() {
@@ -99,7 +169,7 @@ export function AppHeader({ active }: { active: string }) {
       <Link className="brand" href={queryHref('/')}><span className="brand-mark"><BarChart3 size={17} /></span><span>KPI <strong>Intelligence</strong></span></Link>
       <button className="mobile-menu-button" aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}>{menuOpen ? 'Close' : 'Menu'}</button>
       <nav className={`main-nav ${menuOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
-        {[['/', 'Overview'], ['/performance', 'Performance'], ['/campaigns', 'Campaigns'], ['/insights', 'Insights']].map(([href, label]) => <Link key={href} className={activeLabel === label ? 'active' : ''} href={queryHref(href)} onClick={() => setMenuOpen(false)}>{label}</Link>)}
+        {[['/', 'Overview'], ['/performance', 'Performance'], ['/campaigns', 'Campaigns'], ['/insights', 'Insights'], ['/kpis', 'KPI Contracts'], ['/jury', 'Jury Mode']].map(([href, label]) => <Link key={href} className={activeLabel === label ? 'active' : ''} href={queryHref(href)} onClick={() => setMenuOpen(false)}>{label}</Link>)}
       </nav>
       <div className="top-actions">
         <div className="persona-control" style={{ minWidth: '150px' }}>
@@ -107,7 +177,8 @@ export function AppHeader({ active }: { active: string }) {
             ariaLabel="Demo persona"
             value={demo.persona}
             onChange={demo.setPersona}
-            options={personaOptions}
+            options={personaOptions.some(p => p.value === demo.persona) ? personaOptions : [...personaOptions, { value: demo.persona, label: personaLabel(demo.persona) }]}
+            disabled={demo.scenarioLocked}
           />
         </div>
         <button className="theme-button" onClick={() => demo.setTheme(demo.theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">{demo.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
@@ -120,18 +191,23 @@ export function AppHeader({ active }: { active: string }) {
 
 export default function AppShell({ children, active, context }: { children: React.ReactNode; active: string; context?: string }) {
   const demo = useDemoContext()
+  const regionOptions = demo.options.regions.includes(demo.region) ? demo.options.regions : [...demo.options.regions, demo.region]
+  const categoryOptions = demo.options.categories.includes(demo.category) ? demo.options.categories : [...demo.options.categories, demo.category]
+  const dateOptions = demo.options.dates.includes(demo.date) ? demo.options.dates : [...demo.options.dates, demo.date]
+
   return <div className={`app-shell ${demo.theme}`} data-context-ready={demo.ready}>
     <AppHeader active={active} />
     {active !== 'Overview' && <div className="shared-scope-bar" aria-label="Current business scope">
       <span>{demo.region} · {demo.category} · {demo.date}</span>
-      <div style={{ width: '130px' }}>
-        <CustomSelect ariaLabel="Region" value={demo.region} onChange={demo.setRegion} options={demo.options.regions} />
+      {demo.activeScenario && <span className="evidence-pill warning">Demo: {demo.activeScenario.title}</span>}
+      <div style={{ width: '130px' }} title={demo.scenarioLocked ? 'Locked by active scenario' : ''}>
+        <CustomSelect ariaLabel="Region" value={demo.region} onChange={demo.setRegion} options={regionOptions} disabled={demo.scenarioLocked} />
       </div>
-      <div style={{ width: '150px' }}>
-        <CustomSelect ariaLabel="Category" value={demo.category} onChange={demo.setCategory} options={demo.options.categories} />
+      <div style={{ width: '150px' }} title={demo.scenarioLocked ? 'Locked by active scenario' : ''}>
+        <CustomSelect ariaLabel="Category" value={demo.category} onChange={demo.setCategory} options={categoryOptions} disabled={demo.scenarioLocked} />
       </div>
-      <div style={{ width: '140px' }}>
-        <CustomSelect ariaLabel="Date" value={demo.date} onChange={demo.setDate} options={demo.options.dates} searchable />
+      <div style={{ width: '140px' }} title={demo.scenarioLocked ? 'Locked by active scenario' : ''}>
+        <CustomSelect ariaLabel="Date" value={demo.date} onChange={demo.setDate} options={dateOptions} searchable disabled={demo.scenarioLocked} />
       </div>
     </div>}
     {context && <div className="route-context">Active scope: {context} · {demo.persona === 'CFO' ? 'CFO review' : 'Marketing Manager workspace'}</div>}

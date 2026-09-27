@@ -57,10 +57,12 @@ class KBIndexer:
             chunks.append(content)
             ids.append(f"contract_{kpi_id}")
             metadatas.append({
-                "source": file_path,
+                "source": f"contract:{kpi_id}",
                 "evidence_type": "kpi_contract",
                 "kpi": kpi_id,
-                "access_tags": "public,internal",
+                "region": "ALL",
+                "category": "ALL",
+                "access_tags": "kpi_contract",
                 "timestamp": "2026-01-01T00:00:00Z",
             })
         if chunks:
@@ -79,43 +81,22 @@ class KBIndexer:
                 chunks.append(paragraph)
                 ids.append(f"doc_{os.path.basename(file_path)}_{index}")
                 metadatas.append({
-                    "source": file_path,
+                    "source": f"methodology:{os.path.basename(file_path)}:{index + 1}",
                     "evidence_type": "methodology_doc",
                     "line_ref": f"paragraph_{index + 1}",
                     "kpi": "all",
-                    "access_tags": "public,internal",
+                    "region": "ALL",
+                    "category": "ALL",
+                    "access_tags": "public",
                     "timestamp": "2026-01-01T00:00:00Z",
                 })
         if chunks:
             self.collection.upsert(documents=chunks, ids=ids, metadatas=metadatas)
 
     def process_csv_summaries(self, dir_path: str):
-        if self.collection is None:
-            return
-        csv_files = glob.glob(os.path.join(dir_path, "**/*.csv"), recursive=True)
-        chunks, ids, metadatas = [], [], []
-        for file_path in csv_files:
-            try:
-                df = pd.read_csv(file_path, nrows=200)
-                summary = (
-                    f"Dataset Summary: {os.path.basename(file_path)}\n"
-                    f"Columns: {', '.join(df.columns)}\n"
-                    f"Scanned Sample Rows: {len(df)}\n"
-                    f"Stats Overview:\n{df.describe(include='all').to_string()[:800]}"
-                )
-                chunks.append(summary)
-                ids.append(f"csv_{os.path.basename(file_path)}")
-                metadatas.append({
-                    "source": file_path,
-                    "evidence_type": "data_summary",
-                    "kpi": "all",
-                    "access_tags": "internal",
-                    "timestamp": "2026-01-01T00:00:00Z",
-                })
-            except Exception:
-                continue
-        if chunks:
-            self.collection.upsert(documents=chunks, ids=ids, metadatas=metadatas)
+        # Raw CSV-wide summaries can cross KPI, region, and business-domain boundaries.
+        # Governed diagnosis/query services remain the quantitative source for chat.
+        return
 
 
 def ingest_kb() -> Dict[str, Any]:

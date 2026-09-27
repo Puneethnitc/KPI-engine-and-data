@@ -3,7 +3,7 @@ import unittest
 from backend.query_router import DynamicQueryRouter
 from backend.rag_pipeline import DynamicRAGPipeline
 from backend.retrieval import ContextBuilder
-from backend.schemas import ChatRequest
+from backend.schemas import ChatRequest, QueryIntent, RouterAnalysis
 
 
 DIAGNOSIS = {
@@ -24,6 +24,48 @@ DIAGNOSIS = {
 
 
 class RAGFallbackTests(unittest.TestCase):
+    def test_saved_contract_snapshot_is_cited_as_authoritative_contract_context(self):
+        request = ChatRequest(
+            question="How is conversion rate calculated?",
+            diagnosis_json={**DIAGNOSIS, "contract_snapshot": {
+                "identity": {"kpi_id": "conversion_rate", "version": 1},
+                "calculation": {"operator": "RATIO_OF_SUMS", "formula": "orders / traffic_total", "unit": "orders_per_visit"},
+                "governance": {"contract_hash": "saved-hash"},
+            }},
+            active_kpi="conversion_rate", active_date="2023-07-24",
+            active_region="North", active_category="Electronics", user_persona="CFO",
+            user_access_tags=["public", "internal"], as_of_timestamp="2023-07-25T12:00:00",
+        )
+        context, citations = ContextBuilder().extract_priority_one_diagnosis(request)
+        self.assertIn('"operator": "RATIO_OF_SUMS"', context)
+        self.assertIn('"contract_hash": "saved-hash"', context)
+        self.assertTrue(any(citation["evidence_type"] == "kpi_contract" and citation["line_or_row_ref"] == "contract_snapshot" for citation in citations))
+
+    def test_contract_intent_with_saved_snapshot_does_not_query_vector_prose(self):
+        class Collection:
+            def query(self, **_kwargs):
+                raise AssertionError("retrieved prose must not override saved structured contract")
+
+        builder = ContextBuilder()
+        builder.collection = Collection()
+        request = ChatRequest(
+            question="Explain the KPI contract",
+            diagnosis_json={**DIAGNOSIS, "contract_snapshot": {"calculation": {"operator": "SUM"}}},
+            active_kpi="orders", active_date="2023-07-24", active_region="North",
+            active_category="Electronics", user_persona="CFO", user_access_tags=["internal"],
+            as_of_timestamp="2023-07-25T12:00:00",
+        )
+        analysis = RouterAnalysis(
+            intent=QueryIntent.KPI_CONTRACT,
+            reformulated_query="orders calculation",
+            target_kpi="orders",
+            requires_diagnosis_json=True,
+            requires_vector_docs=True,
+        )
+        context, citations = builder.build_dynamic_context(request, analysis)
+        self.assertIn('"operator": "SUM"', context)
+        self.assertTrue(any(citation["evidence_type"] == "kpi_contract" for citation in citations))
+
     def test_metric_summary_aggregates_revenue_across_multiple_rows(self):
         pipeline = DynamicRAGPipeline(DynamicQueryRouter(), ContextBuilder())
         request = ChatRequest(

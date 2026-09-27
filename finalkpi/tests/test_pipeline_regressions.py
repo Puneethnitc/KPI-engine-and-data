@@ -73,12 +73,14 @@ class PipelineRegressions(unittest.TestCase):
         self.assertEqual(result["causal_verdict"], "UNTESTABLE")
         self.assertEqual(result["confidence"]["status"], "NOT_ASSESSED")
         self.assertIsNone(result["confidence"]["calibrated_probability"])
-        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_RECONCILED")
+        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_AVAILABLE_FOR_PERIOD")
         self.assertEqual(result["source_coverage"]["target_marketing_status"], "UNAVAILABLE_OR_MISSING")
-        self.assertIn(
-            ("ad_spend_drop", "UNAVAILABLE_AT_TARGET"),
-            {(row["driver_id"], row["reason_code"]) for row in result["driver_exclusions"]},
+        ad_spend = next(
+            candidate for candidate in result["correlational_candidates"]
+            if candidate["driver_id"] == "ad_spend_drop"
         )
+        self.assertTrue(ad_spend["target_period_available"])
+        self.assertEqual(ad_spend["claim_type"], "CORRELATIONAL")
         self.assertAlmostEqual(
             result["movement_assessment"]["delta"],
             result["decomposition"]["total_delta"],
@@ -95,6 +97,20 @@ class PipelineRegressions(unittest.TestCase):
         self.assertIsNone(result["decision_cards"][0]["expected_impact"])
         self.assertTrue(result["grounding_passed"])
         self.assertTrue(result["narrative_claims"])
+        json.dumps(result, allow_nan=False)
+
+    def test_diagnosis_embeds_same_versioned_semantic_contract(self):
+        result = self.run_case(kpi_id="conversion_rate")
+        projection = self.pipeline.registry.semantic_snapshot(
+            "conversion_rate",
+            allowed_roles=sorted(set(self.pipeline.access_controller.df["owner_role"].astype(str))),
+        )
+        self.assertEqual(result["contract_version"], projection["identity"]["version"])
+        self.assertEqual(result["contract_hash"], projection["governance"]["contract_hash"])
+        self.assertEqual(result["contract_snapshot"]["calculation"], projection["calculation"])
+        self.assertEqual(result["contract_snapshot"]["calculation"]["operator"], "RATIO_OF_SUMS")
+        self.assertEqual(result["confidence_profile"]["driver"]["inputs"]["driver_analysis"], result["driver_analysis"])
+        self.assertEqual(result["confidence_profile"]["overall"]["status"], "LOW")
         json.dumps(result, allow_nan=False)
 
     def test_displayed_bridge_balances_after_rounding(self):
@@ -322,17 +338,44 @@ class PipelineRegressions(unittest.TestCase):
             persona="CFO",
             dimension_slice={"region": "North", "category": "Beauty"},
         )
-        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_RECONCILED")
+        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_AVAILABLE_FOR_PERIOD")
         self.assertEqual(result["verdict"], "INSUFFICIENT_HISTORY")
 
     def test_orders_are_not_reconciled_against_revenue(self):
         result = self.run_case(kpi_id="orders")
-        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_RECONCILED")
+        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_APPLICABLE")
+
+    def test_monthly_driver_attachment_is_many_to_one_and_target_period_safe(self):
+        frame = pd.DataFrame({
+            "date": pd.to_datetime(["2024-01-30", "2024-01-31", "2024-02-01"]),
+            "region": ["North"] * 3,
+            "category": ["Electronics"] * 3,
+            "orders": [10.0, 12.0, 4.0],
+        })
+        finance = pd.DataFrame({
+            "date": pd.to_datetime(["2024-01-01", "2024-02-01"]),
+            "month_end": pd.to_datetime(["2024-01-31", "2024-02-29"]),
+            "region": ["North"] * 2,
+            "category": ["Electronics"] * 2,
+            "monthly_context": [100.0, 900.0],
+        })
+        attached = KPIEnginePipeline._attach_monthly_driver_values(
+            frame,
+            finance,
+            {"monthly_context": {
+                "id": "monthly_context", "source": "finance_monthly",
+                "grain": "monthly", "column": "monthly_context",
+            }},
+            {"region": "North", "category": "Electronics"},
+        )
+        self.assertEqual(len(attached), len(frame))
+        self.assertEqual(attached["finance_monthly_monthly_context"].iloc[:2].tolist(), [100.0, 100.0])
+        self.assertTrue(pd.isna(attached["finance_monthly_monthly_context"].iloc[2]))
 
     def test_orders_do_not_require_unrelated_finance_file(self):
         result = self.run_case(kpi_id="orders", finance_csv="/not/a/finance/file.csv")
         self.assertEqual(result["movement_assessment"]["status"], "OK")
-        self.assertIn("No comparable second source", result["reconciliation_verdict"]["details"]["reason"])
+        self.assertIn("No comparable second-source measure", result["reconciliation_verdict"]["details"]["reason"])
 
     def test_contracts_declare_supported_sources_and_drivers(self):
         revenue = self.pipeline.registry.get("net_sales_revenue")
@@ -384,15 +427,18 @@ class PipelineRegressions(unittest.TestCase):
             for index in range(6):
                 item = dict(source)
                 item["kpi_id"] = f"future_kpi_{index}"
-                item["value_column"] = item["kpi_id"]
-                item["formula"] = item["kpi_id"]
+                item["display_name"] = f"Future KPI {index}"
+                item["value_column"] = "orders"
+                item["formula"] = "orders"
                 if index % 2:
                     item["aggregation"] = "ratio_of_sums"
                     item["numerator_column"] = "orders"
                     item["denominator_column"] = "traffic_total"
+                    item["formula"] = "orders / traffic_total"
                     item["decomposition"] = None
                 else:
                     item["decomposition"] = None
+                item.pop("source_catalog", None)
                 Path(directory, f"{item['kpi_id']}.yaml").write_text(yaml.safe_dump(item))
             registry = KPIRegistry(directory)
             self.assertEqual(len(registry), 6)
@@ -484,16 +530,8 @@ class PipelineRegressions(unittest.TestCase):
         source["grain"] = "weekly"
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "orders.yaml").write_text(yaml.safe_dump(source))
-            pipeline = KPIEnginePipeline(
-                directory, str(DATA / "unstructured_evidence.csv"),
-                access_csv=str(DATA / "access_control.csv"),
-            )
-            with self.assertRaisesRegex(ValueError, "Unsupported grain"):
-                pipeline.run_diagnosis(
-                    "orders", "2023-07-24", self.paths["sales_csv"],
-                    self.paths["marketing_csv"], self.paths["finance_csv"],
-                    persona="CFO",
-                )
+            with self.assertRaisesRegex(ValueError, "grain.*does not match source"):
+                KPIRegistry(directory)
 
     def test_reconciliation_tolerance_is_configurable(self):
         daily = pd.DataFrame({"date": pd.to_datetime(["2024-01-01"]),
@@ -535,7 +573,7 @@ class PipelineRegressions(unittest.TestCase):
             as_of="2024-02-01 00:00:00",
             mode="snapshot",
         )
-        self.assertEqual(result.status, "NOT_RECONCILED")
+        self.assertEqual(result.status, "NOT_AVAILABLE_FOR_PERIOD")
         self.assertIn("snapshot", result.details["reason"].lower())
 
     def test_source_schema_yaml_handles_renamed_sales_columns(self):
@@ -675,7 +713,7 @@ class PipelineRegressions(unittest.TestCase):
         result = SourceReconciler().reconcile_mtd(
             daily, finance, "2024-01", target_date="2024-01-01",
         )
-        self.assertEqual(result.status, "NOT_RECONCILED")
+        self.assertEqual(result.status, "DRIFT")
         self.assertIn("Missing", result.details["reason"])
 
     def test_incomplete_sales_period_or_finance_slice_cannot_reconcile(self):
@@ -693,11 +731,11 @@ class PipelineRegressions(unittest.TestCase):
         })
         reconciler = SourceReconciler()
         result = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-03")
-        self.assertEqual(result.status, "NOT_RECONCILED")
+        self.assertEqual(result.status, "NOT_AVAILABLE_FOR_PERIOD")
         self.assertIn("coverage", result.details["reason"])
         daily.loc[len(daily)] = [pd.Timestamp("2024-01-02"), "North", "Apparel", 0.0]
         result = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-03")
-        self.assertEqual(result.status, "NOT_RECONCILED")
+        self.assertEqual(result.status, "NOT_AVAILABLE_FOR_PERIOD")
         self.assertIn("different", result.details["reason"])
 
     def test_weekly_join_reports_missing_coverage_without_fanout(self):
@@ -783,15 +821,8 @@ class PipelineRegressions(unittest.TestCase):
         source["source"] = "marketing_weekly"
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "orders.yaml").write_text(yaml.safe_dump(source))
-            pipeline = KPIEnginePipeline(
-                directory, str(DATA / "unstructured_evidence.csv"),
-                access_csv=str(DATA / "access_control.csv"),
-            )
-            with self.assertRaisesRegex(ValueError, "Unsupported primary KPI source"):
-                pipeline.run_diagnosis(
-                    "orders", "2023-07-24", self.paths["sales_csv"],
-                    self.paths["marketing_csv"], self.paths["finance_csv"], persona="CFO",
-                )
+            with self.assertRaisesRegex(ValueError, "grain.*does not match source"):
+                KPIRegistry(directory)
 
     def test_reconciliation_uses_same_segment_and_date(self):
         daily = pd.DataFrame({

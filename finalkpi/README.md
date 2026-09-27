@@ -70,6 +70,13 @@ errors fall back to the deterministic narrative, with `llm_status` explaining
 what happened. This is deliberately constrained LLM narration, not free-form
 generation. Access-denied runs never contact the model or disclose slice details.
 
+For the full assistant, query router and constrained narrative selector, set
+`GROQ_API_KEY` and, if needed, `GROQ_MODEL`; the default model is
+`openai/gpt-oss-20b`. The implementation uses the OpenAI-compatible Python SDK
+as a client for Groq's `https://api.groq.com/openai/v1` endpoint; it does not
+send requests to OpenAI. Keys
+must stay in the backend environment and must never use a `NEXT_PUBLIC_` name.
+
 `decision_cards` now contains review-only next checks for unverified cases,
 or an `AWAITING_APPROVAL` action proposal only after conditional observational
 support. The closed lever library does not execute anything or invent a
@@ -175,14 +182,9 @@ result is independent of daily detection and never asserts a proven cause.
   guessed from another column or a default delay.
 - Source system names are preserved. Weekly marketing measurements are carried
   at their weekly value rather than divided into invented daily values.
-- A provisional finance row has no snapshot timestamp in this dataset, so it
-  is `NOT_RECONCILED` for historical replay. Missing finance is never treated
-  as `AGREED` or a contradiction.
-- Reconciliation compares the requested KPI and dimensions through the target
-  date. It requires finite values, matching slice keys, complete daily sales
-  coverage, and a finance period ending on that date. Missing or partial data
-  returns `NOT_RECONCILED`, never a zero-gap `AGREED`. Orders have no finance
-  counterpart and remain `NOT_RECONCILED`.
+- Heterogeneous-source unification occurs during governed normalization and alignment (joining daily sales, weekly marketing, and monthly finance), while cross-source reconciliation is an optional same-measure comparison against an independent system of record (such as monthly finance).
+- Only `net_sales_revenue` declares a comparable finance measure. KPIs without a comparable finance measure (`orders`, `units_sold`, `traffic_total`, `conversion_rate`) return `NOT_APPLICABLE` and proceed through detection and ranking without finance files or warnings.
+- Mid-period requests for `net_sales_revenue` return `NOT_AVAILABLE_FOR_PERIOD` as a transparent limitation and continue diagnosis. Closed-period revenue comparisons return `AGREED` when matching values agree within tolerance. `DRIFT` qualifies conclusions without blocking, while `CONTRADICTED` acts as the sole hard cross-source gate blocking downstream attribution.
 - The public pipeline accepts only `sales_daily` as a primary KPI source until
   other native source paths are implemented. It reads marketing or finance only
   when the KPI contract actually declares a dependency on them, so an unrelated

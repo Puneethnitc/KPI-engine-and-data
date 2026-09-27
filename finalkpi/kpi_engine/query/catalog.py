@@ -88,6 +88,8 @@ class SourceCatalog:
                     field_type=str(field_spec.get("type") or field_spec.get("field_type") or "float"),
                     required=bool(field_spec.get("required", True)),
                     nullable=bool(field_spec.get("nullable", False)),
+                    unit=field_spec.get("unit"),
+                    description=field_spec.get("description"),
                 )
                 continue
             raise ValueError(f"Field '{field_name}' must be a string or mapping.")
@@ -154,6 +156,10 @@ class SourceCatalog:
             natural_key=tuple(str(item) for item in natural_key),
             revision_column=revision_column,
             fields=fields,
+            refresh_cadence=raw_entry.get("refresh_cadence"),
+            access_classification=str(raw_entry.get("access_classification", "internal")),
+            lineage_reference=raw_entry.get("lineage_reference"),
+            version=str(raw_entry.get("version", "1")),
         )
 
     def register_source(self, entry: SourceCatalogEntry) -> None:
