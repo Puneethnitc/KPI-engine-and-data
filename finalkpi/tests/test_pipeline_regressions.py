@@ -67,6 +67,22 @@ class PipelineRegressions(unittest.TestCase):
                 scenario, drivers=("checkout_latency", "invented"),
             ))
 
+    def test_scenario_allocation_resolves_legacy_driver_ids(self):
+        # Stage 1 follow-up: a scenario built against pre-rename driver ids
+        # (plan §1.3, e.g. "ad_spend_drop"/"stockout") must still resolve
+        # against the current contract's declared drivers ("marketing_spend"/
+        # "stock_availability"), not be rejected as "not declared".
+        values = {(): 100, ("ad_spend_drop",): 90, ("stockout",): 80,
+                  ("ad_spend_drop", "stockout"): 60}
+        scenario = ContributionScenario(
+            "orders", "count", ("ad_spend_drop", "stockout"), values, -50,
+        )
+        result = self.pipeline.quantify_scenario(scenario)
+        self.assertEqual(
+            {item["driver_id"] for item in result["contributions"]},
+            {"marketing_spend", "stock_availability"},
+        )
+
     def test_material_event_has_matching_bridge_and_no_invented_cause(self):
         result = self.run_case()
         self.assertEqual(result["verdict"], "MATERIAL_CAUSE_UNVERIFIED")

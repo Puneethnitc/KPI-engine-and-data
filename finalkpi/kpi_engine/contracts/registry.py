@@ -73,8 +73,17 @@ DRIVER_FIELDS = {
 
 # Stage 1 (plan §1.3) renames these driver ids for clarity (a driver id should
 # describe the variable, not the event/direction baked into the old name).
-# Historical runs and feedback records may still reference the old spelling;
-# resolve_driver_id() is the single place that alias gets resolved.
+# resolve_driver_id() is called wherever a caller-supplied driver id is
+# checked against the *current, live* contract's declared drivers:
+# kpi_engine/pipeline.py's quantify_scenario, and (display-only, mirrored by
+# hand) frontend/app/page.tsx's legacyDriverIds/driverLabel.
+# It is deliberately NOT applied to a saved diagnosis run's own stored
+# driver ids (backend/app.py's _feedback_target_exists, response_projection,
+# storage lookups): a saved run and its embedded contract_snapshot are a
+# historically self-consistent pair (a contract edit must not silently
+# reinterpret an old run -- see the module docstring above), so those ids
+# are compared as-is against that same run's own recorded driver list, never
+# against the live registry.
 LEGACY_DRIVER_IDS = {
     "ad_spend_drop": "marketing_spend",
     "checkout_latency_spike": "checkout_latency",

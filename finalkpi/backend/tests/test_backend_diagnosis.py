@@ -47,6 +47,26 @@ class BackendDiagnosisApiTests(unittest.TestCase):
             self.assertIn("narrative", result)
             json.dumps(result, allow_nan=False)
 
+    def test_governed_marketing_design_is_reached_and_assessed(self):
+        # Stage 1 follow-up: the governed design used to be keyed at
+        # 2023-08-13 (the last day of EVT01), where movement is no longer
+        # material -- run_diagnosis short-circuits before the causal step on
+        # a non-material day, so the design was never actually reached. It is
+        # now keyed at 2023-08-06, where movement is material. UNTESTABLE is
+        # an acceptable verdict here (Stage 5 fixes the as-of/exposure
+        # plumbing); NOT_ASSESSED is not, because it would mean the causal
+        # step never ran at all.
+        results = diagnose_scope(
+            kpis=["net_sales_revenue"], target_date="2023-08-06",
+            region="North", category="Electronics",
+        )
+        result = results["results"]["net_sales_revenue"]
+        self.assertTrue(result["movement_assessment"]["is_material"])
+        self.assertIsNotNone(result["causal_verification"])
+        self.assertEqual(result["causal_verification"]["driver_id"], "marketing_spend")
+        self.assertNotEqual(result["confidence_profile"]["causal"]["status"], "NOT_ASSESSED")
+        self.assertTrue(result["confidence_profile"]["causal"]["inputs"]["approved_design"])
+
     def test_fresh_database_returns_none_without_crashing(self):
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             backend_storage, "DB_PATH", Path(tmpdir) / "kpi_backend.sqlite3"

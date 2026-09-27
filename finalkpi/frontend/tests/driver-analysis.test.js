@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import test from 'node:test'
 import {
   driverAnalysisStatusLabel,
@@ -132,4 +133,17 @@ test('persona wording changes without changing ranked quantitative evidence', ()
 
 test('access denied suppresses the driver-analysis workspace', () => {
   assert.equal(driverAnalysisViewModel(analysis(), 'CFO', 'ACCESS_DENIED'), null)
+})
+
+test('overview page resolves pre-rename driver ids to a friendly label (Stage 1 follow-up)', () => {
+  // Mirrors kpi_engine/contracts/registry.py's LEGACY_DRIVER_IDS: a saved run
+  // computed before the driver rename still carries the old id, and the
+  // "Ranked indicators" card must still show a friendly label for it rather
+  // than falling back to the raw id's title-cased text.
+  const overview = fs.readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
+  assert.match(overview, /ad_spend_drop:\s*'marketing_spend'/)
+  assert.match(overview, /checkout_latency_spike:\s*'checkout_latency'/)
+  assert.match(overview, /competitor_price_cut:\s*'competitor_price_index'/)
+  assert.match(overview, /stockout:\s*'stock_availability'/)
+  assert.match(overview, /driverLabel\(candidate\.driver_id\)/)
 })

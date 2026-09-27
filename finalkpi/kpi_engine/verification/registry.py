@@ -8,21 +8,28 @@ from kpi_engine.verification.models import VerificationDesign
 # trigger server-governed designs for authorized target windows.
 GOVERNED_DESIGNS: Dict[Tuple[str, str, str, str], VerificationDesign] = {
     # Key: (kpi_id, target_date, region, category)
-    # Stage 1 (plan §1.8, F-V1): the old traffic_drop design is deleted --
-    # traffic_drop was removed as a driver (F-R2) and this design could never
-    # succeed anyway (its Saturday-adjacent dates never lined up with a
-    # governed Monday treatment start). The marketing design is corrected to
-    # the real cut date (2023-07-17, a Monday) with the current driver id;
-    # South remains the control for now even though it ran its own campaign
-    # (F-V2) -- Stage 5 replaces this whole registry with auto-generated,
-    # control-validated designs.
-    ("net_sales_revenue", "2023-08-13", "North", "Electronics"): VerificationDesign(
+    # Stage 1 (plan §1.8, F-V1): the old traffic_drop design (keyed at
+    # 2023-08-06) is deleted outright, simply because traffic_drop was
+    # removed as a driver entirely (F-R2, F-R4 mechanical-component guard) --
+    # it is no longer a declared driver for any KPI, so no design can
+    # reference it. The other original design (ad_spend_drop,
+    # treatment_start 2023-07-01, a Saturday) is corrected below instead of
+    # deleted: it now uses the current driver id and a real Monday treatment
+    # start (2023-07-17). South remains the control for now even though it
+    # ran its own campaign (F-V2) -- Stage 5 replaces this whole registry
+    # with auto-generated, control-validated designs.
+    # The key's target_date must be a date where the movement is actually
+    # material for this slice (run_diagnosis only reaches the causal step
+    # when assessment.is_material), so this is keyed at 2023-08-06, not
+    # 2023-08-13 (the last day of the event window, where the movement is
+    # no longer material -- a design keyed there would never be reached).
+    ("net_sales_revenue", "2023-08-06", "North", "Electronics"): VerificationDesign(
         driver_id="marketing_spend",
         treated_slice={"region": "North", "category": "Electronics"},
         control_slice={"region": "South", "category": "Electronics"},
         pre_start="2023-06-05",
         treatment_start="2023-07-17",
-        post_end="2023-08-13",
+        post_end="2023-08-06",
         quiet_windows=(("2023-04-01", "2023-04-14"), ("2023-05-01", "2023-05-14")),
         expected_driver_direction=-1,
         expected_outcome_direction=-1,

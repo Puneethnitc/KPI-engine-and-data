@@ -17,7 +17,7 @@ The public path stops after correlational ranking until an event exposure and
 eligible control group are supplied. It never promotes a correlation to cause.
 """
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 import time
 from typing import Any, Dict, Optional
@@ -30,6 +30,7 @@ from kpi_engine.access import AccessController
 from kpi_engine.action import ActionRecommendationEngine
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import prepare_metric_request
+from kpi_engine.contracts.registry import resolve_driver_id
 from kpi_engine.contribute import ContributionScenario, ShapleyContributor
 from kpi_engine.confidence import ConfidenceEngine
 from kpi_engine.decompose import DeterministicDecomposer
@@ -107,6 +108,19 @@ class KPIEnginePipeline:
         # fit a driver model or infer contribution from correlation coefficients.
         contract = self.registry.get(scenario.kpi_id)
         declared = {driver["id"] for driver in contract.candidate_drivers}
+        # A caller may replay a scenario built against a pre-rename driver id
+        # (plan §1.3, e.g. "ad_spend_drop"); resolve it to the current id
+        # before checking it against the live contract's declared drivers.
+        canonical_drivers = tuple(resolve_driver_id(driver_id) for driver_id in scenario.drivers)
+        if canonical_drivers != scenario.drivers:
+            scenario = replace(
+                scenario,
+                drivers=canonical_drivers,
+                coalition_values={
+                    tuple(resolve_driver_id(driver_id) for driver_id in subset): value
+                    for subset, value in scenario.coalition_values.items()
+                },
+            )
         if set(scenario.drivers) - declared:
             raise ValueError("Scenario contains drivers not declared for this KPI")
         if scenario.unit != contract.unit:
