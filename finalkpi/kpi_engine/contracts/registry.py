@@ -46,6 +46,7 @@ CONTRACT_FIELDS = {
     "formula", "unit", "grain", "source", "dimensions", "materiality",
     "seasonal_period", "min_history_periods", "owner", "access_tags",
     "decomposition", "reconciliation", "candidate_drivers", "mechanical_components",
+    "kpi_weight", "impact_to_revenue",
     "numerator_column", "denominator_column", "weight_column",
     "schema_version", "source_catalog", "calculation", "comparison_policy",
     "missing_data_policy", "missing_data", "comparison",
@@ -58,11 +59,12 @@ CONTRACT_FIELDS = {
 }
 
 NESTED_FIELDS = {
-    "materiality": {"z_threshold", "abs_threshold"},
+    "materiality": {"z_threshold", "abs_threshold", "rel_threshold"},
     "calculation": {"operator", "aggregation", "value_column", "numerator_column", "denominator_column", "weight_column", "formula", "description"},
     "comparison_policy": {"period", "comparison", "baseline_periods", "weighting", "completeness", "config"},
     "reconciliation": {"finance_source", "finance_column", "mode", "keys", "unit", "tolerance_pct", "contradiction_multiple", "require_matching_coverage", "comparison", "coverage_rule", "availability_rule"},
     "decomposition": {"quantity_column", "reference_rate_column"},
+    "impact_to_revenue": {"method", "rate_column"},
 }
 DRIVER_FIELDS = {
     "id", "display_name", "unit", "controllability", "expected_direction", "expected_direction_by_scope",
@@ -143,7 +145,8 @@ class KPIRegistry:
         mat_data = data.get("materiality", {})
         materiality = MaterialityThresholds(
             z_threshold=float(mat_data.get("z_threshold", 0.0)),
-            abs_threshold=float(mat_data.get("abs_threshold", 0.0))
+            abs_threshold=float(mat_data.get("abs_threshold", 0.0)),
+            rel_threshold=float(mat_data.get("rel_threshold", 0.0)),
         )
 
         calculation_data = dict(data.get("calculation") or {})
@@ -217,6 +220,8 @@ class KPIRegistry:
             reconciliation=data.get("reconciliation"),
             candidate_drivers=data.get("candidate_drivers", []),
             mechanical_components=list(data.get("mechanical_components") or []),
+            kpi_weight=float(data.get("kpi_weight", 1.0)),
+            impact_to_revenue=data.get("impact_to_revenue"),
             numerator_column=data.get("numerator_column") or calculation_data.get("numerator_column"),
             denominator_column=data.get("denominator_column") or calculation_data.get("denominator_column"),
             weight_column=data.get("weight_column") or calculation_data.get("weight_column"),
@@ -309,6 +314,10 @@ class KPIRegistry:
             reference_label = contract.decomposition.get("reference_rate_column")
             if not reference_label or not isinstance(reference_label, str):
                 raise ValueError(f"KPI {contract.kpi_id}.decomposition.reference_rate_column: a presentation label is required.")
+        if contract.impact_to_revenue and contract.impact_to_revenue.get("method") != "identity":
+            rate_column = contract.impact_to_revenue.get("rate_column")
+            if rate_column not in primary.fields:
+                raise ValueError(f"KPI {contract.kpi_id}.impact_to_revenue.rate_column: source {primary.source_id} has no field '{rate_column}'.")
         for index, driver in enumerate(contract.candidate_drivers):
             try:
                 source = self.source_catalog.get_source(driver["source"])

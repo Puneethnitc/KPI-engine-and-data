@@ -79,3 +79,9 @@ class MovementAssessment:
     detector_agreement: str = "NEITHER"  # BOTH | ROBUST_ONLY | SEASONAL_ONLY | NEITHER
     alert_policy: str = "ROBUST_PRIMARY_SEASONAL_REVIEW"
     policy: Optional[DetectionPolicy] = None
+    # Stage 2 (F-D1/F-D3): how `expected_value` was computed, and the
+    # slice-relative materiality gate (rel_delta = delta / |expected_value|,
+    # rel_threshold from the contract; None when the contract declares none).
+    expected_method: str = "UNAVAILABLE"  # SAME_WEEKDAY_MEDIAN | WEEKDAY_ADJUSTED | UNAVAILABLE
+    rel_delta: Optional[float] = None
+    rel_threshold: Optional[float] = None

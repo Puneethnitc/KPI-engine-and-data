@@ -40,8 +40,9 @@ comparison_policy:
 
 # Provisional business/statistical alert policy; requires dataset calibration.
 materiality:
-  z_threshold: 2.5
+  z_threshold: 2.05
   abs_threshold: 500.0
+  rel_threshold: 0.10 # Stage 2 (F-D3): a slice-relative gate alongside the absolute floor.
 statistical_method: robust rolling baseline z-score with seasonal MSTL review
 detector_agreement_rule: materially alert on the robust detector; seasonal-only movement is review-only
 threshold_status: PROVISIONAL
@@ -50,6 +51,9 @@ seasonal_period: 7
 min_history_periods: 60
 owner: regional_manager
 access_tags: [region_scoped]
+# Stage 2 (F-D4): cross-KPI movement-priority weight; revenue is the reference (1.0).
+kpi_weight: 1.0
+impact_to_revenue: {method: identity}
 
 # Accounting identity configuration; the rate column supplies a display label.
 decomposition:

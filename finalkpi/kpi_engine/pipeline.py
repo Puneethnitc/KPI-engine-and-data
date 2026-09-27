@@ -29,7 +29,7 @@ import yaml
 from kpi_engine.access import AccessController
 from kpi_engine.action import ActionRecommendationEngine
 from kpi_engine.contracts import KPIRegistry
-from kpi_engine.contracts.metrics import prepare_metric_request
+from kpi_engine.contracts.metrics import prepare_metric_request, same_weekday_expected
 from kpi_engine.contracts.registry import resolve_driver_id
 from kpi_engine.contribute import ContributionScenario, ShapleyContributor
 from kpi_engine.confidence import ConfidenceEngine
@@ -755,12 +755,14 @@ class KPIEnginePipeline:
             )
             return self._finalize(result)
 
-        # The detector compares the target observation to the preceding
-        # arithmetic mean. The bridge uses exactly those same periods.
-        # NEXT: obtain an explicit comparison plan from the metric service and
-        # reuse it in detection AND decomposition; do not configure these apart.
+        # Stage 2 (F-D1/F-D2): detection's expected value is now a same-weekday
+        # median, not the arithmetic mean of every baseline day. The bridge
+        # must still land on exactly the same total (assessment.expected_value)
+        # so "identity_held" keeps meaning something: per-segment same-weekday
+        # medians are computed for their robust shape (the mix), then rescaled
+        # so they sum to assessment.expected_value exactly, rather than being
+        # used as independently-estimated, possibly-inconsistent totals.
         stage_started = time.monotonic_ns()
-        history_days = max(30, contract.min_history_periods)
         baseline = prepared_request.comparison.baseline_frame.copy()
         current = prepared_request.comparison.current_frame.copy()
         quantity_col = contract.decomposition.get("quantity_column")
@@ -774,9 +776,6 @@ class KPIEnginePipeline:
                 remaining_dims = [name for name in contract.dimensions
                                   if name not in (dimension_slice or {})]
 
-                # Aggregate baseline totals into an average observed day. Missing
-                # segment-days are not validated here; coverage must be checked
-                # before treating an absent segment as a launch/exit or zero.
                 def segment_parts(frame: pd.DataFrame, divisor: int) -> pd.DataFrame:
                     if remaining_dims:
                         parts = frame.groupby(remaining_dims, dropna=False)[
@@ -797,7 +796,37 @@ class KPIEnginePipeline:
                         "value": parts[kpi_id] / divisor,
                     })
 
-                base_parts = segment_parts(baseline, baseline["date"].nunique())
+                def segment_same_weekday_baseline(value_col: str) -> Dict[tuple, float]:
+                    totals: Dict[tuple, float] = {}
+                    groups = (
+                        baseline.groupby(remaining_dims, dropna=False)
+                        if remaining_dims else [((), baseline)]
+                    )
+                    for segment_key, group in groups:
+                        segment = segment_key if isinstance(segment_key, tuple) else (segment_key,)
+                        segment = segment or ("ALL",)
+                        series = group.groupby("date")[value_col].sum(min_count=1).sort_index()
+                        value, _ = same_weekday_expected(series, target)
+                        totals[segment] = value if value is not None else float(series.mean() or 0.0)
+                    return totals
+
+                def rescale_to_total(totals: Dict[tuple, float], target_total: Optional[float]) -> Dict[tuple, float]:
+                    raw_total = sum(totals.values())
+                    if target_total is None or abs(raw_total) < 1e-9:
+                        return totals
+                    factor = target_total / raw_total
+                    return {segment: value * factor for segment, value in totals.items()}
+
+                scoped_quantity_series = scoped.groupby("date")[quantity_col].sum(min_count=1).sort_index()
+                expected_quantity_total, _ = same_weekday_expected(scoped_quantity_series, target)
+                seg_value = rescale_to_total(segment_same_weekday_baseline(kpi_id), assessment.expected_value)
+                seg_quantity = rescale_to_total(segment_same_weekday_baseline(quantity_col), expected_quantity_total)
+                segments = list(seg_value)
+                base_parts = pd.DataFrame({
+                    "segment": segments,
+                    "quantity": [seg_quantity.get(segment, 0.0) for segment in segments],
+                    "value": [seg_value[segment] for segment in segments],
+                })
                 current_parts = segment_parts(current, 1)
                 try:
                     bridge = self.decomposer.decompose_product_by_segments(

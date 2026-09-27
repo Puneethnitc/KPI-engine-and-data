@@ -160,7 +160,15 @@ class PipelineRegressions(unittest.TestCase):
         )
 
     def test_orders_bridge_labels_rate_as_conversion_not_price(self):
-        result = self.run_case(kpi_id="orders")
+        # Stage 2 (F-D1): North/Electronics 2023-07-24's order count no longer
+        # clears its own materiality gates once compared to the same weekday
+        # (delta -3.3 vs the 5.0 floor; the old arithmetic-mean baseline gave
+        # delta -5.4, which barely cleared it). South/Apparel during the real
+        # EVT03 stockout window is a genuinely material orders movement.
+        result = self.run_case(
+            kpi_id="orders", target_date="2024-02-07", persona="CFO",
+            dimension_slice={"region": "South", "category": "Apparel"},
+        )
         self.assertEqual(result["decomposition_status"], "IDENTITY_HELD")
         self.assertEqual(result["decomposition"]["effect_labels"], {
             "volume_effect": "traffic_total",

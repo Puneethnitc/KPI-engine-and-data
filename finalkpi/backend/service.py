@@ -20,7 +20,7 @@ from datetime import date
 from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
 import numpy as np
@@ -606,6 +606,23 @@ def diagnose_scope(
     return {"results": results}
 
 
+def movement_priority(movement: Dict[str, Any], contract_snapshot: Optional[Dict[str, Any]]) -> float:
+    """Stage 2 (F-D4): priority = |delta| x min(|score| / z_threshold, 3) x kpi_weight.
+
+    Replaces the old material/decline/other 2/1/0 bucket so movements rank by
+    how far outside the governed statistical bar they sit and by how much the
+    contract says this KPI's movements should count, not just by direction.
+    """
+    delta = movement.get("delta")
+    score = movement.get("robust_score")
+    if delta is None or score is None:
+        return 0.0
+    materiality = ((contract_snapshot or {}).get("materiality")) or {}
+    z_threshold = (materiality.get("statistical_thresholds") or {}).get("z_threshold") or 1.0
+    kpi_weight = materiality.get("kpi_weight") or 1.0
+    return abs(delta) * min(abs(score) / z_threshold, 3.0) * kpi_weight
+
+
 def build_marketing_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, Any], persona: str = "marketing_manager") -> Dict[str, Any]:
     def confidence_status(result: Dict[str, Any]) -> str:
         profile = result.get("confidence_profile") or {}
@@ -649,7 +666,8 @@ def build_marketing_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, A
         elif direction == "up":
             positive.append(item)
         if available:
-            candidates.append((2 if item["material"] and direction == "down" else 1 if direction == "down" else 0, item))
+            item["priority"] = movement_priority(movement, result.get("contract_snapshot"))
+            candidates.append((item["priority"], item))
 
     weakest = next((stage for stage in stages[:2] if stage["material"] and stage["direction"] == "down"), None)
     if weakest is None:

@@ -133,10 +133,20 @@ def semantic_contract_projection(
         "materiality": {
             "statistical_method": contract.statistical_method,
             "statistical_thresholds": {"z_threshold": contract.materiality.z_threshold},
-            "business_thresholds": {"absolute_change": contract.materiality.abs_threshold, "unit": contract.unit},
+            "business_thresholds": {
+                "absolute_change": contract.materiality.abs_threshold,
+                "relative_change": contract.materiality.rel_threshold or None,
+                "unit": contract.unit,
+            },
             "detector_agreement_rule": contract.detector_agreement_rule,
             "threshold_status": contract.threshold_status,
             "calibration_reference": contract.calibration_reference,
+            # Stage 2 (F-D4): cross-KPI movement-priority weight and an
+            # optional revenue-equivalence method, so MovementScanner /
+            # build_marketing_brief can compare movements across
+            # differently-united KPIs.
+            "kpi_weight": contract.kpi_weight,
+            "impact_to_revenue": contract.impact_to_revenue,
         },
         "drivers": {
             "candidate_drivers": [

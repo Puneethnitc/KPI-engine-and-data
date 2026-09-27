@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from typing import Any, Dict, Optional
 
-from kpi_engine.contracts.metrics import ComparisonPlan, daily_values
+from kpi_engine.contracts.metrics import ComparisonPlan, daily_values, same_weekday_expected, weekday_adjusted_residuals
 from kpi_engine.detection.models import DetectionPolicy, MovementAssessment
 
 class RobustBaselineDetector:
@@ -75,7 +75,7 @@ class RobustBaselineDetector:
         target_date: str,
         dimension_slice: Optional[Dict[str, str]] = None,
         metric_col: str = 'net_sales_revenue',
-        window_days: int = 30,
+        window_days: int = 90,
         comparison_plan: Optional[ComparisonPlan] = None,
         policy: Optional[DetectionPolicy] = None,
     ) -> MovementAssessment:
@@ -143,11 +143,36 @@ class RobustBaselineDetector:
                 policy=resolved_policy,
             )
 
-        score_center, dispersion_val, method_used = self.calculate_robust_dispersion(baseline)
-        # An arithmetic mean is decomposable exactly from mean quantity and
-        # weighted mean rate over these same baseline observations.
-        expected_val = float(baseline.mean())
+        # Stage 2 (F-D1): the expected value is the median of the same weekday
+        # over the last k=8 weeks (falling back to a weekday-adjusted median
+        # with too few same-weekday points), not the arithmetic mean of every
+        # baseline day regardless of weekday. A comparison_plan's expected
+        # value is reused as-is so detection and decomposition (pipeline.py)
+        # never disagree about what "expected" means for this run.
+        if comparison_plan is not None and comparison_plan.expected_value is not None:
+            expected_val = comparison_plan.expected_value
+            expected_method = comparison_plan.expected_method
+        else:
+            expected_val, expected_method = same_weekday_expected(baseline, target_dt)
+        if expected_val is None or not np.isfinite(expected_val):
+            score_center, _, method_used = self.calculate_robust_dispersion(baseline)
+            return MovementAssessment(
+                target_date=target_date, actual_value=round(actual_val, precision),
+                expected_value=None, delta=None, z_score=None, mad_score=None,
+                is_statistically_significant=False, is_business_material=False,
+                is_material=False, status="UNSCORABLE_BASELINE",
+                dispersion_method=method_used, baseline_count=int(len(baseline)),
+                baseline_center=round(score_center, precision),
+                policy=resolved_policy,
+            )
         delta = actual_val - expected_val
+
+        # Stage 2 (F-D1): scale is the robust MAD of weekday-adjusted residuals
+        # (each historical day minus its own weekday's median) over the full
+        # baseline window, so an ordinary Saturday is compared against other
+        # Saturdays, not against the whole week's noisier spread.
+        residuals = weekday_adjusted_residuals(baseline)
+        score_center, dispersion_val, method_used = self.calculate_robust_dispersion(residuals)
 
         if not np.isfinite(dispersion_val) or dispersion_val <= 0:
             return MovementAssessment(
@@ -162,16 +187,15 @@ class RobustBaselineDetector:
             )
 
         # Decisions use full-precision scores; rounding is only for the payload.
-        point_score = (actual_val - score_center) / dispersion_val
+        point_score = delta / dispersion_val
         sustained_score = None
         recent_days = kpi_contract.seasonal_period
-        if recent_days >= 4 and len(baseline) - (recent_days - 1) >= 14:
-            reference = baseline.iloc[:-(recent_days - 1)]
-            recent = pd.concat([baseline.iloc[-(recent_days - 1):],
-                                pd.Series([actual_val], index=[target_dt])])
-            reference_center, reference_scale, _ = self.calculate_robust_dispersion(reference)
-            if np.isfinite(reference_scale) and reference_scale > 0:
-                sustained_score = (float(recent.median()) - reference_center) / reference_scale
+        if recent_days >= 4 and len(residuals) - (recent_days - 1) >= 14:
+            recent_residuals = pd.concat([
+                residuals.iloc[-(recent_days - 1):],
+                pd.Series([delta], index=[target_dt]),
+            ])
+            sustained_score = float(recent_residuals.median()) / dispersion_val
 
         std_val = float(baseline.std())
         z_score = round(delta / std_val, 4) if std_val > 1e-6 else None
@@ -183,6 +207,8 @@ class RobustBaselineDetector:
         materiality = kpi_contract.materiality
         stat_threshold = materiality.z_threshold
         business_threshold = materiality.abs_threshold
+        rel_threshold = materiality.rel_threshold
+        rel_delta = delta / abs(expected_val) if expected_val not in (None, 0) else None
 
         sustained_hit = (
             sustained_score is not None
@@ -191,7 +217,12 @@ class RobustBaselineDetector:
         )
         point_hit = abs(point_score) >= stat_threshold
         is_stat_sig = bool(point_hit or sustained_hit)
-        is_biz_mat = bool(abs(delta) >= business_threshold)
+        # Stage 2 (F-D3): materiality now requires the absolute floor AND a
+        # slice-relative gate (when the contract declares one), so a small
+        # segment's tiny absolute change and a large segment's proportionally
+        # tiny change are both filtered out.
+        rel_hit = rel_threshold <= 0 or (rel_delta is not None and abs(rel_delta) >= rel_threshold)
+        is_biz_mat = bool(abs(delta) >= business_threshold and rel_hit)
         is_material_dual = bool(is_stat_sig and is_biz_mat)
         pattern = "SUSTAINED" if sustained_hit else "POINT" if point_hit else "NONE"
 
@@ -213,5 +244,8 @@ class RobustBaselineDetector:
             baseline_scale=round(dispersion_val, 6),
             robust_score=round(point_score, 4),
             sustained_score=round(sustained_score, 4) if sustained_score is not None else None,
+            expected_method=expected_method,
+            rel_delta=round(rel_delta, 6) if rel_delta is not None else None,
+            rel_threshold=rel_threshold if rel_threshold > 0 else None,
             policy=resolved_policy,
         )

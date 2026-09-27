@@ -23,6 +23,12 @@ from typing import Any, Dict, List, Optional
 class MaterialityThresholds:
     z_threshold: float
     abs_threshold: float  # measured in the KPI contract's unit
+    # Stage 2 (F-D3): a slice-relative gate alongside the absolute floor, so a
+    # small segment's tiny absolute change cannot alone trigger materiality and
+    # a large segment's proportionally-small change cannot either. 0 disables
+    # the gate (treated as trivially satisfied) for synthetic/legacy callers
+    # that construct this dataclass directly without declaring one.
+    rel_threshold: float = 0.0
 
 
 @dataclass
@@ -256,6 +262,12 @@ class KPIContract:
     reconciliation: Optional[Dict[str, str]]
     candidate_drivers: List[Dict[str, str]]
     mechanical_components: List[str] = field(default_factory=list)
+    # Stage 2 (F-D4): cross-KPI priority weight for MovementScanner's ranking
+    # (kpi_weight) and an optional method for reporting a revenue-equivalent
+    # impact for non-revenue KPIs (impact_to_revenue). Both are advisory
+    # prioritisation metadata, never inputs to the materiality decision itself.
+    kpi_weight: float = 1.0
+    impact_to_revenue: Optional[Dict[str, str]] = None
     numerator_column: Optional[str] = None
     denominator_column: Optional[str] = None
     weight_column: Optional[str] = None
@@ -429,3 +441,15 @@ class KPIContract:
             raise ValueError(f"KPI {self.kpi_id}.business_purpose: active contracts require a purpose.")
         if self.precision < 0:
             raise ValueError(f"KPI {self.kpi_id}: precision cannot be negative.")
+        if self.materiality.rel_threshold < 0:
+            raise ValueError(f"KPI {self.kpi_id}: rel_threshold cannot be negative.")
+        if self.kpi_weight <= 0:
+            raise ValueError(f"KPI {self.kpi_id}: kpi_weight must be positive.")
+        if self.impact_to_revenue is not None:
+            if not isinstance(self.impact_to_revenue, dict) or "method" not in self.impact_to_revenue:
+                raise ValueError(f"KPI {self.kpi_id}.impact_to_revenue: a 'method' is required.")
+            method = self.impact_to_revenue["method"]
+            if method not in {"identity", "aov", "value_per_visit"}:
+                raise ValueError(f"KPI {self.kpi_id}.impact_to_revenue.method: unsupported method '{method}'.")
+            if method != "identity" and not self.impact_to_revenue.get("rate_column"):
+                raise ValueError(f"KPI {self.kpi_id}.impact_to_revenue: '{method}' requires a rate_column.")

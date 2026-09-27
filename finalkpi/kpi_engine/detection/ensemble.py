@@ -18,7 +18,7 @@ class AnomalyDetector:
         self.seasonal = SeasonalForecastDetector()
 
     def evaluate_movement(self, df, kpi_contract, target_date, dimension_slice=None,
-                          metric_col="net_sales_revenue", window_days=30,
+                          metric_col="net_sales_revenue", window_days=90,
                           comparison_plan=None):
         robust = self.robust.evaluate_movement(
             df, kpi_contract, target_date, dimension_slice, metric_col, window_days,

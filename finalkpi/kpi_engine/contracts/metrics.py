@@ -20,6 +20,56 @@ import pandas as pd
 from kpi_engine.contracts.models import KPIContract
 
 
+def same_weekday_expected(
+    series: pd.Series,
+    target_date: pd.Timestamp,
+    k_weeks: int = 8,
+    min_weekday_points: int = 4,
+) -> tuple[Optional[float], str]:
+    """Same-weekday median expectation (Stage 2, F-D1).
+
+    The expected value for `target_date` is the median of the same weekday
+    over the last `k_weeks` weeks. With fewer than `min_weekday_points`
+    same-weekday observations, falls back to a weekday-adjusted median:
+    overall median x weekday factor estimated on the available history.
+    `series` must already be as-of safe; any row at or after target_date is
+    ignored here as a defensive measure, not relied on for as-of safety.
+    """
+    target = pd.Timestamp(target_date).normalize()
+    history = series[series.index < target].dropna()
+    if history.empty:
+        return None, "UNAVAILABLE"
+    target_weekday = target.dayofweek
+    same_weekday = history[history.index.dayofweek == target_weekday].sort_index()
+    recent_same_weekday = same_weekday.iloc[-k_weeks:]
+    if len(recent_same_weekday) >= min_weekday_points:
+        return float(recent_same_weekday.median()), "SAME_WEEKDAY_MEDIAN"
+    overall_median = float(history.median())
+    factor = 1.0
+    if np.isfinite(overall_median) and overall_median != 0:
+        weekday_medians = history.groupby(history.index.dayofweek).median()
+        if target_weekday in weekday_medians.index:
+            candidate_factor = float(weekday_medians.loc[target_weekday]) / overall_median
+            if np.isfinite(candidate_factor):
+                factor = candidate_factor
+    return overall_median * factor, "WEEKDAY_ADJUSTED"
+
+
+def weekday_adjusted_residuals(series: pd.Series) -> pd.Series:
+    """De-seasonalise a daily series by each row's own weekday median.
+
+    Used for the Stage 2 residual dispersion scale (MAD of value minus its
+    weekday's median, over the whole supplied window) -- never for the point
+    "expected value" itself, which uses `same_weekday_expected`'s narrower,
+    more recent k-weeks window.
+    """
+    clean = series.dropna()
+    if clean.empty:
+        return clean
+    weekday_medians = clean.groupby(clean.index.dayofweek).median()
+    return clean - clean.index.dayofweek.map(weekday_medians)
+
+
 @dataclass(frozen=True)
 class ComparisonPlan:
     target_date: pd.Timestamp
@@ -29,6 +79,8 @@ class ComparisonPlan:
     baseline_frame: pd.DataFrame
     current_frame: pd.DataFrame
     baseline_series: Optional[pd.Series] = None
+    expected_value: Optional[float] = None
+    expected_method: str = "UNAVAILABLE"
 
     def __post_init__(self) -> None:
         if not isinstance(self.target_date, pd.Timestamp):
@@ -70,7 +122,10 @@ def prepare_metric_request(
     filtered = filtered.copy()
     filtered["date"] = pd.to_datetime(filtered["date"], errors="coerce")
     target = pd.Timestamp(target_date).normalize()
-    history_days = max(30, int(contract.min_history_periods))
+    # Stage 2 (F-D1): widened from 30 to 90 days so there is enough history for
+    # an 8-same-weekday-week expectation and a 60-90 day residual scale; a
+    # contract with a longer min_history_periods still gets at least that.
+    history_days = max(90, int(contract.min_history_periods))
     baseline_frame = filtered[
         (filtered["date"] < target) &
         (filtered["date"] >= target - pd.Timedelta(days=history_days))
@@ -81,6 +136,7 @@ def prepare_metric_request(
         (series.index < target) &
         (series.index >= target - pd.Timedelta(days=history_days))
     ].dropna()
+    expected_value, expected_method = same_weekday_expected(baseline_series, target)
     comparison = ComparisonPlan(
         target_date=target,
         history_days=history_days,
@@ -89,6 +145,8 @@ def prepare_metric_request(
         baseline_frame=baseline_frame,
         current_frame=current_frame,
         baseline_series=baseline_series,
+        expected_value=expected_value,
+        expected_method=expected_method,
     )
     return PreparedMetricRequest(
         kpi_id=contract.kpi_id,
