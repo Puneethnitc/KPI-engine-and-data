@@ -13,12 +13,12 @@ import {
 function rankedDriver(overrides = {}) {
   return {
     rank: 1,
-    driver_id: 'traffic_drop',
-    display_name: 'Online traffic',
+    driver_id: 'stock_availability',
+    display_name: 'Stock availability',
     source_id: 'sales_daily',
     source_grain: 'daily',
-    aggregation: 'sum',
-    driver_unit: 'visits/day',
+    aggregation: 'mean',
+    driver_unit: 'share_in_stock',
     controllability: 'controllable',
     relationship_type: 'ASSOCIATION',
     direction: 'POSITIVE',
@@ -65,7 +65,7 @@ function analysis(overrides = {}) {
     limitations: ['No multiple-testing correction is applied; ranking is exploratory.'],
     ranked_drivers: [rankedDriver()],
     excluded_drivers: [{
-      driver_id: 'stockout', source_id: 'sales_daily', reason_code: 'LOW_COVERAGE',
+      driver_id: 'checkout_latency', source_id: 'sales_daily', reason_code: 'LOW_COVERAGE',
       reason: 'Pair coverage below minimum', sample_size: 12,
       failed_checks: ['minimum_coverage'], evidence_references: [],
     }],

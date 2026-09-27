@@ -69,10 +69,13 @@ class GroundTruthSmokeTest(unittest.TestCase):
         self.assertIsNotNone(detection["false_alarm_rate_negatives"])
 
         attribution = metrics["attribution"]
-        # Stage 0 baseline: driver ranking finds the true cause on at most a
-        # couple of the 5 real (non-decoy) events. This documents the known
-        # flaw (F-R1/F-R2/F-R3); Stage 3 must raise this bound.
-        self.assertLessEqual(attribution["events_with_any_top1_hit"], 2)
+        # Stage 1 baseline: remapping stockout -> stock_availability, adding
+        # price_discount/promo_flag/weather_temp, and removing the mechanical
+        # traffic_drop driver (F-R1/F-R2/F-R4) raised this from Stage 0's <=2
+        # to 3 of 5 on this 8-case subset. Full explained-movement ranking
+        # (Stage 3) is still required to close the remaining gap (EVT01's
+        # hits are still wrong-signed; EVT06/weather is still unranked here).
+        self.assertGreaterEqual(attribution["events_with_any_top1_hit"], 3)
         # Direction-aware hits (correct id AND correct sign) can only be a
         # subset of naive hits (F-R2/F-R3: some "hits" are wrong-signed).
         self.assertLessEqual(

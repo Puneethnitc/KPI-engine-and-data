@@ -1,6 +1,9 @@
 # IMPLEMENTATION HANDOFF — semantic schema
 # Current: dataclasses validate supported aggregation and component combinations.
 # formula is required descriptive text, not the calculation execution path.
+# A candidate driver's column may not equal the KPI's value/numerator/denominator/
+# decomposition column or appear in mechanical_components (Stage 1, F-R2); a driver's
+# expected_direction_by_scope must reference a real KPI dimension (F-R4).
 # Next: version a structured calculation spec plus comparison, coverage, source,
 # reconciliation and analysis policies. Preserve old contracts through an adapter.
 # Validate positive history, finite thresholds, field types, nested unknown keys,
@@ -252,6 +255,7 @@ class KPIContract:
     decomposition: Dict[str, str]
     reconciliation: Optional[Dict[str, str]]
     candidate_drivers: List[Dict[str, str]]
+    mechanical_components: List[str] = field(default_factory=list)
     numerator_column: Optional[str] = None
     denominator_column: Optional[str] = None
     weight_column: Optional[str] = None
@@ -352,6 +356,12 @@ class KPIContract:
         driver_ids = [driver.get("id") for driver in self.candidate_drivers]
         if len(driver_ids) != len(set(driver_ids)):
             raise ValueError(f"KPI {self.kpi_id}: duplicate candidate driver id.")
+        decomposition_component = (self.decomposition or {}).get("quantity_column")
+        reserved_columns = {
+            column for column in (
+                self.value_column, self.numerator_column, self.denominator_column, decomposition_component,
+            ) if column
+        } | set(self.mechanical_components)
         for driver in self.candidate_drivers:
             if not all(driver.get(field) for field in ("id", "column", "source", "grain")):
                 raise ValueError(f"KPI {self.kpi_id}: each candidate driver needs id, column, source, grain.")
@@ -363,6 +373,34 @@ class KPIContract:
                 raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} has invalid controllability.")
             if driver.get("expected_direction") not in {None, "positive", "negative"}:
                 raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} has invalid expected_direction.")
+            scoped_direction = driver.get("expected_direction_by_scope")
+            if scoped_direction is not None:
+                if not isinstance(scoped_direction, dict) or not scoped_direction:
+                    raise ValueError(
+                        f"KPI {self.kpi_id}: driver {driver.get('id')} expected_direction_by_scope must be a nonempty mapping."
+                    )
+                for dimension, overrides in scoped_direction.items():
+                    if dimension not in self.dimensions:
+                        raise ValueError(
+                            f"KPI {self.kpi_id}: driver {driver.get('id')} expected_direction_by_scope dimension "
+                            f"'{dimension}' is not a KPI dimension."
+                        )
+                    if not isinstance(overrides, dict) or not overrides:
+                        raise ValueError(
+                            f"KPI {self.kpi_id}: driver {driver.get('id')} expected_direction_by_scope.{dimension} "
+                            "must be a nonempty mapping of scope value to direction."
+                        )
+                    if any(direction not in {"positive", "negative"} for direction in overrides.values()):
+                        raise ValueError(
+                            f"KPI {self.kpi_id}: driver {driver.get('id')} expected_direction_by_scope.{dimension} "
+                            "values must be positive or negative."
+                        )
+            if driver.get("column") in reserved_columns:
+                raise ValueError(
+                    f"KPI {self.kpi_id}: driver {driver.get('id')} column '{driver.get('column')}' is a mechanical "
+                    "KPI component (value/numerator/denominator/decomposition/mechanical_components) and cannot be "
+                    "a candidate driver."
+                )
             if driver.get("min_pairs") is not None and int(driver["min_pairs"]) <= 0:
                 raise ValueError(f"KPI {self.kpi_id}: driver {driver.get('id')} min_pairs must be positive.")
             if driver.get("minimum_coverage") is not None and not 0 < float(driver["minimum_coverage"]) <= 1:

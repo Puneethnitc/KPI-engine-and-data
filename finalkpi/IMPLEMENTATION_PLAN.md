@@ -260,9 +260,11 @@ Driver IDs describe **the variable**, not the event. The old IDs (`ad_spend_drop
   - As-of safety: future rows do not change expectations.
 - Update `tests/test_detection.py`, `test_pipeline_regressions.py` and the demo scenarios whose verdict changes. Re-verify each demo scenario's intent and move dates where needed.
 - Harness gates, dev and holdout both:
-  - quiet-day false alarms ≤ 5%
+  - quiet-day false alarms no worse than the 4.1% baseline (`--split all`; see docs/EVALUATION_BASELINE.md) — this stage must not regress it, whatever the weekday-aware detector's absolute rate turns out to be
   - the maximum weekday false-alarm rate ≤ 2× the minimum non-zero weekday rate (or ≤ 3 absolute alerts)
   - event-day recall ≥ 70% for revenue/orders/units, **including** EVT03 (stockout) and EVT04
+  - EVT03 (stockout, South/Apparel) revenue recall ≥ 70% (Stage 0/1 baseline: 25%, 1/4)
+  - EVT06 (cold snap, ALL/Apparel) revenue recall ≥ 70% (Stage 0/1 baseline: 0%, 0/4)
   - the EVT05 decoy may flag `traffic_total` (traffic did rise) but not revenue
 
 ---

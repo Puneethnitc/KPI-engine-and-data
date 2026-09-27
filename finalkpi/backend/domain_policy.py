@@ -22,6 +22,9 @@ _DOMAIN_ENTITLEMENTS: Final[dict[str, frozenset[str]]] = {
     "regional_manager_south": frozenset({"SALES", "OPERATIONS", "KPI_CONTRACT", "CHAT_EVIDENCE"}),
     "regional_manager_east": frozenset({"SALES", "OPERATIONS", "KPI_CONTRACT", "CHAT_EVIDENCE"}),
     "regional_manager_west": frozenset({"SALES", "OPERATIONS", "KPI_CONTRACT", "CHAT_EVIDENCE"}),
+    # F-S4 (plan §1.9): a category-restricted role (North/Electronics only;
+    # see data/access_control.csv), for the role-based security scenario.
+    "category_manager_north_electronics": frozenset({"SALES", "MARKETING", "KPI_CONTRACT", "CHAT_EVIDENCE"}),
 }
 
 

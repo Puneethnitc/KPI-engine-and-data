@@ -18,6 +18,7 @@ REQUIRED_SCENARIO_IDS = (
     "sparse-history-new-launch",
     "unauthorized-scope",
     "non-material-baseline",
+    "category-restricted-scope",
 )
 
 
@@ -169,11 +170,37 @@ _SCENARIOS: tuple[DemoScenario, ...] = (
         primary_kpi="net_sales_revenue",
         region="North",
         category="Electronics",
-        target_date="2023-08-13",
+        # F-D5 (plan §1.10): 2023-08-13 was the last day of the real EVT01
+        # marketing-cut window, so it wasn't a genuine "nothing happened"
+        # baseline. 2023-05-22 (a Monday, well before EVT01 starts on
+        # 2023-07-20) is a verified quiet date confirmed NO_MATERIAL_MOVEMENT
+        # by the Stage 0 ground-truth harness (data/labels/eval_cases.csv).
+        target_date="2023-05-22",
         as_of=None,
         source_mode="production",
         fixture_id=None,
         expected_broad_outcome="NO_MATERIAL_MOVEMENT",
+    ),
+    DemoScenario(
+        scenario_id="category-restricted-scope",
+        title="Category-restricted scope",
+        purpose=(
+            "Demonstrate column/domain-level (not just row/region-level) security: "
+            "a role scoped to a single category is denied a different category in "
+            "its own authorized region (F-S4)."
+        ),
+        demonstration_category="category_restricted_scope",
+        persona="category_manager_north_electronics",
+        user_id="demo-category-manager-north-electronics",
+        kpis=("all",),
+        primary_kpi="net_sales_revenue",
+        region="North",
+        category="Home",
+        target_date="2023-07-24",
+        as_of=None,
+        source_mode="production",
+        fixture_id=None,
+        expected_broad_outcome="ACCESS_DENIED",
     ),
 )
 

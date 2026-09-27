@@ -19,7 +19,7 @@ class VerificationCases(unittest.TestCase):
         cls.contract = KPIRegistry(str(ROOT / "kpi_engine" / "registry")).get("orders")
         cls.verifier = CausalVerifier()
         cls.design = VerificationDesign(
-            driver_id="traffic_drop",
+            driver_id="stock_availability",
             treated_slice={"region": "North", "category": "Electronics"},
             control_slice={"region": "South", "category": "Electronics"},
             pre_start="2023-03-01", treatment_start="2023-04-01", post_end="2023-04-21",
@@ -44,7 +44,7 @@ class VerificationCases(unittest.TestCase):
                     ) + (pre_slope if treated and day < pd.Timestamp("2023-04-01") else 0) + (
                         placebo_drop if treated else 0
                     ),
-                    "traffic_online": 1000 - (500 if treated and event and exposed else 0),
+                    "stock_availability": 1000 - (500 if treated and event and exposed else 0),
                 })
         return pd.DataFrame(rows)
 
@@ -126,7 +126,7 @@ class VerificationCases(unittest.TestCase):
                     ),
                 })
         weekly = replace(
-            self.design, driver_id="ad_spend_drop", treatment_start="2023-04-03",
+            self.design, driver_id="marketing_spend", treatment_start="2023-04-03",
             post_end="2023-04-23",
         )
         result = self.verifier.verify(pd.DataFrame(rows), self.contract, weekly)

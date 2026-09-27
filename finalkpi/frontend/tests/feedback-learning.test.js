@@ -32,7 +32,7 @@ const run = {
   kpi_id: 'orders',
   movement_assessment: { delta: 2, actual_value: 12 },
   reconciliation_verdict: { status: 'AGREED' },
-  driver_analysis: { ranked_drivers: [{ driver_id: 'traffic_drop' }], excluded_drivers: [] },
+  driver_analysis: { ranked_drivers: [{ driver_id: 'checkout_latency' }], excluded_drivers: [] },
   decomposition: { volume_effect: 1 },
   confidence_profile: { overall: { status: 'MODERATE' } },
   narrative_claims: [{ text: 'Associated movement', claim_type: 'CORRELATIONAL' }],
@@ -41,7 +41,7 @@ const run = {
 
 const aggregation = {
   aggregation_key: 'agg-server-key',
-  kpi_id: 'orders', scope: { region: 'North' }, target_type: 'DRIVER', target_id: 'traffic_drop',
+  kpi_id: 'orders', scope: { region: 'North' }, target_type: 'DRIVER', target_id: 'checkout_latency',
   mode: 'ANALYST_CORRECTION', feedback_count: 2, business_feedback_count: 0, analyst_correction_count: 2,
   useful_count: 0, not_useful_count: 0, reason_counts: {}, issue_category_counts: { DRIVER: 2 },
   correction_type_counts: { REINTERPRET: 2 }, action_taken_counts: {}, unique_authorized_submitter_count: 2,
@@ -101,7 +101,7 @@ test('failed submission preserves caller form values and returns backend validat
 
 test('target options are derived from the authorized run and reject arbitrary IDs', () => {
   const targets = model.feedbackTargetOptions(run)
-  assert.ok(targets.some(option => option.target_type === 'DRIVER' && option.target_id === 'traffic_drop'))
+  assert.ok(targets.some(option => option.target_type === 'DRIVER' && option.target_id === 'checkout_latency'))
   assert.ok(targets.some(option => option.target_type === 'ACTION' && option.target_id === 'action-1'))
   assert.ok(!targets.some(option => option.target_id === 'private-secret'))
   assert.throws(() => model.buildBusinessFeedbackRequest({ run, userId: 'demo-cfo', targetType: 'DRIVER', targetId: 'private-secret', rating: 'USEFUL' }), /Select a target/)
@@ -110,14 +110,14 @@ test('target options are derived from the authorized run and reject arbitrary ID
 test('analyst controls are hidden from business users and form targets come from the saved run', () => {
   const html = render(React.createElement(FeedbackCapture, { run, userId: 'demo-marketing', reviewer: false }))
   assert.ok(html.includes('Diagnosis run'))
-  assert.ok(html.includes('Driver: traffic_drop'))
+  assert.ok(html.includes('Driver: checkout_latency'))
   assert.ok(!html.includes('Analyst correction'))
   assert.ok(!html.includes('Issue category'))
 })
 
 test('analyst correction accepts only allowed issue categories and valid run evidence references', () => {
   const payload = model.buildAnalystCorrectionRequest({
-    run, userId: 'demo-cfo', reviewer: true, targetType: 'DRIVER', targetId: 'traffic_drop',
+    run, userId: 'demo-cfo', reviewer: true, targetType: 'DRIVER', targetId: 'checkout_latency',
     issueCategory: 'DRIVER', correctionType: 'REINTERPRET', proposedCorrection: 'Association only',
     rationale: 'No contribution evidence', evidenceRefs: ['driver_analysis.ranked_drivers'],
   })
@@ -125,11 +125,11 @@ test('analyst correction accepts only allowed issue categories and valid run evi
   assert.equal(payload.issue_category, 'DRIVER')
   assert.deepEqual(payload.evidence_refs, ['driver_analysis.ranked_drivers'])
   assert.throws(() => model.buildAnalystCorrectionRequest({
-    run, userId: 'demo-cfo', reviewer: true, targetType: 'DRIVER', targetId: 'traffic_drop',
+    run, userId: 'demo-cfo', reviewer: true, targetType: 'DRIVER', targetId: 'checkout_latency',
     issueCategory: 'DRIVER', correctionType: 'FIX', proposedCorrection: 'x', rationale: 'y', evidenceRefs: ['private.file'],
   }), /Evidence references/)
   assert.throws(() => model.buildAnalystCorrectionRequest({
-    run, userId: 'demo-marketing', reviewer: false, targetType: 'DRIVER', targetId: 'traffic_drop',
+    run, userId: 'demo-marketing', reviewer: false, targetType: 'DRIVER', targetId: 'checkout_latency',
     issueCategory: 'DRIVER', correctionType: 'FIX', proposedCorrection: 'x', rationale: 'y', evidenceRefs: [],
   }), /not available/)
   assert.deepEqual(model.ANALYST_ISSUES, ['DATA', 'KPI_CONTRACT', 'BUSINESS_RULE', 'DRIVER', 'ANALYTICAL_METHOD', 'CONFIDENCE', 'NARRATIVE', 'ACTION', 'ACCESS_POLICY'])
@@ -162,11 +162,11 @@ test('analyst proposal options follow backend compatibility metadata and correct
   const payload = model.proposalCreatePayload({
     userId: 'demo-cfo', aggregation, proposalType: 'DRIVER_CONFIGURATION_CHANGE', sourceFeedbackId: 'fb-2',
     title: 'Review driver wording', rationale: 'Association only',
-    changeFields: { driver_id: 'traffic_drop', proposed_configuration: 'Association only' },
+    changeFields: { driver_id: 'checkout_latency', proposed_configuration: 'Association only' },
     expectedImprovement: 'Avoid causal inference', affectedCases: ['material-a'], rollbackPlan: 'Retain current version',
   })
   assert.equal(payload.aggregation_key, 'agg-server-key')
-  assert.deepEqual(payload.proposed_change, { source_feedback_id: 'fb-2', driver_id: 'traffic_drop', proposed_configuration: 'Association only' })
+  assert.deepEqual(payload.proposed_change, { source_feedback_id: 'fb-2', driver_id: 'checkout_latency', proposed_configuration: 'Association only' })
   assert.throws(() => model.proposalCreatePayload({
     userId: 'demo-cfo', aggregation, proposalType: 'BUSINESS_RULE_CHANGE', sourceFeedbackId: 'fb-2',
     title: 't', rationale: 'r', changeFields: {}, expectedImprovement: 'e', affectedCases: [], rollbackPlan: 'b',

@@ -8,14 +8,14 @@ from kpi_engine.contribute import ContributionScenario, ShapleyContributor
 class ContributionTests(unittest.TestCase):
     def test_interaction_split_and_residual(self):
         scenario = ContributionScenario(
-            "orders", "count", ("traffic_drop", "stockout"),
-            {(): 100, ("traffic_drop",): 90, ("stockout",): 80,
-             ("stockout", "traffic_drop"): 60},
+            "orders", "count", ("checkout_latency", "stock_availability"),
+            {(): 100, ("checkout_latency",): 90, ("stock_availability",): 80,
+             ("stock_availability", "checkout_latency"): 60},
             observed_movement=-50,
         )
         result = ShapleyContributor.quantify(scenario)
         effects = {item.driver_id: item.modeled_effect for item in result.contributions}
-        self.assertEqual(effects, {"traffic_drop": -15, "stockout": -25})
+        self.assertEqual(effects, {"checkout_latency": -15, "stock_availability": -25})
         self.assertEqual(result.modeled_movement, -40)
         self.assertEqual(result.unexplained_residual, -10)
         self.assertEqual(result.claim_type, "MODEL_BASED_SCENARIO")

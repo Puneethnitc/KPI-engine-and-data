@@ -74,6 +74,22 @@ sources:
         type: float
         required: false
         unit: visits/day
+      stock_availability:
+        type: float
+        required: false
+        unit: share_in_stock
+      price_discount_depth:
+        type: float
+        required: false
+        unit: fraction
+      promo_flag:
+        type: int
+        required: false
+        unit: flag
+      weather_temp_c:
+        type: float
+        required: false
+        unit: celsius
 
   marketing_weekly:
     source_id: marketing_weekly

@@ -17,7 +17,7 @@ class EvidenceQualityTests(unittest.TestCase):
 
     def test_inconclusive_interval_cannot_become_support(self):
         assessment = ConfidenceEngine.assess(CausalVerificationResult(
-            "traffic_drop", "INCONCLUSIVE", "CI_INCLUDES_ZERO", "Interval spans zero",
+            "checkout_latency", "INCONCLUSIVE", "CI_INCLUDES_ZERO", "Interval spans zero",
             did_effect=-10, confidence_interval=(-25, 5), pre_days=30,
             post_days=14, temporal_precedence_passed=True,
         ))
@@ -201,7 +201,7 @@ class ConfidenceProfileTests(unittest.TestCase):
 
     def test_conditional_support_is_not_probability(self):
         assessment = ConfidenceEngine.assess(CausalVerificationResult(
-            "traffic_drop", "SUPPORTED_CONDITIONAL", "CHECKS_PASSED", "Passed",
+            "checkout_latency", "SUPPORTED_CONDITIONAL", "CHECKS_PASSED", "Passed",
             did_effect=-10, confidence_interval=(-15, -5), pre_days=14,
             post_days=7, temporal_precedence_passed=True,
         ))
@@ -211,7 +211,7 @@ class ConfidenceProfileTests(unittest.TestCase):
 
     def test_failed_temporal_gate_stays_insufficient(self):
         assessment = ConfidenceEngine.assess(CausalVerificationResult(
-            "traffic_drop", "UNTESTABLE", "PRE_EVENT_MOVEMENT", "Moved early",
+            "checkout_latency", "UNTESTABLE", "PRE_EVENT_MOVEMENT", "Moved early",
             did_effect=-10, confidence_interval=(-15, -5), pre_days=20,
             post_days=7, temporal_precedence_passed=False,
         ))
@@ -221,7 +221,7 @@ class ConfidenceProfileTests(unittest.TestCase):
     def test_confidence_uses_resolved_verification_policy(self):
         policy = type("Policy", (), {"min_pre_days": 10, "min_post_days": 5})()
         assessment = ConfidenceEngine.assess(CausalVerificationResult(
-            "traffic_drop", "SUPPORTED_CONDITIONAL", "CHECKS_PASSED", "Passed",
+            "checkout_latency", "SUPPORTED_CONDITIONAL", "CHECKS_PASSED", "Passed",
             did_effect=-10, confidence_interval=(-15, -5), pre_days=10,
             post_days=5, temporal_precedence_passed=True,
             policy=policy,

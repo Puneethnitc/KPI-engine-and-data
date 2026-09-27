@@ -8,24 +8,21 @@ from kpi_engine.verification.models import VerificationDesign
 # trigger server-governed designs for authorized target windows.
 GOVERNED_DESIGNS: Dict[Tuple[str, str, str, str], VerificationDesign] = {
     # Key: (kpi_id, target_date, region, category)
-    ("net_sales_revenue", "2023-08-06", "North", "Electronics"): VerificationDesign(
-        driver_id="traffic_drop",
+    # Stage 1 (plan §1.8, F-V1): the old traffic_drop design is deleted --
+    # traffic_drop was removed as a driver (F-R2) and this design could never
+    # succeed anyway (its Saturday-adjacent dates never lined up with a
+    # governed Monday treatment start). The marketing design is corrected to
+    # the real cut date (2023-07-17, a Monday) with the current driver id;
+    # South remains the control for now even though it ran its own campaign
+    # (F-V2) -- Stage 5 replaces this whole registry with auto-generated,
+    # control-validated designs.
+    ("net_sales_revenue", "2023-08-13", "North", "Electronics"): VerificationDesign(
+        driver_id="marketing_spend",
         treated_slice={"region": "North", "category": "Electronics"},
         control_slice={"region": "South", "category": "Electronics"},
-        pre_start="2023-06-20",
-        treatment_start="2023-07-20",
-        post_end="2023-08-06",
-        quiet_windows=(("2023-04-01", "2023-04-14"), ("2023-05-01", "2023-05-14")),
-        expected_driver_direction=-1,
-        expected_outcome_direction=-1,
-    ),
-    ("net_sales_revenue", "2023-07-24", "North", "Electronics"): VerificationDesign(
-        driver_id="ad_spend_drop",
-        treated_slice={"region": "North", "category": "Electronics"},
-        control_slice={"region": "South", "category": "Electronics"},
-        pre_start="2023-06-01",
-        treatment_start="2023-07-01",
-        post_end="2023-07-24",
+        pre_start="2023-06-05",
+        treatment_start="2023-07-17",
+        post_end="2023-08-13",
         quiet_windows=(("2023-04-01", "2023-04-14"), ("2023-05-01", "2023-05-14")),
         expected_driver_direction=-1,
         expected_outcome_direction=-1,

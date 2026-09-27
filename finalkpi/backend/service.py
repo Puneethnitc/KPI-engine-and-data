@@ -7,6 +7,8 @@
 # available data. See ../kpi_engine/IMPLEMENTATION_HANDOFF.md and duckdb/README.md.
 # Check: new configured KPI/dimensions work without editing API allowlists and
 # metadata does not expose unavailable or unauthorized slices.
+# DEMO_IDENTITIES includes a category-restricted role (Stage 1, F-S4) to
+# exercise column/domain-level, not just row/region-level, security.
 
 from __future__ import annotations
 
@@ -47,8 +49,12 @@ DEMO_IDENTITIES = {
     "demo-cfo": "CFO",
     "demo-marketing": "marketing_manager",
     "demo-regional-north": "regional_manager_north",
+    # F-S4 (plan §1.9): a category-restricted role, to exercise the
+    # column/domain-level security requirement (every other role currently
+    # has can_view_categories = ALL).
+    "demo-category-manager-north-electronics": "category_manager_north_electronics",
 }
-ENGINE_VERSION = "kpi-engine-b89bfd5-semantic-contract-v1"
+ENGINE_VERSION = "kpi-engine-stage1-data-contract-fixes-v1"
 from kpi_engine.verification.registry import resolve_governed_design
 
 

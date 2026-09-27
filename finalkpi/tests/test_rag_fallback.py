@@ -17,7 +17,7 @@ DIAGNOSIS = {
         "is_material": True,
     },
     "causal_verdict": "UNTESTABLE",
-    "correlational_candidates": [{"driver_id": "traffic_drop", "max_correlation": 0.6362}],
+    "correlational_candidates": [{"driver_id": "checkout_latency", "max_correlation": 0.6362}],
     "narrative": "net_sales_revenue changed by -1364.15 in its declared unit on 2023-07-24.",
     "grounding_passed": True,
 }

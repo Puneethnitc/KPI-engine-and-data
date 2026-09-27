@@ -47,8 +47,8 @@ class FeedbackProposalTests(unittest.TestCase):
             "verdict": "MATERIAL_CAUSE_UNVERIFIED",
             "movement_assessment": {"actual_value": 12, "expected_value": 10, "delta": 2, "is_material": True},
             "reconciliation_verdict": {"status": "AGREED"},
-            "driver_analysis": {"ranked_drivers": [{"driver_id": "traffic_drop"}], "excluded_drivers": []},
-            "correlational_candidates": [{"driver_id": "traffic_drop"}],
+            "driver_analysis": {"ranked_drivers": [{"driver_id": "checkout_latency"}], "excluded_drivers": []},
+            "correlational_candidates": [{"driver_id": "checkout_latency"}],
             "decomposition": {"total_delta": 2, "volume_effect": 1},
             "confidence_profile": {"overall": {"status": "MODERATE"}},
             "narrative_claims": [{"text": "Traffic was associated.", "claim_type": "CORRELATIONAL"}],
@@ -94,7 +94,7 @@ class FeedbackProposalTests(unittest.TestCase):
         )
         return api_feedback(request)
 
-    def analyst_feedback(self, *, run_id="run-proposal-1", user_id="demo-cfo", issue=AnalystIssueCategory.DRIVER, target_type=FeedbackTargetType.DRIVER, target_id="traffic_drop", proposed="Keep this as an association only."):
+    def analyst_feedback(self, *, run_id="run-proposal-1", user_id="demo-cfo", issue=AnalystIssueCategory.DRIVER, target_type=FeedbackTargetType.DRIVER, target_id="checkout_latency", proposed="Keep this as an association only."):
         request = FeedbackSubmissionRequest(
             mode=FeedbackMode.ANALYST_CORRECTION,
             run_id=run_id,
@@ -207,7 +207,7 @@ class FeedbackProposalTests(unittest.TestCase):
             feedback_ids=[feedback["feedback_id"]],
             proposed_change={
                 "source_feedback_id": feedback["feedback_id"],
-                "driver_id": "traffic_drop",
+                "driver_id": "checkout_latency",
                 "proposed_configuration": feedback["proposed_correction"],
             },
         )
@@ -263,7 +263,7 @@ class FeedbackProposalTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as incompatible:
             api_improvement_proposal_create(self.proposal_request(
                 feedback_ids=[correction["feedback_id"], other["feedback_id"]],
-                proposed_change={"source_feedback_id": correction["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": correction["proposed_correction"]},
+                proposed_change={"source_feedback_id": correction["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": correction["proposed_correction"]},
             ))
         self.assertEqual(incompatible.exception.status_code, 422)
 
@@ -286,7 +286,7 @@ class FeedbackProposalTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as changed_value:
             api_improvement_proposal_create(self.proposal_request(
                 feedback_ids=[feedback["feedback_id"]],
-                proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": "invented configuration"},
+                proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": "invented configuration"},
             ))
         self.assertEqual(changed_value.exception.status_code, 422)
 
@@ -295,7 +295,7 @@ class FeedbackProposalTests(unittest.TestCase):
         aggregation = api_feedback_aggregations(user_id="demo-cfo")["items"][0]
         request = self.proposal_request(
             aggregation_key=aggregation["aggregation_key"],
-            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"]},
+            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"]},
         )
         first = api_improvement_proposal_create(request)
         replay = api_improvement_proposal_create(request)
@@ -314,7 +314,7 @@ class FeedbackProposalTests(unittest.TestCase):
         feedback = self.analyst_feedback()
         proposal = api_improvement_proposal_create(self.proposal_request(
             feedback_ids=[feedback["feedback_id"]],
-            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"]},
+            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"]},
         ))
         accepted = api_improvement_proposal_event(
             proposal["proposal_id"],
@@ -340,7 +340,7 @@ class FeedbackProposalTests(unittest.TestCase):
         feedback = self.analyst_feedback()
         proposal = api_improvement_proposal_create(self.proposal_request(
             feedback_ids=[feedback["feedback_id"]],
-            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"]},
+            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"]},
         ))
         rejected = api_improvement_proposal_event(
             proposal["proposal_id"],
@@ -366,7 +366,7 @@ class FeedbackProposalTests(unittest.TestCase):
         self.assertEqual(cannot_create.exception.status_code, 404)
         proposal = api_improvement_proposal_create(self.proposal_request(
             feedback_ids=[feedback["feedback_id"]],
-            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"]},
+            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"]},
         ))
         with self.assertRaises(HTTPException) as hidden:
             api_improvement_proposal_get(proposal["proposal_id"], user_id="demo-marketing")
@@ -383,7 +383,7 @@ class FeedbackProposalTests(unittest.TestCase):
         feedback = self.analyst_feedback()
         proposal = api_improvement_proposal_create(self.proposal_request(
             feedback_ids=[feedback["feedback_id"]],
-            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"]},
+            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"]},
         ))
         listing = api_improvement_proposal_list(user_id="demo-cfo")
         self.assertEqual(listing["items"][0]["proposal_id"], proposal["proposal_id"])
@@ -399,7 +399,7 @@ class FeedbackProposalTests(unittest.TestCase):
         feedback = self.analyst_feedback()
         proposal = api_improvement_proposal_create(self.proposal_request(
             feedback_ids=[feedback["feedback_id"]],
-            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"]},
+            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"]},
         ))
         connection = storage._connect()
         try:
@@ -421,7 +421,7 @@ class FeedbackProposalTests(unittest.TestCase):
         feedback = self.analyst_feedback()
         proposal = api_improvement_proposal_create(self.proposal_request(
             feedback_ids=[feedback["feedback_id"]],
-            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"]},
+            proposed_change={"source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"]},
         ))
         api_improvement_proposal_event(
             proposal["proposal_id"],

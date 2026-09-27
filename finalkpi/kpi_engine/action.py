@@ -38,36 +38,52 @@ class DecisionCard:
 class ActionRecommendationEngine:
     """Create review artifacts only; never execute or estimate an action."""
 
+    # Keyed by the current driver id (plan §1.3 rename); LEGACY_DRIVER_IDS in
+    # kpi_engine/contracts/registry.py is the single place the old spelling
+    # resolves to these. traffic_drop is gone: traffic is a KPI/bridge
+    # component (Stage 3), never an actionable driver (F-R2).
     LEVERS = {
-        "checkout_latency_spike": (
+        "checkout_latency": (
             "Checkout performance", "engineering_lead",
             "Review checkout latency traces and recent releases before proposing a remediation.",
             "Assess a checkout performance remediation plan and rollback criteria.",
             "Engineering change review",
         ),
-        "competitor_price_cut": (
+        "competitor_price_index": (
             "Pricing", "pricing_lead",
             "Validate the competitor-price observation and compare affected products.",
             "Assess a targeted pricing response and its margin implications.",
             "Pricing and margin approval",
         ),
-        "ad_spend_drop": (
+        "marketing_spend": (
             "Marketing", "marketing_lead",
             "Check weekly spend publication and campaign changes for the affected slice.",
             "Assess a campaign-budget adjustment and its guardrails.",
             "Marketing budget approval",
         ),
-        "stockout": (
+        "stock_availability": (
             "Availability", "operations_lead",
             "Check inventory and lost-unit records for the affected slice.",
             "Assess a replenishment response and operational capacity.",
             "Operations capacity approval",
         ),
-        "traffic_drop": (
-            "Acquisition", "growth_lead",
-            "Check traffic instrumentation and channel-level movement.",
-            "Assess a channel recovery plan and measurement safeguards.",
-            "Growth channel approval",
+        "price_discount": (
+            "Pricing/Promotions", "pricing_lead",
+            "Validate the discount depth observation and compare against the promo calendar.",
+            "Assess a targeted discount adjustment and its margin implications.",
+            "Pricing and margin approval",
+        ),
+        "promo_flag": (
+            "Pricing/Promotions", "pricing_lead",
+            "Validate the promotion window observation and compare against the promo calendar.",
+            "Assess a promotion timing or scope adjustment.",
+            "Pricing and margin approval",
+        ),
+        "weather_temp": (
+            "Contextual", "merchandising_lead",
+            "Review the weather observation and its expected category-level effect.",
+            "Assess inventory and merchandising plan adjustments; weather is not controllable.",
+            "Merchandising plan review",
         ),
     }
 

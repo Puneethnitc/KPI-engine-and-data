@@ -29,16 +29,16 @@ const { renderToStaticMarkup } = require('react-dom/server')
 const ActionWorkspace = require('../components/action-workspace.tsx').default
 
 const action = {
-  action_id: 'ACTION_stockout_NEXT_CHECK', kind: 'NEXT_CHECK', status: 'AWAITING_REVIEW',
-  driver_id: 'stockout', driver_rank: 1, driver_relationship: 'ASSOCIATION', controllability: 'CONTROLLABLE',
+  action_id: 'ACTION_stock_availability_NEXT_CHECK', kind: 'NEXT_CHECK', status: 'AWAITING_REVIEW',
+  driver_id: 'stock_availability', driver_rank: 1, driver_relationship: 'ASSOCIATION', controllability: 'CONTROLLABLE',
   lever: 'Availability', recommendation: 'Check inventory and lost-unit records for the affected slice.',
   owner: 'operations_lead', owner_source: 'contract.candidate_drivers.owner', decision_right: 'Operations capacity approval', approval_required: false,
   expected_impact: null, expected_impact_unit: null, impact_method: 'NOT_ESTIMATED',
   impact_explanation: 'Impact is not estimated: no validated deterministic method is configured.',
   evidence_status: 'HIGH', confidence_status: 'LOW',
-  evidence_references: [{ evidence_type: 'ranked_driver', path: 'driver_analysis.ranked_drivers', driver_id: 'stockout', driver_rank: 1, source_id: 'sales_daily', period: '2024-01-31', method: 'daily_date_grouping' }],
-  constraints: ['Association is diagnostic only.'], monitoring_plan: 'Monitor stockout and the declared KPI at the governed native grain.',
-  success_metric: 'Verify the stockout signal before rollout.', review_window: 'Review after the next governed observation window.',
+  evidence_references: [{ evidence_type: 'ranked_driver', path: 'driver_analysis.ranked_drivers', driver_id: 'stock_availability', driver_rank: 1, source_id: 'sales_daily', period: '2024-01-31', method: 'daily_date_grouping' }],
+  constraints: ['Association is diagnostic only.'], monitoring_plan: 'Monitor stock_availability and the declared KPI at the governed native grain.',
+  success_metric: 'Verify the stock_availability signal before rollout.', review_window: 'Review after the next governed observation window.',
   stop_conditions: ['Stop if coverage falls below minimum.'], limitations: ['No causal estimate.'], evidence_paths: ['driver_analysis.ranked_drivers'],
 }
 
@@ -105,7 +105,7 @@ test('legacy cards render safely without inventing new values', () => {
 })
 
 test('structured and legacy layouts are distinct and optional facts are omitted', () => {
-  assert.equal(isLegacyAction({ kind: 'NEXT_CHECK', driver_id: 'stockout', lever: 'Availability', recommendation: 'Check records.', owner: 'analyst', status: 'AWAITING_REVIEW', evidence_paths: [], expected_impact: null }), true)
+  assert.equal(isLegacyAction({ kind: 'NEXT_CHECK', driver_id: 'stock_availability', lever: 'Availability', recommendation: 'Check records.', owner: 'analyst', status: 'AWAITING_REVIEW', evidence_paths: [], expected_impact: null }), true)
   assert.equal(isLegacyAction(action), false)
   const sparse = { ...action, driver_rank: null, owner_source: null, decision_right: null, evidence_status: null, confidence_status: null, monitoring_plan: null, success_metric: null, review_window: null, stop_conditions: null, evidence_references: [] }
   const html = render(React.createElement(ActionWorkspace, { actions: [sparse], persona: 'CFO' }))

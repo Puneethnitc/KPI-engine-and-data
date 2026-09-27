@@ -24,7 +24,7 @@ class NarrativeTests(unittest.TestCase):
             "decomposition_status": "IDENTITY_HELD",
             "decomposition": {"total_delta": -12.5, "is_identity_held": True},
             "correlational_candidates": [
-                {"driver_id": "traffic_drop", "claim_type": "CORRELATIONAL"}
+                {"driver_id": "checkout_latency", "claim_type": "CORRELATIONAL"}
             ],
             "causal_verdict": "INCONCLUSIVE",
             "causal_verification": {"verdict": "INCONCLUSIVE"},
@@ -33,7 +33,7 @@ class NarrativeTests(unittest.TestCase):
     def test_claims_are_bound_and_noncausal(self):
         rendered = self.engine.render(self.payload)
         self.assertTrue(rendered["grounding_passed"])
-        self.assertIn("traffic_drop is a correlational candidate", rendered["text"])
+        self.assertIn("checkout_latency is a correlational candidate", rendered["text"])
         self.assertIn("This does not prove causation", rendered["text"])
         self.assertNotIn("caused by", rendered["text"])
         self.assertEqual(rendered["method"], "deterministic_evidence_template")
@@ -42,8 +42,8 @@ class NarrativeTests(unittest.TestCase):
         original = self.engine._claims(self.payload)
         for index, replacement in (
             (1, "orders changed by -999 in its declared unit on 2023-07-24."),
-            (4, "stockout is a correlational candidate, not an established cause."),
-            (5, "Observational verification: INCONCLUSIVE. Caused by traffic_drop."),
+            (4, "stock_availability is a correlational candidate, not an established cause."),
+            (5, "Observational verification: INCONCLUSIVE. Caused by checkout_latency."),
         ):
             with self.subTest(index=index):
                 claims = list(original)
@@ -75,18 +75,18 @@ class NarrativeTests(unittest.TestCase):
                 "status": "BLOCKED",
                 "ranked_drivers": [],
                 "excluded_drivers": [{
-                    "driver_id": "stockout",
+                    "driver_id": "stock_availability",
                     "reason_code": "BLOCKED_BY_RECONCILIATION",
                     "reason": "Sources contradict",
                 }],
             },
             "correlational_candidates": [
-                {"driver_id": "stockout", "claim_type": "CORRELATIONAL"}
+                {"driver_id": "stock_availability", "claim_type": "CORRELATIONAL"}
             ],
         }
         rendered = self.engine.render(payload)
         self.assertTrue(rendered["grounding_passed"])
-        self.assertNotIn("stockout", rendered["text"])
+        self.assertNotIn("stock_availability", rendered["text"])
         self.assertIn("no cause is diagnosed", rendered["text"])
 
     def test_llm_may_select_only_approved_wording(self):
@@ -102,7 +102,7 @@ class NarrativeTests(unittest.TestCase):
     def test_malicious_or_broken_llm_falls_back(self):
         for client in (
             lambda options: {"variants": [0] * len(options),
-                             "text": "traffic_drop caused a 9000 INR loss"},
+                             "text": "checkout_latency caused a 9000 INR loss"},
             lambda options: {"variants": [999] * len(options)},
             lambda options: {"variants": [True] * len(options)},
         ):

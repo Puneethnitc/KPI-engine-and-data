@@ -12,8 +12,8 @@ class ActionTests(unittest.TestCase):
             "target_date": "2024-01-31",
             "contract_snapshot": {
                 "drivers": {"candidate_drivers": [{
-                    "driver_id": "stockout",
-                    "display_name": "Stockout units",
+                    "driver_id": "stock_availability",
+                    "display_name": "Stock availability",
                     "source_id": "sales_daily",
                     "unit": "units/day",
                     "controllability": "controllable",
@@ -23,13 +23,13 @@ class ActionTests(unittest.TestCase):
             "driver_analysis": {
                 "status": "ASSESSED",
                 "ranked_drivers": [{
-                    "driver_id": "stockout", "rank": 1, "claim_type": "CORRELATIONAL",
+                    "driver_id": "stock_availability", "rank": 1, "claim_type": "CORRELATIONAL",
                     "source_id": "sales_daily", "controllability": "controllable",
                     "alignment_method": "daily_date_grouping",
                 }],
                 "excluded_drivers": [],
             },
-            "causal_verification": {"verdict": "INCONCLUSIVE", "driver_id": "stockout"},
+            "causal_verification": {"verdict": "INCONCLUSIVE", "driver_id": "stock_availability"},
             "confidence_profile": {
                 "overall": {"status": "LOW"},
                 "source": {"status": "HIGH", "blocking": False},
@@ -57,26 +57,26 @@ class ActionTests(unittest.TestCase):
         self.assertIsNone(card["expected_impact_unit"])
         self.assertEqual(card["impact_method"], "NOT_ESTIMATED")
         self.assertTrue(card["evidence_references"])
-        self.assertEqual(card["evidence_references"][0]["driver_id"], "stockout")
-        self.assertIn("stockout", card["monitoring_plan"])
+        self.assertEqual(card["evidence_references"][0]["driver_id"], "stock_availability")
+        self.assertIn("stock_availability", card["monitoring_plan"])
         self.assertTrue(card["stop_conditions"])
 
     def test_low_confidence_and_not_assessed_cannot_create_action_proposal(self):
         supported = self._ranked_result(
-            causal_verification={"verdict": "SUPPORTED_CONDITIONAL", "driver_id": "stockout"},
+            causal_verification={"verdict": "SUPPORTED_CONDITIONAL", "driver_id": "stock_availability"},
             confidence_profile={"overall": {"status": "LOW"}, "source": {"status": "HIGH", "blocking": False}},
         )
         self.assertEqual(ActionRecommendationEngine.recommend(supported)[0]["kind"], "NEXT_CHECK")
 
         not_assessed = self._ranked_result(
-            causal_verification={"verdict": "UNTESTABLE", "driver_id": "stockout"},
+            causal_verification={"verdict": "UNTESTABLE", "driver_id": "stock_availability"},
             confidence_profile={"overall": {"status": "NOT_ASSESSED"}, "source": {"status": "HIGH", "blocking": False}},
         )
         self.assertEqual(ActionRecommendationEngine.recommend(not_assessed)[0]["kind"], "NEXT_CHECK")
 
     def test_conditional_support_is_approved_but_impact_remains_unestimated(self):
         result = self._ranked_result(
-            causal_verification={"verdict": "SUPPORTED_CONDITIONAL", "driver_id": "stockout"},
+            causal_verification={"verdict": "SUPPORTED_CONDITIONAL", "driver_id": "stock_availability"},
             confidence_profile={"overall": {"status": "MODERATE"}, "source": {"status": "HIGH", "blocking": False}},
         )
         card = ActionRecommendationEngine.recommend(result)[0]
@@ -99,7 +99,7 @@ class ActionTests(unittest.TestCase):
         cards = ActionRecommendationEngine.recommend({
             "verdict": "EVENT_ASSESSED_CAUSE_UNVERIFIED",
             "causal_verification": {
-                "verdict": "SUPPORTED_CONDITIONAL", "driver_id": "stockout",
+                "verdict": "SUPPORTED_CONDITIONAL", "driver_id": "stock_availability",
             },
         })
         self.assertEqual(cards[0]["kind"], "ACTION_PROPOSAL")
@@ -110,9 +110,9 @@ class ActionTests(unittest.TestCase):
         cards = ActionRecommendationEngine.recommend({
             "verdict": "MATERIAL_CAUSE_UNVERIFIED",
             "causal_verdict": "REJECTED",
-            "causal_verification": {"verdict": "REJECTED", "driver_id": "stockout"},
+            "causal_verification": {"verdict": "REJECTED", "driver_id": "stock_availability"},
             "correlational_candidates": [
-                {"driver_id": "stockout", "claim_type": "CORRELATIONAL"}
+                {"driver_id": "stock_availability", "claim_type": "CORRELATIONAL"}
             ],
         })
         self.assertEqual(cards[0]["kind"], "NEXT_CHECK")
@@ -129,17 +129,17 @@ class ActionTests(unittest.TestCase):
     def test_excluded_driver_cannot_reenter_from_legacy_candidate_list(self):
         cards = ActionRecommendationEngine.recommend({
             "verdict": "MATERIAL_CAUSE_UNVERIFIED",
-            "causal_verification": {"verdict": "UNTESTABLE", "driver_id": "stockout"},
+            "causal_verification": {"verdict": "UNTESTABLE", "driver_id": "stock_availability"},
             "driver_analysis": {
                 "status": "INSUFFICIENT_EVIDENCE",
                 "ranked_drivers": [],
                 "excluded_drivers": [{
-                    "driver_id": "stockout", "reason_code": "LOW_COVERAGE",
+                    "driver_id": "stock_availability", "reason_code": "LOW_COVERAGE",
                     "reason": "Coverage below threshold",
                 }],
             },
             "correlational_candidates": [
-                {"driver_id": "stockout", "claim_type": "CORRELATIONAL"}
+                {"driver_id": "stock_availability", "claim_type": "CORRELATIONAL"}
             ],
         })
         self.assertIsNone(cards[0]["driver_id"])

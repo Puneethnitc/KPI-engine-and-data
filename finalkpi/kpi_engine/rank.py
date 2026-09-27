@@ -2,8 +2,11 @@
 # Current: native-grain first differences, governed lags, available-pair and
 # coverage checks, nested-window stability, explicit composite ranking score.
 # Lag search remains exploratory; no multiple-testing correction is applied.
+# Expected direction (Stage 1, F-R5) resolves a per-scope override
+# (expected_direction_by_scope) before falling back to the flat declaration.
 # Next: validate dependence-aware p-value correction on reviewed labelled runs,
 # and add conditional/multivariate interaction analysis only with diagnostics.
+# Rank by explained movement (Stage 3), not marginal correlation (F-R3).
 # Check: candidate completeness, future-row invariance, weekly deduplication,
 # missingness denominators, lag order and window-sensitive rank behavior.
 
@@ -199,6 +202,26 @@ class CorrelationalRanker:
     @staticmethod
     def _resolve_policy(contract: KPIContract | None, driver_spec: Optional[Dict[str, Any]] = None) -> RankingPolicy:
         return RankingPolicy.from_contract(contract, driver_spec)
+
+    @staticmethod
+    def _resolve_expected_direction(spec: Dict[str, Any], scope: Dict[str, str]) -> Optional[str]:
+        """Resolve a driver's expected direction for the requested slice.
+
+        A scope override (contracts/models.py's expected_direction_by_scope,
+        e.g. weather_temp: colder means more Apparel sales but less demand for
+        seasonal categories elsewhere) takes precedence over the flat
+        expected_direction. With neither declared, the direction is None: the
+        driver is flagged (not ranked as confident), never guessed.
+        """
+        scoped = spec.get("expected_direction_by_scope")
+        if isinstance(scoped, dict):
+            for dimension, overrides in scoped.items():
+                if not isinstance(overrides, dict):
+                    continue
+                value = scope.get(dimension)
+                if value is not None and value in overrides:
+                    return overrides[value]
+        return spec.get("expected_direction")
 
     @staticmethod
     def _lag_candidates(allowed_lags: Optional[List[int]], max_lag: int) -> List[int]:
@@ -558,7 +581,10 @@ class CorrelationalRanker:
             score = abs(correlation) * coverage_ratio * sample_factor * stability_factor
             source_id = spec.get("source", "sales_daily")
             # Direction is governance metadata, never inferred from a driver ID.
-            expected_dir = spec.get("expected_direction")
+            # A scope override (e.g. weather_temp's category-dependent sign)
+            # takes precedence over the flat expected_direction; if neither is
+            # declared, expected_dir stays None (flagged, not ranked as confident).
+            expected_dir = self._resolve_expected_direction(spec, requested_scope)
             dir_consistent = None if expected_dir is None else (
                 (correlation < 0 and expected_dir == "negative") or
                 (correlation > 0 and expected_dir == "positive")

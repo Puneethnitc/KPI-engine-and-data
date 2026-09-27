@@ -1,6 +1,8 @@
 # IMPLEMENTATION HANDOFF — contract loading
 # Current: YAML loader rejects duplicate keys, unknown top-level fields and IDs;
-# converts values to dataclasses and invokes their validation.
+# converts values to dataclasses and invokes their validation. mechanical_components
+# (Stage 1, F-R2) and expected_direction_by_scope (F-R4) are accepted driver/contract
+# fields; LEGACY_DRIVER_IDS/resolve_driver_id resolve pre-rename driver ids (F-R5).
 # Next: add schema-version dispatch, nested validation, source-catalog resolution
 # and a stable contract digest for each run. KPI version and schema version are
 # separate concepts. Validate actual engine support, not only accepted syntax.
@@ -43,7 +45,7 @@ CONTRACT_FIELDS = {
     "kpi_id", "version", "definition", "value_column", "aggregation",
     "formula", "unit", "grain", "source", "dimensions", "materiality",
     "seasonal_period", "min_history_periods", "owner", "access_tags",
-    "decomposition", "reconciliation", "candidate_drivers",
+    "decomposition", "reconciliation", "candidate_drivers", "mechanical_components",
     "numerator_column", "denominator_column", "weight_column",
     "schema_version", "source_catalog", "calculation", "comparison_policy",
     "missing_data_policy", "missing_data", "comparison",
@@ -63,10 +65,27 @@ NESTED_FIELDS = {
     "decomposition": {"quantity_column", "reference_rate_column"},
 }
 DRIVER_FIELDS = {
-    "id", "display_name", "unit", "controllability", "expected_direction", "column", "source", "grain", "aggregation",
+    "id", "display_name", "unit", "controllability", "expected_direction", "expected_direction_by_scope",
+    "column", "source", "grain", "aggregation",
     "allowed_lags", "min_pairs", "minimum_coverage", "max_lag", "window_days", "threshold", "ranking_window_days",
     "monthly_min_pairs", "owner", "ranking", "policy", "lag_policy", "availability", "lag_availability",
 }
+
+# Stage 1 (plan §1.3) renames these driver ids for clarity (a driver id should
+# describe the variable, not the event/direction baked into the old name).
+# Historical runs and feedback records may still reference the old spelling;
+# resolve_driver_id() is the single place that alias gets resolved.
+LEGACY_DRIVER_IDS = {
+    "ad_spend_drop": "marketing_spend",
+    "checkout_latency_spike": "checkout_latency",
+    "competitor_price_cut": "competitor_price_index",
+    "stockout": "stock_availability",
+}
+
+
+def resolve_driver_id(driver_id: str) -> str:
+    """Map a legacy driver id (pre plan §1.3 rename) to its current id."""
+    return LEGACY_DRIVER_IDS.get(driver_id, driver_id)
 
 class KPIRegistry:
     """Stage 0: Versioned KPI Registry.
@@ -188,6 +207,7 @@ class KPIRegistry:
             decomposition=data.get("decomposition") or {},
             reconciliation=data.get("reconciliation"),
             candidate_drivers=data.get("candidate_drivers", []),
+            mechanical_components=list(data.get("mechanical_components") or []),
             numerator_column=data.get("numerator_column") or calculation_data.get("numerator_column"),
             denominator_column=data.get("denominator_column") or calculation_data.get("denominator_column"),
             weight_column=data.get("weight_column") or calculation_data.get("weight_column"),

@@ -52,10 +52,10 @@ class PipelineRegressions(unittest.TestCase):
         return self.pipeline.run_diagnosis(**args)
 
     def test_scenario_allocation_requires_declared_drivers_and_unit(self):
-        values = {(): 100, ("traffic_drop",): 90, ("stockout",): 80,
-                  ("traffic_drop", "stockout"): 60}
+        values = {(): 100, ("checkout_latency",): 90, ("stock_availability",): 80,
+                  ("checkout_latency", "stock_availability"): 60}
         scenario = ContributionScenario(
-            "orders", "count", ("traffic_drop", "stockout"), values, -50,
+            "orders", "count", ("checkout_latency", "stock_availability"), values, -50,
         )
         result = self.pipeline.quantify_scenario(scenario)
         self.assertEqual(result["claim_type"], "MODEL_BASED_SCENARIO")
@@ -64,7 +64,7 @@ class PipelineRegressions(unittest.TestCase):
             self.pipeline.quantify_scenario(replace(scenario, unit="INR"))
         with self.assertRaisesRegex(ValueError, "not declared"):
             self.pipeline.quantify_scenario(replace(
-                scenario, drivers=("traffic_drop", "invented"),
+                scenario, drivers=("checkout_latency", "invented"),
             ))
 
     def test_material_event_has_matching_bridge_and_no_invented_cause(self):
@@ -77,7 +77,7 @@ class PipelineRegressions(unittest.TestCase):
         self.assertEqual(result["source_coverage"]["target_marketing_status"], "UNAVAILABLE_OR_MISSING")
         ad_spend = next(
             candidate for candidate in result["correlational_candidates"]
-            if candidate["driver_id"] == "ad_spend_drop"
+            if candidate["driver_id"] == "marketing_spend"
         )
         self.assertTrue(ad_spend["target_period_available"])
         self.assertEqual(ad_spend["claim_type"], "CORRELATIONAL")
@@ -98,6 +98,25 @@ class PipelineRegressions(unittest.TestCase):
         self.assertTrue(result["grounding_passed"])
         self.assertTrue(result["narrative_claims"])
         json.dumps(result, allow_nan=False)
+
+    def test_stockout_driver_is_eligible_not_constant_series(self):
+        # F-R1 (plan §1.1): stockout used to map to lost_units_stockout, which
+        # is 0 on every row, so it was always excluded as CONSTANT_SERIES.
+        # stock_availability (the real signal; it falls to 0.15 during the
+        # EVT03 South/Apparel stockout) must be ranked or excluded for a real
+        # reason, never CONSTANT_SERIES.
+        result = self.run_case(
+            target_date="2024-02-07", persona="CFO",
+            dimension_slice={"region": "South", "category": "Apparel"},
+        )
+        ranked_ids = {item["driver_id"] for item in result["driver_analysis"]["ranked_drivers"]}
+        excluded = {
+            item["driver_id"]: item["reason_code"]
+            for item in result["driver_analysis"]["excluded_drivers"]
+        }
+        self.assertIn("stock_availability", ranked_ids | set(excluded))
+        self.assertNotEqual(excluded.get("stock_availability"), "CONSTANT_SERIES")
+        self.assertIn("stock_availability", ranked_ids)
 
     def test_diagnosis_embeds_same_versioned_semantic_contract(self):
         result = self.run_case(kpi_id="conversion_rate")
@@ -237,7 +256,7 @@ class PipelineRegressions(unittest.TestCase):
 
     def test_cross_region_control_is_not_read_by_regional_manager(self):
         design = VerificationDesign(
-            driver_id="traffic_drop",
+            driver_id="checkout_latency",
             treated_slice={"region": "North", "category": "Electronics"},
             control_slice={"region": "South", "category": "Electronics"},
             pre_start="2023-06-20", treatment_start="2023-07-20",
@@ -253,7 +272,7 @@ class PipelineRegressions(unittest.TestCase):
 
     def test_authorized_observational_design_runs_without_inventing_a_cause(self):
         design = VerificationDesign(
-            driver_id="traffic_drop",
+            driver_id="price_discount",
             treated_slice={"region": "North", "category": "Electronics"},
             control_slice={"region": "South", "category": "Electronics"},
             pre_start="2023-06-20", treatment_start="2023-07-20",
@@ -274,7 +293,7 @@ class PipelineRegressions(unittest.TestCase):
 
     def test_event_verification_runs_when_final_day_is_not_material(self):
         design = VerificationDesign(
-            driver_id="traffic_drop",
+            driver_id="checkout_latency",
             treated_slice={"region": "North", "category": "Electronics"},
             control_slice={"region": "South", "category": "Electronics"},
             pre_start="2023-06-20", treatment_start="2023-07-20",
@@ -295,9 +314,35 @@ class PipelineRegressions(unittest.TestCase):
         self.assertIsNotNone(event["confidence"])
         json.dumps(event, allow_nan=False)
 
+    def test_verify_event_approved_design_updates_causal_confidence_dimension(self):
+        # F-C4 (plan §1.7): verify_event never set _causal_design_approved, so
+        # build_profile's causal dimension was silently forced to NOT_ASSESSED
+        # even after a real DiD ran. An approved design must now change it.
+        design = VerificationDesign(
+            driver_id="checkout_latency",
+            treated_slice={"region": "North", "category": "Electronics"},
+            control_slice={"region": "South", "category": "Electronics"},
+            pre_start="2023-06-20", treatment_start="2023-07-20",
+            post_end="2023-08-13",
+            quiet_windows=(("2023-04-01", "2023-04-14"),
+                           ("2023-05-01", "2023-05-14")),
+            expected_driver_direction=-1, expected_outcome_direction=-1,
+        )
+        unapproved = self.pipeline.verify_event(
+            "net_sales_revenue", design, persona="CFO", **self.paths,
+        )
+        self.assertEqual(unapproved["confidence_profile"]["causal"]["status"], "NOT_ASSESSED")
+
+        approved = self.pipeline.verify_event(
+            "net_sales_revenue", design, persona="CFO",
+            approved_causal_design=True, **self.paths,
+        )
+        self.assertNotEqual(approved["confidence_profile"]["causal"]["status"], "NOT_ASSESSED")
+        self.assertEqual(approved["causal_verdict"], unapproved["causal_verdict"])
+
     def test_event_verification_checks_control_access_before_loading_data(self):
         design = VerificationDesign(
-            driver_id="traffic_drop",
+            driver_id="checkout_latency",
             treated_slice={"region": "North", "category": "Electronics"},
             control_slice={"region": "South", "category": "Electronics"},
             pre_start="2023-06-20", treatment_start="2023-07-20",
@@ -384,7 +429,10 @@ class PipelineRegressions(unittest.TestCase):
         self.assertIsNone(orders.reconciliation)
         self.assertEqual(revenue.decomposition["quantity_column"], "units_sold")
         self.assertEqual(orders.decomposition["quantity_column"], "traffic_total")
-        self.assertEqual(len(revenue.candidate_drivers), 5)
+        # checkout_latency, competitor_price_index, marketing_spend, stock_availability,
+        # price_discount, promo_flag, weather_temp (traffic_drop removed: F-R2, it was a
+        # mechanical funnel component, not a driver).
+        self.assertEqual(len(revenue.candidate_drivers), 7)
 
     def test_undeclared_driver_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Drivers not declared"):

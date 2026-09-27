@@ -148,6 +148,11 @@ class SemanticContractTests(unittest.TestCase):
     def test_invalid_dimensions_driver_source_and_driver_field_fail(self):
         source = yaml.safe_load((REGISTRY_DIR / "orders.yaml").read_text())
         source["dimensions"] = ["country"]
+        # Isolate the top-level dimensions check: weather_temp's
+        # expected_direction_by_scope references "category", which would
+        # otherwise (correctly) fail its own validation first.
+        for driver in source["candidate_drivers"]:
+            driver.pop("expected_direction_by_scope", None)
         with tempfile.TemporaryDirectory() as directory:
             self.write_contract(directory, source)
             with self.assertRaisesRegex(ValueError, "dimensions.*country"):
@@ -165,6 +170,24 @@ class SemanticContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.write_contract(directory, source)
             with self.assertRaisesRegex(ValueError, "candidate_drivers\\[0\\].column"):
+                KPIRegistry(directory)
+
+    def test_mechanical_component_driver_is_rejected(self):
+        # F-R2 (plan §1.4): a candidate driver may not be the KPI's own
+        # decomposition/mechanical component (e.g. traffic), even under a
+        # different driver id, or Stage 0's "traffic always wins" bug returns.
+        source = yaml.safe_load((REGISTRY_DIR / "orders.yaml").read_text())
+        source["candidate_drivers"][0]["column"] = "traffic_total"  # orders' own decomposition quantity_column
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_contract(directory, source)
+            with self.assertRaisesRegex(ValueError, "mechanical KPI component"):
+                KPIRegistry(directory)
+
+        source = yaml.safe_load((REGISTRY_DIR / "net_sales_revenue.yaml").read_text())
+        source["candidate_drivers"][0]["column"] = "traffic_online"  # declared in mechanical_components
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_contract(directory, source)
+            with self.assertRaisesRegex(ValueError, "mechanical KPI component"):
                 KPIRegistry(directory)
 
     def test_reconciliation_and_decomposition_are_kpi_specific_and_validated(self):

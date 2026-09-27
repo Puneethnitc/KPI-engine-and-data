@@ -99,7 +99,7 @@ class DomainProjectionTests(unittest.TestCase):
                     "evidence_refs": ["reconciliation_verdict", "movement_assessment"],
                 }},
             },
-            "driver_analysis": {"status": "ASSESSED", "ranked_drivers": [{"driver_id": "ad_spend_drop", "score": 0.5}]},
+            "driver_analysis": {"status": "ASSESSED", "ranked_drivers": [{"driver_id": "marketing_spend", "score": 0.5}]},
             "decision_cards": [{"action_id": "review", "status": "REVIEW"}],
         }
 

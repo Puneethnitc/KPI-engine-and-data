@@ -53,7 +53,7 @@ class ChatStorageRegressionTests(unittest.TestCase):
                 "driver_analysis": {
                     "status": "ASSESSED",
                     "ranked_drivers": [{"rank": 1, "driver_id": "traffic", "score": 0.42}],
-                    "excluded_drivers": [{"driver_id": "stockout", "reason_code": "LOW_COVERAGE"}],
+                    "excluded_drivers": [{"driver_id": "stock_availability", "reason_code": "LOW_COVERAGE"}],
                 },
             }
             save_diagnosis_run(

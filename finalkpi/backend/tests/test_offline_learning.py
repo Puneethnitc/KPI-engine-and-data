@@ -73,19 +73,19 @@ class OfflineLearningTests(unittest.TestCase):
             "reconciliation_verdict": {"status": "AGREED", "gap_pct": 0.2},
             "decomposition": {"total_delta": 15, "volume_effect": 10, "is_identity_held": True},
             "decomposition_status": "IDENTITY_HELD",
-            "driver_analysis": {"status": "ASSESSED", "ranked_drivers": [{"driver_id": "traffic_drop", "relationship_type": "ASSOCIATION"}], "excluded_drivers": []},
-            "correlational_candidates": [{"driver_id": "traffic_drop", "claim_type": "CORRELATIONAL"}],
+            "driver_analysis": {"status": "ASSESSED", "ranked_drivers": [{"driver_id": "checkout_latency", "relationship_type": "ASSOCIATION"}], "excluded_drivers": []},
+            "correlational_candidates": [{"driver_id": "checkout_latency", "claim_type": "CORRELATIONAL"}],
             "causal_verdict": "UNTESTABLE",
             "causal_verification": {"verdict": "UNTESTABLE"},
             "confidence": {"status": "INSUFFICIENT"},
             "confidence_profile": {"overall": {"status": "MODERATE"}},
             "decision_cards": [{"action_id": "action-1", "recommendation": "Review the traffic association."}],
             "narrative_claims": [{
-                "text": "traffic_drop is a correlational candidate, not an established cause.",
+                "text": "checkout_latency is a correlational candidate, not an established cause.",
                 "evidence_paths": ["correlational_candidates.0.driver_id"],
                 "claim_type": "CORRELATIONAL",
             }],
-            "narrative": "traffic_drop is a correlational candidate, not an established cause.",
+            "narrative": "checkout_latency is a correlational candidate, not an established cause.",
             "grounding_passed": True,
             "contract_version": "3",
             "contract_hash": "contract-hash-3",
@@ -160,9 +160,9 @@ class OfflineLearningTests(unittest.TestCase):
         return feedback, proposal
 
     def test_only_accepted_proposals_apply_and_unsupported_types_stay_accepted(self):
-        feedback = self.correction(issue="DRIVER", target_type="DRIVER", target_id="traffic_drop", change="Keep this driver association-only.")
+        feedback = self.correction(issue="DRIVER", target_type="DRIVER", target_id="checkout_latency", change="Keep this driver association-only.")
         proposal = self.proposal([feedback["feedback_id"]], proposal_type="DRIVER_CONFIGURATION_CHANGE", proposed_change={
-            "source_feedback_id": feedback["feedback_id"], "driver_id": "traffic_drop", "proposed_configuration": feedback["proposed_correction"],
+            "source_feedback_id": feedback["feedback_id"], "driver_id": "checkout_latency", "proposed_configuration": feedback["proposed_correction"],
         })
         with self.assertRaises(HTTPException) as not_accepted:
             api_apply_improvement_proposal(proposal["proposal_id"], user_id="demo-cfo")
@@ -390,7 +390,7 @@ class OfflineLearningTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(narrative_path.read_bytes()).hexdigest(), live_hash_before)
 
         unsupported_feedback = self.correction(
-            issue="DRIVER", target_type="DRIVER", target_id="traffic_drop",
+            issue="DRIVER", target_type="DRIVER", target_id="checkout_latency",
             change="Keep this driver association-only.",
         )
         unsupported_proposal = self.proposal(
@@ -398,7 +398,7 @@ class OfflineLearningTests(unittest.TestCase):
             proposal_type="DRIVER_CONFIGURATION_CHANGE",
             proposed_change={
                 "source_feedback_id": unsupported_feedback["feedback_id"],
-                "driver_id": "traffic_drop",
+                "driver_id": "checkout_latency",
                 "proposed_configuration": unsupported_feedback["proposed_correction"],
             },
         )

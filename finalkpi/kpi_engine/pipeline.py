@@ -7,6 +7,8 @@
 # at a time. run_diagnosis and verify_event must share the same prepared inputs.
 # Check: current five KPI outputs match before broadening supported source/grain;
 # future or unavailable rows, denied controls and missing coverage still abstain.
+# verify_event mirrors run_diagnosis's approved_causal_design flag (Stage 1, F-C4)
+# so a completed event's causal dimension is not silently forced to NOT_ASSESSED.
 # See IMPLEMENTATION_HANDOFF.md for acceptance criteria and integration consumers.
 
 """As-of KPI diagnosis with explicit boundaries between facts and hypotheses.
@@ -312,6 +314,7 @@ class KPIEnginePipeline:
         finance_csv: str,
         persona: str = "CFO",
         as_of: Optional[str] = None,
+        approved_causal_design: bool = False,
     ) -> Dict[str, Any]:
         """Assess a predeclared completed event, independent of a daily alert."""
         if not isinstance(verification_design, VerificationDesign):
@@ -332,6 +335,9 @@ class KPIEnginePipeline:
             "causal_verdict": None,
             "causal_verification": None,
             "confidence": None,
+            # F-C4: mirrors run_diagnosis so build_profile's causal dimension
+            # is not silently forced to NOT_ASSESSED after a real DiD ran.
+            "_causal_design_approved": approved_causal_design,
         }
         for label, group in (("treated", verification_design.treated_slice),
                              ("control", verification_design.control_slice)):

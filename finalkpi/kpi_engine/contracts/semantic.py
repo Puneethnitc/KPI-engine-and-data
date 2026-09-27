@@ -150,10 +150,15 @@ def semantic_contract_projection(
                     "unit": item.get("unit"),
                     "controllability": item.get("controllability", "contextual").upper(),
                     "expected_direction": item.get("expected_direction"),
+                    "expected_direction_by_scope": item.get("expected_direction_by_scope"),
                     "allowed_lags": item.get("allowed_lags"),
                     "minimum_pairs": item.get("min_pairs"),
                     "minimum_coverage": item.get("minimum_coverage"),
-                    "owner": item.get("owner", contract.owner),
+                    # No fallback to the KPI owner (F-A2): a driver without its
+                    # own declared owner resolves through action.py's lever
+                    # catalog instead, so e.g. a marketing lever is never
+                    # assigned to the KPI's regional/ops owner.
+                    "owner": item.get("owner"),
                 }
                 for item in contract.candidate_drivers
             ],

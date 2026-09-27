@@ -57,7 +57,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     question: str
     user_id: Optional[str] = None
-    persona: str = "CFO"
+    persona: Optional[str] = None
     diagnosis_json: Optional[Dict[str, Any]] = None
     active_kpi: Optional[str] = None
     active_date: Optional[str] = None

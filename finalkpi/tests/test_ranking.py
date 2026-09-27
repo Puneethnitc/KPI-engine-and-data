@@ -27,10 +27,10 @@ class RankingCases(unittest.TestCase):
         frame = pd.DataFrame({
             "date": pd.date_range("2023-01-01", periods=100),
             "orders": kpi,
-            "traffic_online": driver,
+            "stock_availability": driver,
         })
         candidates = self.ranker.rank_candidates(
-            frame, "orders", ["traffic_drop"], contract=self.contract,
+            frame, "orders", ["stock_availability"], contract=self.contract,
         )
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].optimal_lag_days, 2)
@@ -38,7 +38,7 @@ class RankingCases(unittest.TestCase):
         self.assertEqual(candidates[0].claim_type, "CORRELATIONAL")
         self.assertEqual(candidates[0].source_grain, "daily")
         analysis = self.ranker.evaluate_candidates(
-            frame, "orders", ["traffic_drop"], contract=self.contract,
+            frame, "orders", ["stock_availability"], contract=self.contract,
         ).driver_analysis
         ranked = analysis["ranked_drivers"][0]
         self.assertEqual(ranked["temporal_order"], "BEFORE")
@@ -63,7 +63,7 @@ class RankingCases(unittest.TestCase):
                     "marketing_spend": spend,
                 })
         candidates = self.ranker.rank_candidates(
-            pd.DataFrame(rows), "orders", ["ad_spend_drop"],
+            pd.DataFrame(rows), "orders", ["marketing_spend"],
             contract=self.contract, window_days=200,
         )
         self.assertEqual(len(candidates), 1)
@@ -72,7 +72,7 @@ class RankingCases(unittest.TestCase):
         self.assertEqual(candidates[0].optimal_lag_days, 0)
         self.assertGreater(candidates[0].max_correlation, 0.99)
         analysis = self.ranker.evaluate_candidates(
-            pd.DataFrame(rows), "orders", ["ad_spend_drop"],
+            pd.DataFrame(rows), "orders", ["marketing_spend"],
             contract=self.contract, window_days=200,
         ).driver_analysis
         weekly_driver = analysis["ranked_drivers"][0]
@@ -97,7 +97,7 @@ class RankingCases(unittest.TestCase):
                     "marketing_spend": 1000.0 * (0.05 + signal),
                 })
         result = self.ranker.evaluate_candidates(
-            pd.DataFrame(rows), "conversion_rate", ["ad_spend_drop"],
+            pd.DataFrame(rows), "conversion_rate", ["marketing_spend"],
             contract=contract, window_days=200,
         )
         self.assertEqual(result.exclusions, [])
@@ -111,19 +111,19 @@ class RankingCases(unittest.TestCase):
         frame = pd.DataFrame({
             "date": pd.date_range("2023-01-01", periods=100),
             "orders": driver * 0.5,
-            "traffic_online": driver,
+            "stock_availability": driver,
         })
         first = self.ranker.rank_candidates(
-            frame, "orders", ["traffic_drop"], contract=self.contract,
+            frame, "orders", ["stock_availability"], contract=self.contract,
             target_date="2023-04-10",
         )
         future = pd.DataFrame({
             "date": pd.date_range("2023-04-11", periods=10),
             "orders": [10000.0] * 10,
-            "traffic_online": [1.0] * 10,
+            "stock_availability": [1.0] * 10,
         })
         replay = self.ranker.rank_candidates(
-            pd.concat([frame, future]), "orders", ["traffic_drop"],
+            pd.concat([frame, future]), "orders", ["stock_availability"],
             contract=self.contract, target_date="2023-04-10",
         )
         self.assertEqual(first, replay)
@@ -142,7 +142,7 @@ class RankingCases(unittest.TestCase):
                         "marketing_spend": float(week + 1) if region == "North" else np.nan,
                     })
         evaluation = self.ranker.evaluate_candidates(
-            pd.DataFrame(rows), "orders", ["ad_spend_drop"],
+            pd.DataFrame(rows), "orders", ["marketing_spend"],
             contract=self.contract, window_days=200,
         )
         self.assertEqual(evaluation.candidates, [])
@@ -153,20 +153,20 @@ class RankingCases(unittest.TestCase):
         frame = pd.DataFrame({
             "date": dates,
             "orders": [100 + (i % 5) for i in range(40)],
-            "traffic_online": [5.0] * 40,
+            "stock_availability": [5.0] * 40,
         })
         evaluation = self.ranker.evaluate_candidates(
-            frame, "orders", ["checkout_latency_spike", "traffic_drop"],
+            frame, "orders", ["checkout_latency", "stock_availability"],
             contract=self.contract,
         )
         self.assertEqual(evaluation.candidates, [])
         self.assertEqual(
             {item.driver_id: item.reason_code for item in evaluation.exclusions},
-            {"checkout_latency_spike": "SOURCE_UNAVAILABLE", "traffic_drop": "CONSTANT_SERIES"},
+            {"checkout_latency": "SOURCE_UNAVAILABLE", "stock_availability": "CONSTANT_SERIES"},
         )
         short = self.ranker.evaluate_candidates(
-            frame.iloc[:10].assign(traffic_online=range(10)),
-            "orders", ["traffic_drop"], contract=self.contract,
+            frame.iloc[:10].assign(stock_availability=range(10)),
+            "orders", ["stock_availability"], contract=self.contract,
         )
         self.assertEqual(short.exclusions[0].reason_code, "INSUFFICIENT_HISTORY")
 
@@ -175,10 +175,10 @@ class RankingCases(unittest.TestCase):
         frame = pd.DataFrame({
             "date": dates,
             "orders": np.arange(60, dtype=float),
-            "traffic_online": np.arange(60, dtype=float),
+            "stock_availability": np.arange(60, dtype=float),
             "checkout_latency_ms": np.ones(60),
         })
-        evaluated_ids = ["traffic_drop", "checkout_latency_spike"]
+        evaluated_ids = ["stock_availability", "checkout_latency"]
         evaluation = self.ranker.evaluate_candidates(
             frame, "orders", evaluated_ids, contract=self.contract,
         )
@@ -198,10 +198,10 @@ class RankingCases(unittest.TestCase):
         frame = pd.DataFrame({
             "date": pd.date_range("2023-01-01", periods=80),
             "orders": kpi,
-            "traffic_online": driver,
+            "stock_availability": driver,
         })
         result = self.ranker.evaluate_candidates(
-            frame, "orders", ["traffic_drop"], contract=self.contract,
+            frame, "orders", ["stock_availability"], contract=self.contract,
         )
         self.assertEqual(len(result.candidates), 1)
         item = result.driver_analysis["ranked_drivers"][0]
@@ -216,10 +216,10 @@ class RankingCases(unittest.TestCase):
         frame = pd.DataFrame({
             "date": pd.date_range("2023-01-01", periods=10),
             "orders": np.arange(10, dtype=float),
-            "traffic_online": np.arange(10, dtype=float),
+            "stock_availability": np.arange(10, dtype=float),
         })
         result = self.ranker.evaluate_candidates(
-            frame, "orders", ["traffic_drop"], contract=self.contract,
+            frame, "orders", ["stock_availability"], contract=self.contract,
         )
         self.assertEqual(result.driver_analysis["status"], "INSUFFICIENT_EVIDENCE")
         self.assertEqual(result.driver_analysis["ranked_drivers"], [])
@@ -245,9 +245,9 @@ class RankingCases(unittest.TestCase):
         frame = pd.DataFrame({
             "date": pd.date_range("2023-01-01", periods=80),
             "orders": random.normal(size=80),
-            "traffic_online": driver,
+            "stock_availability": driver,
         })
-        result = self.ranker.evaluate_candidates(frame, "orders", ["traffic_drop"], contract=self.contract)
+        result = self.ranker.evaluate_candidates(frame, "orders", ["stock_availability"], contract=self.contract)
         self.assertEqual(result.driver_analysis["ranked_drivers"], [])
         excluded = result.driver_analysis["excluded_drivers"][0]
         self.assertEqual(excluded["reason_code"], "LOW_COVERAGE")
@@ -296,21 +296,60 @@ class RankingCases(unittest.TestCase):
         driver = np.r_[0.0, np.cumsum(driver_changes)]
         kpi = np.r_[0.0, np.cumsum(kpi_changes)]
         contract = deepcopy(self.contract)
+        stock_spec = next(d for d in self.contract.candidate_drivers if d["id"] == "stock_availability")
         contract.candidate_drivers = [dict(
-            self.contract.candidate_drivers[-1], max_lag="0", allowed_lags="0",
+            stock_spec, max_lag="0", allowed_lags="0",
             stability_window_fraction="0.3",
         )]
         frame = pd.DataFrame({
             "date": pd.date_range("2023-01-01", periods=201),
             "orders": kpi,
-            "traffic_online": driver,
+            "stock_availability": driver,
         })
         result = self.ranker.evaluate_candidates(
-            frame, "orders", ["traffic_drop"], contract=contract,
+            frame, "orders", ["stock_availability"], contract=contract,
             window_days=201,
         )
         self.assertEqual(result.driver_analysis["ranked_count"], 1)
         self.assertEqual(result.driver_analysis["ranked_drivers"][0]["stability_status"], "SENSITIVE")
+
+    def test_expected_direction_by_scope_resolves_over_flat_default(self):
+        # Stage 1 (plan §1.2, F-R4): weather_temp has no flat expected_direction
+        # (it is scope-dependent), only a per-category override.
+        spec = {
+            "expected_direction": None,
+            "expected_direction_by_scope": {"category": {"Apparel": "negative"}},
+        }
+        self.assertEqual(
+            CorrelationalRanker._resolve_expected_direction(spec, {"category": "Apparel"}), "negative",
+        )
+        self.assertIsNone(
+            CorrelationalRanker._resolve_expected_direction(spec, {"category": "Electronics"}),
+        )
+        self.assertIsNone(CorrelationalRanker._resolve_expected_direction(spec, {}))
+
+    def test_expected_direction_by_scope_flags_direction_conflict_for_ranked_driver(self):
+        random = np.random.default_rng(5)
+        driver = random.normal(20, 3, 100)
+        kpi = driver * 2 + random.normal(0, 0.01, 100)  # strong positive association
+        frame = pd.DataFrame({
+            "date": pd.date_range("2023-01-01", periods=100),
+            "orders": kpi,
+            "weather_temp_c": driver,
+        })
+        apparel = self.ranker.evaluate_candidates(
+            frame, "orders", ["weather_temp"], contract=self.contract, scope={"category": "Apparel"},
+        ).candidates[0]
+        self.assertEqual(apparel.expected_direction, "negative")
+        self.assertFalse(apparel.direction_consistent)
+        self.assertEqual(apparel.evidence_descriptor, "DIRECTION_CONFLICT")
+        self.assertIn("Association sign conflicts with declared driver hypothesis", apparel.limitations)
+
+        electronics = self.ranker.evaluate_candidates(
+            frame, "orders", ["weather_temp"], contract=self.contract, scope={"category": "Electronics"},
+        ).candidates[0]
+        self.assertIsNone(electronics.expected_direction)
+        self.assertIsNone(electronics.direction_consistent)
 
 
 if __name__ == "__main__":

@@ -122,11 +122,13 @@ function statusLabelForBrief(value?: string | null) {
 }
 
 const driverLabels: Record<string, string> = {
-  traffic_drop: 'Traffic movement',
-  ad_spend_drop: 'Ad-spend movement',
-  checkout_latency_spike: 'Checkout latency',
-  competitor_price_cut: 'Competitor pricing',
-  stockout: 'Stock availability',
+  marketing_spend: 'Marketing spend',
+  checkout_latency: 'Checkout latency',
+  competitor_price_index: 'Competitor pricing',
+  stock_availability: 'Stock availability',
+  price_discount: 'Price discount depth',
+  promo_flag: 'Promotion flag',
+  weather_temp: 'Weather temperature',
 }
 
 function formatValue(value: number | null | undefined, unit: string) {

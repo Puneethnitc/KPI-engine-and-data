@@ -75,6 +75,33 @@ class ChatDomainSecurityTests(unittest.TestCase):
         self.assertNotIn("875.0", repr(request.diagnosis_json))
         self.assertIsNone(request.diagnosis_json["reconciliation_verdict"]["gap_pct"])
 
+    def test_chat_without_persona_field_works_for_non_cfo_identity(self):
+        # F-P4 (plan §1.6): ChatRequest.persona now defaults to None, so a
+        # marketing (or any non-CFO) caller that omits persona is resolved
+        # from user_id instead of being rejected against a hard-coded "CFO".
+        captured = {}
+
+        def run(request):
+            captured["request"] = request
+            return ChatResponse(
+                answer="bounded", citations=[], evidence_status="NOT_APPLICABLE",
+                limitations=[], suggested_followups=[],
+            )
+
+        payload = ApiChatRequest(
+            question="Explain this", user_id="demo-marketing",
+            diagnosis_json={
+                "kpi_id": "orders", "target_date": "2023-07-24", "verdict": "NO_MATERIAL_MOVEMENT",
+                "segment": {"region": "North", "category": "Electronics"},
+            },
+            active_kpi="orders", active_date="2023-07-24", active_region="North",
+            active_category="Electronics",
+        )
+        self.assertIsNone(payload.persona)
+        with patch("backend.app.pipeline.run", side_effect=run):
+            api_chat(payload)
+        self.assertIn("request", captured)
+
 
 if __name__ == "__main__":
     unittest.main()

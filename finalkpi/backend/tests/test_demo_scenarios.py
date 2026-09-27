@@ -64,7 +64,10 @@ class DemoScenarioTests(unittest.TestCase):
         self.assertIsNone(profile["causal"]["score"])
         driver_analysis = result["driver_analysis"]
         self.assertEqual(driver_analysis["status"], "ASSESSED")
-        self.assertEqual(driver_analysis["candidate_count"], 5)
+        # net_sales_revenue's candidate_drivers (Stage 1, F-R1/F-R2/F-R4): checkout_latency,
+        # competitor_price_index, marketing_spend, stock_availability, price_discount,
+        # promo_flag, weather_temp.
+        self.assertEqual(driver_analysis["candidate_count"], 7)
         self.assertEqual(driver_analysis["candidate_count"], driver_analysis["ranked_count"] + driver_analysis["excluded_count"])
         self.assertGreater(driver_analysis["ranked_count"], 1)
         supported_ids = {item["driver_id"] for item in driver_analysis["ranked_drivers"]}
@@ -207,6 +210,20 @@ class DemoScenarioTests(unittest.TestCase):
         self.assertEqual(mismatched.exception.status_code, 403)
         self.assertIsInstance(mismatched.exception.detail, str)
 
+    def test_category_restricted_scenario_is_denied(self):
+        # F-S4 (plan §1.9): category_manager_north_electronics is authorized
+        # for North, but only the Electronics category; North/Home must be
+        # denied even though the region matches.
+        with self.assertRaises(HTTPException) as context:
+            api_demo_scenario_execute(
+                "category-restricted-scope",
+                type("Req", (), {"user_id": "demo-category-manager-north-electronics"})(),
+            )
+        self.assertEqual(context.exception.status_code, 403)
+        detail = context.exception.detail
+        self.assertEqual(detail["observed_broad_outcome"], "ACCESS_DENIED")
+        self.assertEqual(detail["engine_result"]["verdict"], "ACCESS_DENIED")
+
     def test_scenario_requires_explicit_known_governed_identity(self):
         for user_id, expected_status in ((None, 401), ("unknown-user", 401), ("demo-regional-north", 403)):
             with self.subTest(user_id=user_id):
@@ -234,7 +251,7 @@ class DemoScenarioTests(unittest.TestCase):
     def test_diagnoses_endpoint_accepts_scenario_id(self):
         response = api_diagnoses(DiagnosisRequest(scenario_id="non-material-baseline", user_id="demo-cfo"))
         self.assertEqual(response["observed_broad_outcome"], "NO_MATERIAL_MOVEMENT")
-        self.assertEqual(response["resolved_scope"]["target_date"], "2023-08-13")
+        self.assertEqual(response["resolved_scope"]["target_date"], "2023-05-22")
 
     def test_scenario_id_does_not_bypass_identity(self):
         with self.assertRaises(HTTPException) as context:

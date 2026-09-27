@@ -96,7 +96,7 @@ cd frontend
 pnpm build
 ```
 
-Expected handoff baseline: 187 engine tests, 111 backend tests, and a successful
+Expected handoff baseline: 194 engine tests, 113 backend tests, and a successful
 Next.js production build.
 
 ## Safe collaboration workflow
