@@ -23,7 +23,7 @@ export function TrendChartMetadata({
         gap: '12px 20px',
         paddingTop: '12px',
         borderTop: '1px solid var(--line)',
-        fontSize: '11px',
+        fontSize: '13px',
         color: 'var(--faint)',
       }}
     >

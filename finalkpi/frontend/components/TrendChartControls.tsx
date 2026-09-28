@@ -47,7 +47,7 @@ export function TrendChartControls({
             onClick={() => onPreset(p.days)}
             style={{
               padding: '3px 8px',
-              fontSize: '11px',
+              fontSize: '13px',
               fontWeight: 600,
               borderRadius: '4px',
               border: 'none',
@@ -121,7 +121,7 @@ export function TrendChartControls({
             border: '1px solid var(--line)',
             borderRadius: '6px',
             color: 'var(--muted)',
-            fontSize: '11px',
+            fontSize: '13px',
             cursor: 'pointer',
           }}
         >

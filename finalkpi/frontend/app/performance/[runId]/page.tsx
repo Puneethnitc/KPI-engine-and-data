@@ -137,7 +137,7 @@ export default function DetailPage({ params }: { params: Promise<{ runId: string
         <div className="card detail-card" style={{ marginBottom: '24px' }}>
           <span className="eyebrow">Source inventory & readiness</span>
           <div style={{ overflowX: 'auto', marginTop: '16px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '15px', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--border)' }}>
                   <th style={{ padding: '8px' }}>Source</th>
@@ -184,11 +184,11 @@ export default function DetailPage({ params }: { params: Promise<{ runId: string
             {evidence.alignment?.map((a) => (
               <div key={a.source_id} style={{ marginTop: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border)' }}>
                 <strong>{a.source_id}</strong>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Target grain:</strong> {a.target_grain}</p>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Calendar:</strong> {a.calendar}</p>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Aggregation:</strong> {a.aggregation}</p>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Keys:</strong> {a.join_keys.join(', ')}</p>
-                <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Rule:</strong> {a.period_completeness_rule}</p>
+                <p style={{ margin: '4px 0', fontSize: '15px' }}><strong>Target grain:</strong> {a.target_grain}</p>
+                <p style={{ margin: '4px 0', fontSize: '15px' }}><strong>Calendar:</strong> {a.calendar}</p>
+                <p style={{ margin: '4px 0', fontSize: '15px' }}><strong>Aggregation:</strong> {a.aggregation}</p>
+                <p style={{ margin: '4px 0', fontSize: '15px' }}><strong>Keys:</strong> {a.join_keys.join(', ')}</p>
+                <p style={{ margin: '4px 0', fontSize: '15px' }}><strong>Rule:</strong> {a.period_completeness_rule}</p>
               </div>
             ))}
           </div>
@@ -205,10 +205,10 @@ export default function DetailPage({ params }: { params: Promise<{ runId: string
                 }`} style={{ marginBottom: '12px', display: 'inline-block' }}>
                   {titleCase(evidence.reconciliation.status)}
                 </span>
-                <p style={{ fontSize: '13px', margin: '0 0 12px 0' }}>{evidence.reconciliation.reason}</p>
+                <p style={{ fontSize: '15px', margin: '0 0 12px 0' }}>{evidence.reconciliation.reason}</p>
 
                 {evidence.reconciliation.applicable && (
-                  <div style={{ background: 'var(--background)', padding: '12px', borderRadius: '4px', fontSize: '13px' }}>
+                  <div style={{ background: 'var(--background)', padding: '12px', borderRadius: '4px', fontSize: '15px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span><strong>Metric:</strong> {evidence.reconciliation.metric}</span>
                       <span><strong>Unit:</strong> {evidence.reconciliation.unit}</span>
@@ -240,7 +240,7 @@ export default function DetailPage({ params }: { params: Promise<{ runId: string
                 <div>
                   <strong>{item.source_id}</strong>
                   <p style={{ margin: '4px 0' }}>{item.claim}</p>
-                  <p style={{ margin: '0', fontSize: '12px', color: 'var(--muted)' }}>{item.claim_type} · ref {item.row_or_period_reference ?? '—'}</p>
+                  <p style={{ margin: '0', fontSize: '14px', color: 'var(--muted)' }}>{item.claim_type} · ref {item.row_or_period_reference ?? '—'}</p>
                   <small style={{ display: 'block', marginTop: '4px', color: 'var(--muted)' }}>{item.analytical_method ?? '—'} · access {item.access_classification}</small>
                 </div>
               </div>

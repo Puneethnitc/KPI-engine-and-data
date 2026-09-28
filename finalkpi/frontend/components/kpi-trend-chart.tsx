@@ -386,7 +386,7 @@ export function KpiTrendChart({
           minHeight: '260px',
           color: 'var(--muted)',
           gap: '10px',
-          fontSize: '13px',
+          fontSize: '15px',
         }}
       >
         <RefreshCw size={16} className="spin" />
@@ -414,10 +414,10 @@ export function KpiTrendChart({
         }}
       >
         {isAccessDenied ? <ShieldAlert size={28} style={{ color: 'var(--red)' }} /> : <Calendar size={28} style={{ color: 'var(--faint)' }} />}
-        <strong style={{ color: 'var(--text)', fontSize: '14px' }}>
+        <strong style={{ color: 'var(--text)', fontSize: '16px' }}>
           {isAccessDenied ? 'Access Denied: Scope Unauthorized' : 'Insufficient Historical Trend Data'}
         </strong>
-        <p style={{ fontSize: '12px', margin: 0, maxWidth: '440px' }}>
+        <p style={{ fontSize: '14px', margin: 0, maxWidth: '440px' }}>
           {error || 'The backend returned no historical daily data points for the selected scope.'}
         </p>
       </div>
@@ -448,7 +448,7 @@ export function KpiTrendChart({
       >
         <div>
           <span className="eyebrow">Governed trend series · {region === 'ALL' ? 'All regions' : region} · {category === 'ALL' ? 'All categories' : category}</span>
-          <h3 style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 650, color: 'var(--text)' }}>
+          <h3 style={{ margin: '4px 0 0', fontSize: '17px', fontWeight: 650, color: 'var(--text)' }}>
             {kpiLabel} Historical Performance
           </h3>
         </div>
@@ -472,7 +472,7 @@ export function KpiTrendChart({
           flexWrap: 'wrap',
           alignItems: 'center',
           gap: '16px',
-          fontSize: '11px',
+          fontSize: '13px',
           color: 'var(--muted)',
         }}
       >
@@ -526,7 +526,7 @@ export function KpiTrendChart({
           <span>Target Date ({targetDate})</span>
         </div>
 
-        <div style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--faint)' }}>
+        <div style={{ marginLeft: 'auto', fontSize: '13px', color: 'var(--faint)' }}>
           Showing {visiblePoints.length} days ({visiblePoints[0]?.observation_date} to{' '}
           {visiblePoints[visiblePoints.length - 1]?.observation_date})
         </div>
@@ -568,7 +568,7 @@ export function KpiTrendChart({
                   x={-10}
                   y={tick.y + 4}
                   textAnchor="end"
-                  fontSize={11}
+                  fontSize={13}
                   fill="var(--muted)"
                   fontFamily="sans-serif"
                 >
@@ -593,7 +593,7 @@ export function KpiTrendChart({
                   x={t.x}
                   y={innerHeight + 24}
                   textAnchor="middle"
-                  fontSize={11}
+                  fontSize={13}
                   fill="var(--muted)"
                   fontFamily="sans-serif"
                 >
@@ -756,7 +756,7 @@ export function KpiTrendChart({
               border: '1px solid var(--line)',
               borderRadius: '8px',
               padding: '10px 14px',
-              fontSize: '11px',
+              fontSize: '13px',
               boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
               zIndex: 50,
               pointerEvents: 'none',
@@ -781,7 +781,7 @@ export function KpiTrendChart({
                     color: 'var(--amber)',
                     padding: '1px 6px',
                     borderRadius: '4px',
-                    fontSize: '9px',
+                    fontSize: '12px',
                     fontWeight: 700,
                   }}
                 >

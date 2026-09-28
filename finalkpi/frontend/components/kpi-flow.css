@@ -5,26 +5,26 @@
 .kpi-connect-info summary { cursor: pointer; list-style: none; font-size: 22px; }
 .kpi-connect-info p { position: absolute; right: 0; width: min(320px, 80vw); padding: 14px; border: 1px solid #cad5e4; border-radius: 10px; background: white; box-shadow: 0 10px 30px #1b2d451f; }
 .kpi-connect-headline { font-size: 1.13rem; font-weight: 650; margin: 16px 0; }
-.kpi-connect-missing { color: #825d18; font-size: .86rem; }
+.kpi-connect-missing { color: #825d18; font-size: 1rem; }
 .kpi-connect-flow { display: flex; align-items: center; width: 100%; gap: 4px; padding: 18px 0; }
 .kpi-driver-column { flex: 1.15; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 90px; }
 .kpi-driver-column small { color: #59677b; }
-.kpi-driver-chip { display: inline-block; max-width: 100%; border-radius: 999px; padding: 5px 8px; background: #e8edff; color: #243f7d; font-size: .74rem; }
+.kpi-driver-chip { display: inline-block; max-width: 100%; border-radius: 999px; padding: 5px 8px; background: #e8edff; color: #243f7d; font-size: .86rem; }
 .kpi-driver-chip.muted { background: #edf0f4; color: #667080; }
 .kpi-flow-step { flex: 1; min-width: 0; display: flex; align-items: center; }
 .kpi-flow-node { flex: 1; min-width: 0; min-height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 1px solid #cad3de; border-radius: 12px; background: #f4f6f9; color: #344358; cursor: pointer; text-align: center; padding: 8px 4px; }
 .kpi-flow-node.down { border-color: #e8aaa8; background: #fff0ef; color: #a12e2a; }
 .kpi-flow-node.up { border-color: #9ed3b0; background: #edfaf1; color: #1e7940; }
 .kpi-flow-node strong { font-size: clamp(1rem, 1.8vw, 1.55rem); }
-.kpi-flow-node small { font-size: .78rem; font-weight: 700; }
-.kpi-flow-node span { font-size: .66rem; }
-.kpi-flow-arrow { width: 64px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; color: #4c5d75; font-size: .64rem; text-align: center; }
+.kpi-flow-node small { font-size: .9rem; font-weight: 700; }
+.kpi-flow-node span { font-size: .8rem; }
+.kpi-flow-arrow { width: 64px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; color: #4c5d75; font-size: .78rem; text-align: center; }
 .kpi-flow-arrow i { width: 90%; border-top: var(--edge-width) solid #7990ad; position: relative; }
 .kpi-flow-arrow i::after { content: ''; position: absolute; right: -3px; top: -5px; border-left: 7px solid #7990ad; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
 .kpi-connect-actions { border-top: 1px solid #e1e6ed; padding-top: 12px; }
 .kpi-connect-actions h3 { margin: 0 0 8px; }
 .kpi-connect-actions ol { margin: 0; padding-left: 22px; }
 .kpi-connect-actions li { padding: 6px 0; }
-.kpi-connect-actions li span { display: block; font-size: .84rem; color: #526174; }
+.kpi-connect-actions li span { display: block; font-size: .95rem; color: #526174; }
 @media (max-width: 700px) { .kpi-connect { padding: 16px; } .kpi-connect-flow { flex-wrap: wrap; gap: 10px; } .kpi-driver-column { flex: 0 0 100%; flex-direction: row; flex-wrap: wrap; align-items: center; } .kpi-flow-step { flex: 1 1 30%; } .kpi-flow-arrow { width: 42px; } .kpi-flow-node { min-height: 95px; } }
 @media (max-width: 430px) { .kpi-flow-step { flex: 1 1 42%; } .kpi-flow-step:last-child { flex-basis: 100%; } }

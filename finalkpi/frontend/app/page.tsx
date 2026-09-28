@@ -572,13 +572,13 @@ export default function Page() {
                 <span className="eyebrow" style={{ color: 'var(--foreground-muted)' }}>Active Demo Scenario</span>
                 <h3>{activeScenario.title}</h3>
                 <p>{activeScenario.purpose}</p>
-                <div style={{ marginTop: '8px', fontSize: '12px', display: 'flex', gap: '12px' }}>
+                <div style={{ marginTop: '8px', fontSize: '14px', display: 'flex', gap: '12px' }}>
                   <span><strong>Governed Scope:</strong> {activeScenario.persona} · {activeScenario.region} · {activeScenario.category}</span>
                   <span><strong>Source:</strong> {activeScenario.source_mode}</span>
                   {activeScenario.uses_demo_fixture && <span className="evidence-pill">Simulated demonstration data</span>}
                 </div>
                 {scenarioMeta && (
-                   <div style={{ marginTop: '8px', fontSize: '13px' }}>
+                   <div style={{ marginTop: '8px', fontSize: '15px' }}>
                      <strong>Expected Outcome:</strong> {scenarioMeta.expectedBroadOutcome}
                      {' · '}
                      <strong>Observed Outcome:</strong> {scenarioMeta.observedBroadOutcome}

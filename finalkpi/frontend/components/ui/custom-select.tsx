@@ -230,7 +230,7 @@ export function CustomSelect({
           htmlFor={`${selectId}-button`}
           className="custom-select-label"
           style={{
-            fontSize: '10px',
+            fontSize: '12px',
             fontWeight: 650,
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
@@ -269,7 +269,7 @@ export function CustomSelect({
           color: 'var(--text)',
           border: '1px solid var(--line)',
           borderRadius: '8px',
-          fontSize: '12px',
+          fontSize: '14px',
           fontWeight: 500,
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.6 : 1,
@@ -347,7 +347,7 @@ export function CustomSelect({
                   border: 'none',
                   outline: 'none',
                   color: 'var(--text)',
-                  fontSize: '12px',
+                  fontSize: '14px',
                   padding: '2px 0',
                 }}
               />
@@ -371,7 +371,7 @@ export function CustomSelect({
               <li
                 style={{
                   padding: '10px 12px',
-                  fontSize: '12px',
+                  fontSize: '14px',
                   color: 'var(--faint)',
                   textAlign: 'center',
                 }}
@@ -400,7 +400,7 @@ export function CustomSelect({
                       justifyContent: 'space-between',
                       gap: '8px',
                       borderRadius: '6px',
-                      fontSize: '12px',
+                      fontSize: '14px',
                       fontWeight: isSelected ? 600 : 400,
                       color: isSelected ? 'var(--text)' : 'var(--muted)',
                       backgroundColor: isHighlighted
