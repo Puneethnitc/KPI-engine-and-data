@@ -182,7 +182,7 @@ export function AppHeader({ active }: { active: string }) {
       <Link className="brand" href={queryHref('/')}><span className="brand-mark"><BarChart3 size={17} /></span><span>KPI <strong>Intelligence</strong></span></Link>
       <button className="mobile-menu-button" aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}>{menuOpen ? 'Close' : 'Menu'}</button>
       <nav className={`main-nav ${menuOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
-        {[['/', 'Overview'], ['/performance', 'Performance'], ['/campaigns', 'Campaigns'], ['/insights', 'Insights'], ['/kpis', 'KPI Contracts'], ['/jury', 'Jury Mode']].map(([href, label]) => <Link key={href} className={activeLabel === label ? 'active' : ''} href={queryHref(href)} onClick={() => setMenuOpen(false)}>{label}</Link>)}
+        {[['/', 'Overview'], ['/performance', 'Performance'], ['/insights', 'Insights'], ['/kpis', 'KPI Contracts'], ['/jury', 'Jury Mode']].map(([href, label]) => <Link key={href} className={activeLabel === label ? 'active' : ''} href={queryHref(href)} onClick={() => setMenuOpen(false)}>{label}</Link>)}
       </nav>
       <div className="top-actions">
         <div className="persona-control" style={{ minWidth: '150px' }}>

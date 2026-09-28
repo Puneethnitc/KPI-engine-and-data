@@ -117,8 +117,8 @@ pushes and do not merge unrelated legacy branches into the handoff branch.
 ## Current product boundary
 
 This is a working research/demo prototype, not a production deployment. It
-supports the connected Overview, Performance, Channel Signals (route name
-`campaigns`), and Insights experiences; governed KPI diagnosis; explicit
+supports the connected Overview, Performance and Insights experiences;
+governed KPI diagnosis; explicit
 uncertainty and abstention; traceable evidence; persona context; feedback
 review; and a grounded assistant. It does not claim causal certainty when the
 available evidence is observational or incomplete.
