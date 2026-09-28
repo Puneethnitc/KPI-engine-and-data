@@ -647,13 +647,17 @@ export default function Page() {
           </section>
         )}
 
-        {!loading && result?.verdict !== 'ACCESS_DENIED' && <ExecutiveSummary summary={executiveSummary} />}
-
-        {marketingBrief && result?.verdict !== 'ACCESS_DENIED' && <section className="marketing-brief" aria-labelledby="briefing-title">
-          <div className="briefing-lead"><div><span className="eyebrow">{persona === 'CFO' ? 'Financial reviewer briefing' : persona === 'regional_manager_north' ? 'Regional manager (North) briefing' : 'Marketing manager briefing'}</span><h2 id="briefing-title">What you need to know today</h2>{executiveSummary?.status === 'LLM' ? null : <p>{marketingBrief.summary}</p>}<small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
-          {marketingBrief.uncertainty.length > 0 && <details className="brief-limits"><summary>Evidence limitations ({marketingBrief.uncertainty.length})</summary><p>{marketingBrief.uncertainty.map(statusLabelForBrief).join(' · ')}</p></details>}
-          <details className="brief-method"><summary>Method and evidence details</summary><p>{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</p><small>Overall evidence: {result?.confidence_profile?.overall.status ?? 'PROFILE_NOT_SAVED'} · Causal verification: {result?.causal_verdict ?? 'UNTESTABLE'} · Engine verdict: {result?.verdict}</small></details>
-        </section>}
+        {!loading && marketingBrief && result?.verdict !== 'ACCESS_DENIED' && <ExecutiveSummary
+          summary={executiveSummary}
+          eyebrow={persona === 'CFO' ? 'Financial reviewer briefing' : persona === 'regional_manager_north' ? 'Regional manager (North) briefing' : 'Marketing manager briefing'}
+          scope={`${region} · ${category} · ${date}`}
+          fallbackText={marketingBrief.summary}
+          note={marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}
+          footer={<div className="executive-summary-footer">
+            {marketingBrief.uncertainty.length > 0 && <details className="brief-limits"><summary>Evidence limitations ({marketingBrief.uncertainty.length})</summary><p>{marketingBrief.uncertainty.map(statusLabelForBrief).join(' · ')}</p></details>}
+            <details className="brief-method"><summary>Method and evidence details</summary><p>{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</p><small>Overall evidence: {result?.confidence_profile?.overall.status ?? 'PROFILE_NOT_SAVED'} · Causal verification: {result?.causal_verdict ?? 'UNTESTABLE'} · Engine verdict: {result?.verdict}</small></details>
+          </div>}
+        />}
 
         {!loading && result?.verdict !== 'ACCESS_DENIED' && <KpiFlow story={kpiStory} onSelect={kpiId => { setSelected(kpiId); detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />}
 

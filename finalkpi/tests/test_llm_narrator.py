@@ -34,7 +34,7 @@ def ids(sheet, kind):
 def output(sheet, texts, do_first=None):
     rev, bridge, driver = ids(sheet, "revenue")[0], ids(sheet, "bridge")[0], ids(sheet, "driver")[0]
     body = {"sentences": [{"text": t, "facts": [rev, bridge, driver]} for t in texts],
-            "do_first": {"text": do_first or "Check stock availability first.", "facts": [driver]}}
+            "do_first": {"text": do_first or "No action needed; keep monitoring", "facts": []}}
     return body
 
 
@@ -49,10 +49,92 @@ class ConsequenceFactTests(unittest.TestCase):
             {"kpi_id": "units_sold", "percent_change": -1.0, "material": False, "consequence_of": None},
         ]}
         sheet = build_fact_sheet(story, results(), "cfo")
-        texts = {f["text"].split(" changed")[0]: f["text"] for f in sheet["facts"] if f["kind"] == "kpi"}
+        texts = {f["text"].split(" ")[0]: f["text"] for f in sheet["facts"] if f["kind"] == "kpi"}
         self.assertIn("downstream result of conversion", texts["Orders"])
         self.assertNotIn("result of", texts["Traffic"])
         self.assertNotIn("result of", texts["Units"])
+
+
+def material_story(material=True):
+    story = {**STORY, "nodes": [{"kpi_id": "net_sales_revenue", "percent_change": 14.4, "material": material, "consequence_of": None}],
+             "edges": [*STORY["edges"], {"stage": "basket", "from": "net_sales_revenue", "to": "net_sales_revenue", "contribution_inr": 112.0, "contribution_pct": 29.7, "factor_percent_change": 3.0}]}
+    return story
+
+
+def action_results(ac=0.72):
+    data = results("NOT_TESTED", ac)
+    data["net_sales_revenue"]["decision_cards"] = [{"recommendation": "Restore stock availability at the North warehouse.", "owner": "operations_lead", "approval_required": True}]
+    return data
+
+
+class SummaryStructureTests(unittest.TestCase):
+    def setUp(self):
+        llm_narrator._CACHE.clear()
+
+    def test_do_first_never_restates_the_revenue_change(self):
+        sheet = build_fact_sheet(material_story(), action_results(), "cfo")
+        self.assertTrue(sheet["action_allowed"])
+        rev = ids(sheet, "revenue")[0]
+        bad = {"sentences": [{"text": t, "facts": [rev]} for t in GOOD[:2]], "do_first": {"text": "Revenue rose ₹377 (14.4%) versus expected.", "facts": [rev]}}
+        self.assertFalse(guard(bad, sheet)[0])
+        summary = executive_summary(material_story(), action_results(), "cfo")
+        self.assertNotEqual(summary["do_first"]["text"], summary["sentences"][0]["text"])
+        self.assertIn("Restore stock availability", summary["do_first"]["text"])
+
+    def test_action_fact_is_accepted_as_do_first_when_material_and_qualified(self):
+        sheet = build_fact_sheet(material_story(), action_results(), "cfo")
+        action = ids(sheet, "action")[0]
+        body = {"sentences": [{"text": t, "facts": [ids(sheet, "revenue")[0]]} for t in GOOD[:1]] + [{"text": "Stock availability is linked to the movement.", "facts": [ids(sheet, "driver")[0]]}],
+                "do_first": {"text": "Restore stock availability at the North warehouse.", "facts": [action]}}
+        ok, errors = guard(body, sheet)
+        self.assertTrue(ok, errors)
+
+    def test_non_material_movement_yields_no_action_needed(self):
+        sheet = build_fact_sheet(material_story(False), action_results(), "cfo")
+        self.assertFalse(sheet["action_allowed"])
+        summary = executive_summary(material_story(False), action_results(), "cfo")
+        self.assertEqual(summary["do_first"]["text"], "No action needed; keep monitoring")
+        action = ids(sheet, "action")[0]
+        bad = {"sentences": [{"text": t, "facts": [ids(sheet, "revenue")[0]]} for t in GOOD[:2]],
+               "do_first": {"text": "Restore stock availability at the North warehouse.", "facts": [action]}}
+        self.assertFalse(guard(bad, sheet)[0])
+
+    def test_no_qualified_driver_also_means_no_action(self):
+        sheet = build_fact_sheet(material_story(), action_results(0.2), "cfo")
+        self.assertFalse(sheet["action_allowed"])
+        self.assertIn("No driver reached", next(f["text"] for f in sheet["facts"] if f["kind"] == "gate"))
+
+    def test_caveat_appears_at_most_once(self):
+        sheet = build_fact_sheet(material_story(), action_results(), "cfo")
+        rev, caveat = ids(sheet, "revenue")[0], ids(sheet, "caveat")[0]
+        twice = {"sentences": [{"text": "Revenue rose ₹377 (14.4%) versus expected.", "facts": [rev]},
+                               {"text": "This is an accounting split, not a cause.", "facts": [caveat]},
+                               {"text": "Again, an accounting split, not a cause.", "facts": [caveat]}],
+                 "do_first": {"text": "No action needed; keep monitoring", "facts": []}}
+        ok, errors = guard(twice, sheet)
+        self.assertFalse(ok)
+        self.assertTrue(any("at most once" in e for e in errors))
+        summary = executive_summary(material_story(), action_results(), "cfo")
+        joined = " ".join(item["text"] for item in [*summary["sentences"], summary["do_first"]])
+        self.assertLessEqual(joined.lower().count("accounting split"), 1)
+        self.assertTrue(2 <= len(summary["sentences"]) <= 4)
+
+    def test_drove_is_rejected_for_unverified_driver_but_allowed_when_verified(self):
+        sheet = build_fact_sheet(material_story(), action_results(), "cfo")
+        driver, rev = ids(sheet, "driver")[0], ids(sheet, "revenue")[0]
+        body = {"sentences": [{"text": "Revenue rose ₹377 (14.4%) versus expected.", "facts": [rev]}, {"text": "Stock availability drove the rise.", "facts": [driver]}],
+                "do_first": {"text": "No action needed; keep monitoring", "facts": []}}
+        self.assertFalse(guard(body, sheet)[0])
+        verified = build_fact_sheet(material_story(), {**action_results(), "net_sales_revenue": {**action_results()["net_sales_revenue"], "causal_verification": {"driver_id": "stock_availability", "verdict": "SUPPORTED_CONDITIONAL"}}}, "cfo")
+        body["sentences"][1]["facts"] = [ids(verified, "driver")[0]]
+        ok, errors = guard(body, verified)
+        self.assertTrue(ok, errors)
+
+    def test_facts_use_rose_or_fell(self):
+        sheet = build_fact_sheet(material_story(), action_results(), "cfo")
+        texts = " ".join(f["text"] for f in sheet["facts"])
+        self.assertNotIn("changed +", texts)
+        self.assertIn("Revenue rose", texts)
 
 
 class Client:
@@ -103,7 +185,7 @@ class GuardTests(unittest.TestCase):
 
     def test_driver_outside_fact_sheet_and_length_are_rejected(self):
         self.assertFalse(guard(output(self.sheet, [*GOOD[:2], "Checkout latency is linked to the drop."]), self.sheet)[0])
-        self.assertFalse(guard(output(self.sheet, GOOD[:2]), self.sheet)[0])
+        self.assertFalse(guard(output(self.sheet, GOOD[:1]), self.sheet)[0])
         self.assertFalse(guard(output(self.sheet, [GOOD[0] + " x" * 200, *GOOD[1:]]), self.sheet)[0])
 
 

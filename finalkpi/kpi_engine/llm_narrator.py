@@ -27,11 +27,15 @@ from kpi_engine.narrative import CAUSAL_SUPPORTED_VERDICTS, CAUSAL_WORDING_MIN_A
 from kpi_engine.personas import load_persona
 
 REGISTRY_DIR = Path(__file__).resolve().parent / "registry"
-MIN_SENTENCES, MAX_SENTENCES = 3, 5
+MIN_SENTENCES, MAX_SENTENCES = 2, 4
+PROMPT_VERSION = "2"
+DRIVER_THRESHOLD = 0.35
+NO_ACTION_TEXT = "No action needed; keep monitoring"
+CAVEAT_PHRASE = "accounting split"
 MAX_SENTENCE_CHARS, MAX_ACTION_CHARS, MAX_TOTAL_CHARS = 320, 260, 1300
 MAX_FACTS = 30
 CACHE_LIMIT = 128
-CAUSAL_WORDS = re.compile(r"\b(caused|causes|causing|cause of|due to|because of|resulted from|result of|driven by|led to)\b", re.I)
+CAUSAL_WORDS = re.compile(r"\b(caused|causes|causing|cause of|due to|because of|resulted from|result of|driven by|drove|drives|led to)\b", re.I)
 
 KPI_NAMES = {"traffic_total": "Traffic", "conversion_rate": "Conversion", "orders": "Orders", "units_sold": "Units", "net_sales_revenue": "Revenue"}
 STAGE_NAMES = {"traffic": "Traffic", "conversion": "Conversion", "units": "Units per order", "basket": "Price per unit"}
@@ -53,6 +57,10 @@ def _humanize(value: str) -> str:
 
 def _money(amount: float) -> str:
     return f"{'+' if amount >= 0 else '−'}₹{abs(amount):,.0f}"
+
+
+def _verb(delta: float) -> str:
+    return "rose" if delta > 0 else "fell" if delta < 0 else "was unchanged"
 
 
 def _pct(value: float, signed: bool = True) -> str:
@@ -90,17 +98,24 @@ def build_fact_sheet(story: Mapping[str, Any], results: Mapping[str, Mapping[str
     revenue = next((f for f in story.get("headline_facts", []) if f.get("kind") == "revenue"), {})
     if revenue.get("delta") is not None:
         pct = revenue.get("percent_change")
-        add(f"Revenue changed {_money(revenue['delta'])}{'' if pct is None else f' ({_pct(pct)})'} versus expected.", "revenue")
+        delta = revenue["delta"]
+        add(f"Revenue {_verb(delta)} ₹{abs(delta):,.0f}{'' if pct is None else f' ({abs(pct):.1f}%)'} versus expected.", "revenue")
+    revenue_node = next((n for n in story.get("nodes", []) if n.get("kpi_id") == "net_sales_revenue"), None)
+    material = bool(revenue_node and revenue_node.get("material"))
+    if revenue_node is not None:
+        add(f"The revenue movement is {'a material change' if material else 'within the normal range'}.", "materiality", material=material)
     for edge in story.get("edges", []):
         share = edge.get("contribution_pct")
-        add(f"{STAGE_NAMES.get(edge['stage'], edge['stage'])} accounts for {_money(edge['contribution_inr'])}{'' if share is None else f' ({abs(share):.0f}% of the revenue change)'}; this is an accounting split, not a cause.", "bridge")
+        add(f"{STAGE_NAMES.get(edge['stage'], edge['stage'])} accounts for {_money(edge['contribution_inr'])}{'' if share is None else f' ({abs(share):.0f}% of the revenue change)'}.", "bridge")
+    if story.get("edges"):
+        add("The funnel split is an accounting split, not a cause.", "caveat")
     if story.get("root_stage"):
         add(f"The largest share of the revenue change came from {STAGE_NAMES.get(story['root_stage'], story['root_stage']).lower()}.", "root")
     for node in story.get("nodes", []):
         if node.get("percent_change") is not None and node["kpi_id"] in KPI_NAMES:
             origin = node.get("consequence_of")
             downstream = f" It is a downstream result of {STAGE_NAMES.get(origin, origin).lower()}, not a separate cause." if origin else ""
-            add(f"{KPI_NAMES[node['kpi_id']]} changed {_pct(node['percent_change'])} versus expected ({'material' if node.get('material') else 'within the normal range'}).{downstream}", "kpi")
+            add(f"{KPI_NAMES[node['kpi_id']]} {_verb(node['percent_change'])} {abs(node['percent_change']):.1f}% versus expected ({'material' if node.get('material') else 'within the normal range'}).{downstream}", "kpi")
     if story.get("missing_stages"):
         add(f"Missing stages: {', '.join(STAGE_NAMES.get(s, s) for s in story['missing_stages'])}.", "missing")
 
@@ -122,6 +137,11 @@ def build_fact_sheet(story: Mapping[str, Any], results: Mapping[str, Mapping[str
         entry = best.setdefault(driver_id, {"id": driver_id, "name": _humanize(driver_id).capitalize(), "ac": float(chain["attribution_confidence"]), "band": chain.get("band"), "verdict": chain.get("causal_verdict"), "kpi": chain.get("via_kpi")})
         if chain.get("causal_verdict") not in (None, "NOT_TESTED"):
             entry["verdict"] = chain["causal_verdict"]
+    qualified = sorted((e for e in best.values() if e["ac"] >= DRIVER_THRESHOLD), key=lambda item: -item["ac"])
+    if qualified:
+        add(f"A driver reached the {DRIVER_THRESHOLD * 100:.0f}% confidence threshold: {qualified[0]['name']} at {qualified[0]['ac'] * 100:.0f}% attribution confidence.", "gate")
+    else:
+        add(f"No driver reached the {DRIVER_THRESHOLD * 100:.0f}% attribution-confidence threshold.", "gate")
     for entry in sorted(best.values(), key=lambda item: -item["ac"])[:4]:
         chain = chains.get(entry["id"])
         causal_ok = entry["verdict"] in CAUSAL_SUPPORTED_VERDICTS and entry["ac"] >= CAUSAL_WORDING_MIN_AC
@@ -145,10 +165,15 @@ def build_fact_sheet(story: Mapping[str, Any], results: Mapping[str, Mapping[str
             text = str(card.get("recommendation") or "").strip()
             if text and text not in seen and len(seen) < 3:
                 seen.add(text)
-                add(f"Proposed action: {text} Owner: {_humanize(str(card.get('owner') or 'analyst'))}. Approval required: {'yes' if card.get('approval_required') else 'no'}.", "action")
+                owner = _humanize(str(card.get("owner") or "analyst"))
+                add(f"Proposed action: {text} Owner: {owner}. Approval required: {'yes' if card.get('approval_required') else 'no'}.", "action",
+                    recommendation=text, owner=owner, approval=bool(card.get("approval_required")))
 
+    if not seen:
+        add("No action is recommended for this movement.", "no_action")
+    action_allowed = material and bool(qualified) and any(f["kind"] == "action" for f in facts)
     config = load_persona(persona)
-    return {"facts": facts, "names": sorted(names), "persona": config.persona_id, "persona_display": config.display_name}
+    return {"facts": facts, "action_allowed": action_allowed, "names": sorted(names), "persona": config.persona_id, "persona_display": config.display_name}
 
 
 # ------------------------------------------------------------------- guard
@@ -184,9 +209,20 @@ def guard(output: Any, sheet: Mapping[str, Any]) -> tuple[bool, list[str]]:
     for index, item in enumerate(items):
         label = "do_first" if index == len(sentences) else f"sentence {index + 1}"
         text, cited = (item.get("text"), item.get("facts")) if isinstance(item, dict) else (None, None)
-        if not isinstance(text, str) or not text.strip() or not isinstance(cited, list) or not cited or not all(isinstance(c, str) for c in cited):
+        is_no_action = label == "do_first" and isinstance(text, str) and text.strip().rstrip(".").lower() == NO_ACTION_TEXT.lower()
+        if not isinstance(text, str) or not text.strip() or not isinstance(cited, list) or not all(isinstance(c, str) for c in cited) or (not cited and not is_no_action):
             errors.append(f"{label}: needs text and at least one fact id")
             continue
+        if label == "do_first":
+            kinds = {facts[c]["kind"] for c in cited if c in facts}
+            if is_no_action:
+                pass
+            elif not sheet.get("action_allowed"):
+                errors.append(f"do_first: must be '{NO_ACTION_TEXT}' when the movement is not material or no driver qualified")
+            elif "action" not in kinds:
+                errors.append("do_first: must cite an action fact")
+            elif kinds & {"revenue", "bridge", "kpi", "root", "materiality"} or re.search(r"\brevenue\b.*\b(rose|fell)\b", text, re.I):
+                errors.append("do_first: must not restate the revenue change")
         total += len(text)
         if len(text) > (MAX_ACTION_CHARS if label == "do_first" else MAX_SENTENCE_CHARS):
             errors.append(f"{label}: too long")
@@ -211,30 +247,54 @@ def guard(output: Any, sheet: Mapping[str, Any]) -> tuple[bool, list[str]]:
                 errors.append(f"{label}: causal wording without a supported causal test and AC >= {CAUSAL_WORDING_MIN_AC}")
     if total > MAX_TOTAL_CHARS:
         errors.append("summary too long")
+    caveats = sum(str(item.get("text", "")).lower().count(CAVEAT_PHRASE) for item in items if isinstance(item, dict))
+    if caveats > 1:
+        errors.append("the accounting-split caveat may appear at most once")
     return not errors, errors
 
 
 # ---------------------------------------------------------------- fallback
 
 def fallback_summary(story: Mapping[str, Any], sheet: Mapping[str, Any]) -> dict[str, Any]:
-    """Deterministic summary from headline facts and the fact sheet; cites every fact it uses."""
+    """Deterministic 2-4 sentence summary (what happened, where from, how sure) plus a do-first line."""
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for fact in sheet["facts"]:
         by_kind.setdefault(fact["kind"], []).append(fact)
-    sentences = []
-    for kind in ("revenue", "root"):
-        for fact in by_kind.get(kind, [])[:1]:
-            sentences.append({"text": fact["text"], "facts": [fact["id"]]})
-    for fact in by_kind.get("reconciliation", [])[:1]:
-        sentences.append({"text": fact["text"], "facts": [fact["id"]]})
-    for fact in by_kind.get("driver", [])[:1]:
-        text = re.sub(r" Causal wording is .*$", "", fact["text"])
-        sentences.append({"text": text, "facts": [fact["id"]]})
+    sentences: list[dict[str, Any]] = []
+    revenue = (by_kind.get("revenue") or [None])[0]
+    if revenue:
+        sentences.append({"text": revenue["text"], "facts": [revenue["id"]]})
+    bridge = by_kind.get("bridge", [])
+    edges = sorted((e for e in story.get("edges", []) if e.get("contribution_pct") is not None), key=lambda e: -abs(e["contribution_inr"]))
+    if edges and revenue:
+        rising = (story.get("revenue_delta") or 0) >= 0
+        by_stage = {f["text"].split(" accounts")[0]: f for f in bridge}
+        parts = []
+        cited: list[str] = []
+        for rank, edge in enumerate(edges[:2]):
+            label = STAGE_NAMES.get(edge["stage"], edge["stage"])
+            fact = by_stage.get(label)
+            if not fact or (rank and abs(edge["contribution_pct"]) < 10):
+                continue
+            cited.append(fact["id"])
+            same_direction = (edge["contribution_inr"] >= 0) == rising
+            if rank == 0:
+                parts.append(f"Most of the {'rise' if rising else 'fall'} came from {label.lower()} ({abs(edge['contribution_pct']):.0f}%)")
+            else:
+                parts.append(f"{label.lower()} {'adding' if same_direction else 'offsetting'} {abs(edge['contribution_pct']):.0f}%")
+        caveat = (by_kind.get("caveat") or [None])[0]
+        if parts and caveat:
+            sentences.append({"text": ", with ".join(parts) + "; this is an accounting split, not a cause.", "facts": [*cited, caveat["id"]]})
+        elif parts:
+            sentences.append({"text": ", with ".join(parts) + ".", "facts": cited})
+    gate = (by_kind.get("gate") or [None])[0]
+    if gate:
+        sentences.append({"text": gate["text"], "facts": [gate["id"]]})
     if not sentences:
         sentences.append({"text": "A revenue comparison is unavailable for this scope.", "facts": [sheet["facts"][0]["id"]] if sheet["facts"] else []})
     action = (by_kind.get("action") or [None])[0]
-    do_first = ({"text": action["text"], "facts": [action["id"]]} if action
-                else {"text": "Review the driver evidence before naming a cause.", "facts": []})
+    do_first = ({"text": f"{action['recommendation']} (owner: {action['owner']}{'; approval required' if action['approval'] else ''})", "facts": [action["id"]]} if sheet.get("action_allowed") and action
+                else {"text": NO_ACTION_TEXT, "facts": []})
     return {"sentences": sentences, "do_first": do_first}
 
 
@@ -262,12 +322,18 @@ def model_name() -> str:
 def build_messages(sheet: Mapping[str, Any]) -> list[dict[str, str]]:
     brief = PERSONA_BRIEF.get(sheet["persona"], PERSONA_BRIEF["regional_manager"] if sheet["persona"].startswith("regional") else "You write for a business leader.")
     system = (
-        f"{brief} Write a short executive summary in plain language using ONLY the numbered facts provided. "
-        "Rules: write 3 to 5 sentences and one 'do first' line; every sentence lists the fact IDs it uses; "
-        "copy numbers exactly as written in the facts and never compute, round or invent numbers; "
-        "never name a KPI, driver or document that is not in the facts; "
-        "use 'caused', 'due to' or 'because of' ONLY for a driver whose fact says causal wording is allowed, "
-        "otherwise use 'linked to' or 'associated with'; the funnel split is accounting, not a cause. "
+        f"{brief} Write a short summary in plain language using ONLY the numbered facts provided. "
+        "Write 2 to 4 sentences in this order: (1) what happened; (2) where it came from, combining the funnel split into ONE sentence "
+        "such as 'Most of the rise came from traffic (61%), with price per unit adding 30%'; (3) how sure we are (materiality and driver confidence). "
+        "Then give a separate 'do first' line. "
+        "Say 'rose' or 'fell', never 'changed +' or 'changed -'. "
+        "State the 'accounting split, not a cause' caveat at most once, and only if you talk about the funnel split. "
+        f"The 'do first' line must be the action from the action facts, or exactly '{NO_ACTION_TEXT}' when the movement is not material, "
+        "no driver reached the confidence threshold, or there is no action fact; it must never restate the revenue change. "
+        "Every sentence lists the fact IDs it uses. Copy numbers exactly as written in the facts; never compute, round or invent numbers. "
+        "Never name a KPI, driver or document that is not in the facts. "
+        "You may say 'came from', 'linked to' or 'associated with'. Use 'caused', 'drove', 'drives', 'due to' or 'because of' "
+        "ONLY for a driver whose fact says causal wording is allowed. "
         'Return JSON only: {"sentences":[{"text":"...","facts":["F1"]}],"do_first":{"text":"...","facts":["F2"]}}'
     )
     return [{"role": "system", "content": system},
@@ -275,7 +341,7 @@ def build_messages(sheet: Mapping[str, Any]) -> list[dict[str, str]]:
 
 
 def _fact_hash(sheet: Mapping[str, Any]) -> str:
-    payload = json.dumps({"facts": [(f["id"], f["text"]) for f in sheet["facts"]], "persona": sheet["persona"], "model": model_name()}, sort_keys=True, ensure_ascii=False)
+    payload = json.dumps({"facts": [(f["id"], f["text"]) for f in sheet["facts"]], "persona": sheet["persona"], "model": model_name(), "prompt": PROMPT_VERSION}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

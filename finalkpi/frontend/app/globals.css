@@ -924,7 +924,15 @@ button, a, select, textarea { outline-offset: 3px; }
 .driver-detail-toggle > summary { cursor: pointer; font-size: 14px; font-weight: 700; padding: 6px 0; }
 .simple-chart-title { margin: 12px 0 8px; font-size: 16px; }
 
-.executive-summary { margin: 20px 0; }
-.executive-summary-text { font-size: 17px; line-height: 1.6; margin: 12px 0; }
-.executive-summary-first { font-size: 16px; margin: 8px 0; }
-.fact-chip { display: inline-block; margin-right: 4px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; text-decoration: none; cursor: help; color: var(--muted); background: var(--panel-2); }
+.executive-summary { margin: 0 0 18px; padding: 22px 24px; }
+.executive-summary .card-heading { display: flex; }
+.executive-summary h2 { margin: 6px 0 0; font-size: 22px; }
+.executive-summary-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.executive-summary-text { font-size: 17px; line-height: 1.7; margin: 14px 0 10px; max-width: 900px; }
+.executive-summary-first { font-size: 16px; line-height: 1.6; margin: 8px 0; max-width: 900px; }
+.executive-summary-note { display: block; margin-top: 8px; font-size: 15px; color: var(--muted); }
+.executive-summary-footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.executive-summary-footer .brief-limits { font-size: 15px; }
+.executive-summary-footer summary { font-size: 15px; }
+.executive-summary-footer p, .executive-summary-footer small { font-size: 15px; }
+.fact-chip { display: inline-block; margin: 0 4px 0 0; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; text-decoration: none; cursor: help; color: var(--muted); background: var(--panel-2); }
