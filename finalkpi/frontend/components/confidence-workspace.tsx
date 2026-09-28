@@ -49,6 +49,7 @@ export default function ConfidenceWorkspace({
       </p>}
     </div>
 
+    {model.attributionBars.length === 0 && <p className="confidence-boundary">Attribution Confidence is not available for this older run.</p>}
     {model.attributionBars.length > 0 && <div className="attribution-confidence-bars" aria-label="Per-driver Attribution Confidence">
       <h3>Attribution Confidence by driver</h3>
       <p className="confidence-boundary">Status: {model.attributionStatus}</p>

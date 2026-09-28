@@ -27,7 +27,9 @@ export default function FunnelBridgeCard({
   status?: string | null
   unit: string
 }) {
-  if (status !== 'IDENTITY_HELD' || !bridge) return null
+  if (!bridge && !status) return <article className="card funnel-bridge-card" aria-label="Funnel bridge"><p>Funnel bridge is not available for this older run.</p></article>
+  if (!bridge) return null
+  if (status !== 'IDENTITY_HELD') return null
   const maxAbs = Math.max(1e-9, ...bridge.components.map(item => Math.abs(item.effect)))
   return <article className="card funnel-bridge-card" aria-label="Funnel bridge">
     <div className="card-heading">

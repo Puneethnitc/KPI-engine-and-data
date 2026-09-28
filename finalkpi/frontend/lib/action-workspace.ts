@@ -79,7 +79,7 @@ export function actionBoundary(action?: ActionContract | null): string {
 
 export function actionImpactLabel(action?: ActionContract | null): string {
   if (!action || action.expected_impact == null) {
-    return action?.impact_explanation || 'Impact is not estimated with available evidence.'
+    return action?.impact_explanation || (action && isLegacyAction(action) ? 'Expected impact is not available for this older run.' : 'Impact is not estimated with available evidence.')
   }
   return `${action.expected_impact}${action.expected_impact_unit ? ` ${action.expected_impact_unit}` : ''}`
 }

@@ -197,7 +197,8 @@ class NarrativeEngine:
                 {"role": "user", "content": json.dumps({"options": options})},
             ],
         }).encode("utf-8")
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json",
+                   "User-Agent": "kpi-engine/1.0"}
         request = Request(
             endpoint, data=body,
             headers=headers,

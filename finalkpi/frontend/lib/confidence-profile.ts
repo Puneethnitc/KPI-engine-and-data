@@ -54,11 +54,11 @@ export type ConfidenceProfile = {
     explanation_conclusion: string
   }
   attribution_status: string
-  attribution_confidence: AttributionConfidenceDriver[]
+  attribution_confidence?: AttributionConfidenceDriver[]
   movement: ConfidenceDimension
   source: ConfidenceDimension
-  attribution: ConfidenceDimension
-  driver: ConfidenceDimension
+  attribution?: ConfidenceDimension
+  driver?: ConfidenceDimension
   causal: ConfidenceDimension
 }
 
@@ -163,9 +163,17 @@ export function confidenceWorkspaceModel(
 ) {
   if (!profile || verdict === 'ACCESS_DENIED') return null
   const keys = ['movement', 'source', 'attribution', 'causal'] as const
-  const dimensions = keys.map(key => {
-    const details = profile[key]
-    return {
+  const dimensions = keys.flatMap(key => {
+    const saved = profile[key] ?? (key === 'attribution' ? profile.driver : undefined)
+    if (!saved) return []
+    const details: ConfidenceDimension = {
+      ...saved,
+      method: saved.method ?? 'not recorded',
+      reasons: saved.reasons ?? [],
+      limitations: saved.limitations ?? [],
+      evidence_refs: saved.evidence_refs ?? [],
+    }
+    return [{
       key,
       title: dimensionTitles[key],
       status: details.status,
@@ -181,7 +189,7 @@ export function confidenceWorkspaceModel(
           ? 'Not assessed: no approved causal design targets the top-ranked driver for this run.'
           : null,
       details,
-    } satisfies ConfidenceDimensionView
+    } satisfies ConfidenceDimensionView]
   })
   const personaFrame = persona === 'CFO'
     ? 'Decision focus: financial materiality, reconciliation, and the risk of acting on unverified evidence.'
@@ -191,8 +199,8 @@ export function confidenceWorkspaceModel(
       status: profile.overall.status,
       statusLabel: confidenceStatusLabel(profile.overall.status),
       tone: confidenceStatusTone(profile.overall.status),
-      reasons: profile.overall.reasons,
-      blockingDimensions: profile.overall.blocking_dimensions,
+      reasons: profile.overall.reasons ?? [],
+      blockingDimensions: profile.overall.blocking_dimensions ?? [],
       movementConclusion: {
         status: profile.overall.movement_conclusion,
         statusLabel: confidenceStatusLabel(profile.overall.movement_conclusion),

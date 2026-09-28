@@ -932,6 +932,21 @@ separate v2 file on dev only.
   genuinely has no AC field, and the chat still has to say so rather than
   inventing one. The real-AC path is covered by the two new chat tests.
 
+## Stage final compatibility and Groq header: before → after
+
+The compatibility fix changes historical-run presentation and the Groq request header; it does not change deterministic scoring. The after column is the fresh `--split all` run (538 cases). The before column uses the prior `fix/stage-final` baseline recorded above.
+
+| Measure | Before | After |
+|---|---:|---:|
+| Top-1 driver accuracy | 0.734 | 0.734 |
+| Top-1 direction-aware accuracy | 0.719 | 0.719 |
+| Top-3 driver accuracy | 0.766 | 0.766 |
+| Quiet-negative false-alarm rate | 0.048 | 0.048 |
+| AC gap, true minus false | 0.5126 | 0.5126 |
+| Brier score | 0.0977 | 0.0977 |
+
+The live diagnosis for `net_sales_revenue`, North/Electronics, 2023-07-31 now reports `llm_status=USED` and provider-reported usage of 473 input and 697 output tokens in `docs/telemetry_sample.json`. Estimated cost remains null because provider pricing is not configured.
+
 ## Wave 2 merged: before → after
 
 The before values are the recorded Stage 8 results on the incoming branch; the

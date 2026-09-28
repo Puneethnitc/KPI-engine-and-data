@@ -36,7 +36,7 @@ export default function ActionWorkspace({
     </div>
     <p className="action-persona-frame">{actionPersonaFrame(persona)}</p>
     {blocked && <div className="alert warning"><strong>Actions blocked.</strong> Contradictory evidence must be reconciled before operational action is considered.</div>}
-    {!blocked && !visibleActions.length && <div className="empty-state">{abstention ? 'The engine is abstaining from action.' : 'The engine is abstaining from action until the evidence is sufficient.'}</div>}
+    {!blocked && !visibleActions.length && <div className="empty-state">{actions == null ? 'Action guidance is not available for this older run.' : abstention ? 'The engine is abstaining from action.' : 'The engine is abstaining from action until the evidence is sufficient.'}</div>}
     {!blocked && visibleActions.length > 0 && <div className="action-list">
       {visibleActions.map((action, index) => isLegacyAction(action)
         ? <LegacyActionItem action={action} index={index} key={`legacy-${index}`} />

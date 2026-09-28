@@ -96,6 +96,16 @@ test('all four dimensions remain independently represented, with attribution rep
   assert.deepEqual(model.dimensions.map(item => item.status), ['HIGH', 'HIGH', 'MODERATE', 'NOT_ASSESSED'])
 })
 
+test('older profile uses driver evidence and tolerates missing dimension details and AC', () => {
+  const old = makeProfile({ attribution: undefined, attribution_confidence: undefined,
+    driver: { status: 'MODERATE', score: null }, causal: undefined })
+  const model = confidenceWorkspaceModel(old, 'CFO')
+  assert.deepEqual(model.dimensions.map(item => item.key), ['movement', 'source', 'attribution'])
+  assert.equal(model.dimensions[2].method, 'not recorded')
+  assert.equal(model.dimensions[2].reason, 'No supporting reason was recorded.')
+  assert.deepEqual(model.attributionBars, [])
+})
+
 test('causal NOT_ASSESSED is distinct from LOW', () => {
   const notAssessed = confidenceWorkspaceModel(makeProfile(), 'CFO').dimensions[3]
   const low = confidenceWorkspaceModel(makeProfile({ causal: makeDimension('LOW') }), 'CFO').dimensions[3]

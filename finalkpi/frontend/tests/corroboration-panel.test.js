@@ -78,7 +78,7 @@ test('a run with no corroboration block is not assessed, not empty evidence', ()
   assert.equal(model.assessed, false)
   assert.equal(model.statusLabel, 'Not assessed in this run')
   assert.match(model.boundary, /predates evidence corroboration/)
-  assert.equal(renderToStaticMarkup(React.createElement(CorroborationPanel, { corroboration: null })), '')
+  assert.match(renderToStaticMarkup(React.createElement(CorroborationPanel, { corroboration: null })), /not available for this older run/)
 })
 
 test('a retrieval failure is distinguished from an absence of evidence', () => {

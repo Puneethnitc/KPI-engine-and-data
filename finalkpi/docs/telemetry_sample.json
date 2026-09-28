@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-28T14:10:37.748557+00:00",
+  "captured_at": "2026-09-28T14:40:02.928223+00:00",
   "source": "FastAPI POST /api/diagnoses",
   "request": {
     "kpis": [
@@ -13,18 +13,18 @@
     "as_of": "2024-12-31T23:59:59"
   },
   "http_status": 200,
-  "llm_status": "ERROR_FALLBACK",
+  "llm_status": "USED",
   "telemetry": {
-    "execution_id": "exec-4cb0d800-7ac8-4bae-8086-122eef828f66",
-    "started_at": "2026-09-28T14:10:36.325137+00:00",
-    "completed_at": "2026-09-28T14:10:37.717449+00:00",
-    "total_latency_ms": 1392.35,
+    "execution_id": "exec-31392aef-2643-4bce-93f0-6d75f6b591ca",
+    "started_at": "2026-09-28T14:40:00.737235+00:00",
+    "completed_at": "2026-09-28T14:40:02.905092+00:00",
+    "total_latency_ms": 2167.902,
     "stages": [
       {
         "stage": "diagnosis_pipeline",
         "processing_type": "DETERMINISTIC",
         "method": "governed_hybrid_pipeline",
-        "latency_ms": 1392.109,
+        "latency_ms": 2167.654,
         "status": "COMPLETED",
         "cache_status": "MISS",
         "provider": null,
@@ -40,7 +40,7 @@
         "stage": "authorization",
         "processing_type": "BUSINESS_RULE",
         "method": "role_and_row_scope_policy",
-        "latency_ms": 0.458,
+        "latency_ms": 0.453,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -56,7 +56,7 @@
         "stage": "source_preparation",
         "processing_type": "DETERMINISTIC",
         "method": "grain_cadence_and_as_of_alignment",
-        "latency_ms": 44.086,
+        "latency_ms": 44.728,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -72,7 +72,7 @@
         "stage": "reconciliation",
         "processing_type": "DETERMINISTIC",
         "method": "independent_source_comparison",
-        "latency_ms": 15.092,
+        "latency_ms": 15.404,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -88,7 +88,7 @@
         "stage": "movement_detection",
         "processing_type": "STATISTICAL",
         "method": "statistical_and_business_materiality",
-        "latency_ms": 99.711,
+        "latency_ms": 99.837,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -104,7 +104,7 @@
         "stage": "driver_analysis",
         "processing_type": "STATISTICAL",
         "method": "joint_robust_regression_explained_movement",
-        "latency_ms": 152.0,
+        "latency_ms": 150.612,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -120,7 +120,7 @@
         "stage": "evidence_corroboration",
         "processing_type": "DETERMINISTIC",
         "method": "availability_scope_and_entitlement_filtered_retrieval",
-        "latency_ms": 14.958,
+        "latency_ms": 15.566,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -136,7 +136,7 @@
         "stage": "contribution_analysis",
         "processing_type": "DETERMINISTIC",
         "method": "deterministic_accounting_bridge",
-        "latency_ms": 6.071,
+        "latency_ms": 6.488,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -152,7 +152,7 @@
         "stage": "causal_verification",
         "processing_type": "CAUSAL",
         "method": "predeclared_observational_design",
-        "latency_ms": 41.513,
+        "latency_ms": 41.594,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -168,7 +168,7 @@
         "stage": "confidence_and_actions",
         "processing_type": "BUSINESS_RULE",
         "method": "rules_and_evidence_scoring",
-        "latency_ms": 17.377,
+        "latency_ms": 17.763,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -184,7 +184,7 @@
         "stage": "narrative_synthesis",
         "processing_type": "DETERMINISTIC",
         "method": "evidence_bound_template",
-        "latency_ms": 967.224,
+        "latency_ms": 1739.583,
         "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": null,
@@ -200,18 +200,18 @@
         "stage": "narrative_generation",
         "processing_type": "LLM",
         "method": "approved_wording_selection",
-        "latency_ms": 966.969,
-        "status": "FALLBACK",
+        "latency_ms": 1739.329,
+        "status": "COMPLETED",
         "cache_status": "NOT_APPLICABLE",
         "provider": "groq",
         "model": "openai/gpt-oss-20b",
         "model_calls": 1,
-        "input_tokens": null,
-        "output_tokens": null,
+        "input_tokens": 473,
+        "output_tokens": 697,
         "estimated_cost_usd": null,
-        "usage_source": "UNAVAILABLE",
+        "usage_source": "PROVIDER_REPORTED",
         "details": {
-          "reason_code": "ERROR_FALLBACK"
+          "reason_code": "USED"
         }
       }
     ],
@@ -219,10 +219,10 @@
       "provider": "groq",
       "model": "openai/gpt-oss-20b",
       "model_calls": 1,
-      "input_tokens": null,
-      "output_tokens": null,
+      "input_tokens": 473,
+      "output_tokens": 697,
       "estimated_cost_usd": null,
-      "usage_source": "UNAVAILABLE"
+      "usage_source": "PROVIDER_REPORTED"
     },
     "cache_summary": {
       "hits": 0,
@@ -236,8 +236,8 @@
       "fallback_behavior": "deterministic_evidence_bound_fallback",
       "pricing_version": "unconfigured"
     },
-    "execution_ms": 1392,
+    "execution_ms": 2167,
     "query_provenance": {}
   },
-  "notes": "Groq key was present in .env. No key value is stored. Token counts and estimated cost reflect provider usage and pricing configuration; null indicates the provider did not return usage or pricing was not configured."
+  "notes": "Groq key was present in .env. No key value is stored. Token counts are provider reported; estimated cost depends on pricing configuration."
 }

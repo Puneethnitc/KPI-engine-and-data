@@ -15,7 +15,7 @@ import {
  */
 export default function CorroborationPanel({ corroboration }: { corroboration?: Corroboration | null }) {
   const model = corroborationViewModel(corroboration)
-  if (!model.assessed) return null
+  if (!model.assessed) return <p className="driver-boundary">Evidence corroboration is not available for this older run.</p>
 
   return <details className="corroboration-panel">
     <summary>

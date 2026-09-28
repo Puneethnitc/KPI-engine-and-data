@@ -233,10 +233,10 @@ export function driverAnalysisViewModel(
   verdict?: string | null,
 ) {
   if (!analysis || verdict === 'ACCESS_DENIED') return null
-  const ranked = [...analysis.ranked_drivers].sort((left, right) => left.rank - right.rank || left.driver_id.localeCompare(right.driver_id))
+  const ranked = [...(analysis.ranked_drivers ?? [])].sort((left, right) => left.rank - right.rank || left.driver_id.localeCompare(right.driver_id))
   const explaining = ranked.filter(driver => !driver.offsetting)
   const offsetting = ranked.filter(driver => driver.offsetting)
-  const excluded = [...analysis.excluded_drivers].sort((left, right) => left.driver_id.localeCompare(right.driver_id))
+  const excluded = [...(analysis.excluded_drivers ?? [])].sort((left, right) => left.driver_id.localeCompare(right.driver_id))
   const didNotMove = excluded.filter(item => item.reason_code === 'DID_NOT_MOVE')
   const otherExcluded = excluded.filter(item => item.reason_code !== 'DID_NOT_MOVE')
   const personaFrame = persona === 'CFO'

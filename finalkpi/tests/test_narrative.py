@@ -134,6 +134,7 @@ class NarrativeTests(unittest.TestCase):
         )) as provider:
             rendered = NarrativeEngine(api_key="test-only-key").render(self.payload)
         self.assertTrue(provider.called)
+        self.assertEqual(provider.call_args.args[0].get_header("User-agent"), "kpi-engine/1.0")
         self.assertEqual(rendered["llm_status"], "USED")
         self.assertTrue(rendered["grounding_passed"])
 

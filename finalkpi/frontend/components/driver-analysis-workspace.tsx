@@ -34,7 +34,7 @@ export default function DriverAnalysisWorkspace({
     </div>
     <p className="driver-persona-frame">{model.personaFrame}</p>
     <p className="driver-boundary">Statistical attribution of observed movement; causal status is shown separately.</p>
-    <p className="driver-method-line"><strong>Method:</strong> {analysis.method.replaceAll('_', ' ').toLowerCase()} · target {analysis.target_kpi} · {String(analysis.target_period.start ?? 'period start unavailable')} to {String(analysis.target_period.end ?? 'period end unavailable')} · {analysis.candidate_count} candidates · {analysis.hypotheses_tested} lag hypotheses · {analysis.correction_method ?? 'no multiple-testing correction'}{analysis.collinearity_warning ? ' · collinearity warning' : ''}</p>
+    <p className="driver-method-line"><strong>Method:</strong> {(analysis.method ?? 'not recorded').replaceAll('_', ' ').toLowerCase()} · target {analysis.target_kpi} · {String(analysis.target_period?.start ?? 'period start unavailable')} to {String(analysis.target_period?.end ?? 'period end unavailable')} · {analysis.candidate_count} candidates · {analysis.hypotheses_tested} lag hypotheses · {analysis.correction_method ?? 'no multiple-testing correction'}{analysis.collinearity_warning ? ' · collinearity warning' : ''}</p>
 
     {model.abstention && <div className={`driver-abstention ${analysis.status === 'BLOCKED' ? 'warning' : ''}`} role="status">{model.abstention}</div>}
 
@@ -42,7 +42,7 @@ export default function DriverAnalysisWorkspace({
       {model.ranked.map(driver => <section className="driver-evidence-item" key={driver.driver_id}>
         <div className="driver-evidence-heading">
           <div><span className="driver-rank">#{driver.rank}</span><strong>{driver.display_name}</strong><small>{driver.controllability === 'controllable' ? 'Controllable lever' : 'Contextual indicator'} · {driver.source_id} · {driver.source_grain} · {driver.aggregation} · {driver.driver_unit ?? 'unit not specified'}</small></div>
-          <span className={`driver-stability ${driver.stability_status.toLowerCase()}`}>{driver.stability_status}</span>
+          <span className={`driver-stability ${(driver.stability_status ?? 'not_assessed').toLowerCase()}`}>{driver.stability_status ?? 'Not available for this older run'}</span>
         </div>
         <div className="driver-metrics">
           <span><small>Contribution</small><strong>{driverContributionLabel(driver.contribution)}</strong></span>
@@ -55,19 +55,19 @@ export default function DriverAnalysisWorkspace({
         </div>
         <CorroborationPanel corroboration={driver.corroboration} />
         <p><strong>Temporal order:</strong> {driverTemporalLabel(driver.temporal_order, driver.temporal_order_supported)}</p>
-        <p><strong>Important limitation:</strong> {driver.limitations[0] ?? 'No additional limitation recorded.'}</p>
+        <p><strong>Important limitation:</strong> {driver.limitations?.[0] ?? 'No additional limitation recorded.'}</p>
         <p className="driver-boundary">{driver.claim_boundary}</p>
         <details>
           <summary>Why this driver ranked here</summary>
-          <p><strong>Beta (standardised driver residual to KPI units):</strong> {driver.beta} · 95% CI [{driver.beta_ci[0] ?? 'n/a'}, {driver.beta_ci[1] ?? 'n/a'}]</p>
-          <p><strong>Contribution interval:</strong> [{driver.contribution_interval[0] ?? 'n/a'}, {driver.contribution_interval[1] ?? 'n/a'}]</p>
+          <p><strong>Beta (standardised driver residual to KPI units):</strong> {driver.beta} · 95% CI [{driver.beta_ci?.[0] ?? 'n/a'}, {driver.beta_ci?.[1] ?? 'n/a'}]</p>
+          <p><strong>Contribution interval:</strong> [{driver.contribution_interval?.[0] ?? 'n/a'}, {driver.contribution_interval?.[1] ?? 'n/a'}]</p>
           <p><strong>Tested lags:</strong> {driver.lag_candidates_tested}</p>
           <pre>{JSON.stringify(driver.tested_lags, null, 2)}</pre>
           <p><strong>Stability diagnostics:</strong> {driver.stability_status}</p>
           <pre>{JSON.stringify(driver.stability_details, null, 2)}</pre>
           <p><strong>Evidence references:</strong></p>
           <pre>{JSON.stringify(driver.evidence_references, null, 2)}</pre>
-          {driver.limitations.map((limitation, index) => <p key={`limit-${index}`}>{limitation}</p>)}
+          {(driver.limitations ?? []).map((limitation, index) => <p key={`limit-${index}`}>{limitation}</p>)}
         </details>
       </section>)}
     </div>}
@@ -94,7 +94,7 @@ export default function DriverAnalysisWorkspace({
         <strong>{item.driver_id.replaceAll('_', ' ')}</strong>
         <span className="evidence-pill limited">{driverExclusionLabel(item.reason_code)}</span>
         <p>{item.reason}</p>
-        <small>{item.source_id} · {item.sample_size} usable pairs · failed checks: {item.failed_checks.join(', ') || 'none recorded'}</small>
+        <small>{item.source_id} · {item.sample_size} usable pairs · failed checks: {item.failed_checks?.join(', ') || 'none recorded'}</small>
         <details><summary>Evidence references</summary><pre>{JSON.stringify(item.evidence_references, null, 2)}</pre></details>
       </div>)}
     </details>}
@@ -104,7 +104,7 @@ export default function DriverAnalysisWorkspace({
       <p><strong>Unexplained residual:</strong> {model.residual} {model.residualShare != null ? `(${(model.residualShare * 100).toFixed(0)}% of the observed change)` : ''}</p>
       <p><strong>Multiple-testing correction:</strong> {analysis.correction_method ?? 'None; ranking is exploratory.'}</p>
       <p><strong>Lag hypotheses tested:</strong> {analysis.hypotheses_tested}</p>
-      {analysis.limitations.map((limitation, index) => <p key={`analysis-limit-${index}`}>{limitation}</p>)}
+      {(analysis.limitations ?? []).map((limitation, index) => <p key={`analysis-limit-${index}`}>{limitation}</p>)}
     </details>
   </article>
 }
