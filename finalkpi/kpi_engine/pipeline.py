@@ -52,6 +52,7 @@ from kpi_engine.rank import CorrelationalRanker
 from kpi_engine.rank import DriverExclusion
 from kpi_engine.reconcile import SourceReconciler
 from kpi_engine.verification import CausalVerifier, CausalVerificationResult, VerificationDesign
+from kpi_engine.verification.designer import CausalDesigner
 
 
 class KPIEnginePipeline:
@@ -469,7 +470,8 @@ class KPIEnginePipeline:
             "_causal_design_approved": approved_causal_design,
         }
         for label, group in (("treated", verification_design.treated_slice),
-                             ("control", verification_design.control_slice)):
+                             *(("control", scope) for scope in
+                               (verification_design.control_slices or (verification_design.control_slice,)))):
             access = self.access_controller.check(persona, group)
             if not access.allowed:
                 result.update(verdict="ACCESS_DENIED", narrative=f"{label} slice: {access.reason}")
@@ -618,6 +620,14 @@ class KPIEnginePipeline:
             verification = CausalVerificationResult(
                 verification_design.driver_id, "UNTESTABLE", "UNDECLARED_DRIVER",
                 "The proposed driver is not declared in the KPI contract",
+            )
+        elif verification_design.driver_id not in {
+            item.get("driver_id") for item in driver_analysis.get("ranked_drivers", [])[:2]
+            if (item.get("explained_share") or 0) >= 0.20
+        }:
+            verification = CausalVerificationResult(
+                verification_design.driver_id, "INCONCLUSIVE", "NOT_ATTRIBUTED_DRIVER",
+                "The proposed driver is not among the top attributed drivers for this event",
             )
         else:
             verification = self.verifier.verify(daily, contract, verification_design)
@@ -892,7 +902,7 @@ class KPIEnginePipeline:
             persona,
         )
         self._record_runtime(result, "evidence_corroboration", "DETERMINISTIC", "availability_scope_and_entitlement_filtered_retrieval", stage_started)
-        if not assessment.is_material:
+        if not assessment.is_material and assessment.pattern != "SUSTAINED":
             if assessment.detector_agreement == "SEASONAL_ONLY":
                 result.update(
                     verdict="SEASONAL_REVIEW",
@@ -1045,10 +1055,28 @@ class KPIEnginePipeline:
 
         stage_started = time.monotonic_ns()
         if verification_design is None:
-            verification = CausalVerificationResult(
-                "", "UNTESTABLE", "NO_DESIGN",
-                "No predeclared treatment, authorized control, and quiet windows were supplied",
+            attempts = []
+            for driver in driver_analysis.get("ranked_drivers", [])[:2]:
+                if (driver.get("explained_share") or 0) < 0.20:
+                    continue
+                attempt = CausalDesigner.build(
+                    daily, contract, driver, target.date().isoformat(),
+                    dimension_slice or {}, persona, self.access_controller,
+                )
+                if attempt.design is None:
+                    attempts.append(CausalVerificationResult(
+                        attempt.driver_id, "UNTESTABLE", attempt.reason_code or "NO_DESIGN",
+                        "No valid automatic causal design could be generated",
+                        controls_rejected=attempt.controls_rejected,
+                    ))
+                else:
+                    attempts.append(self.verifier.verify(daily, contract, attempt.design))
+            result["causal_verifications"] = [asdict(item) for item in attempts]
+            verification = attempts[0] if attempts else CausalVerificationResult(
+                "", "UNTESTABLE", "NO_ELIGIBLE_DRIVER",
+                "No top-two attributed driver explained at least 20% of the movement",
             )
+            result["_causal_design_approved"] = any(item.design_id is not None for item in attempts)
         elif not isinstance(verification_design, VerificationDesign):
             raise TypeError("verification_design must be a VerificationDesign")
         elif verification_design.driver_id not in driver_specs:
@@ -1067,10 +1095,19 @@ class KPIEnginePipeline:
                 verification_design.driver_id, "UNTESTABLE", "FUTURE_POST_PERIOD",
                 "The proposed post-period extends beyond the target date",
             )
-        elif not self.access_controller.check(persona, verification_design.control_slice).allowed:
+        elif any(not self.access_controller.check(persona, scope).allowed for scope in
+                 (verification_design.control_slices or (verification_design.control_slice,))):
             verification = CausalVerificationResult(
                 verification_design.driver_id, "UNTESTABLE", "CONTROL_NOT_AUTHORIZED",
                 "The requested role cannot access the proposed control slice",
+            )
+        elif verification_design.driver_id not in {
+            item.get("driver_id") for item in driver_analysis.get("ranked_drivers", [])[:2]
+            if (item.get("explained_share") or 0) >= 0.20
+        }:
+            verification = CausalVerificationResult(
+                verification_design.driver_id, "INCONCLUSIVE", "NOT_ATTRIBUTED_DRIVER",
+                "The proposed driver is not among the top attributed drivers for this movement",
             )
         else:
             verification = self.verifier.verify(daily, contract, verification_design)
@@ -1080,12 +1117,10 @@ class KPIEnginePipeline:
         self._record_runtime(result, "causal_verification", "CAUSAL", "predeclared_observational_design", stage_started)
         delta_display = f"{assessment.delta:.6f}" if contract.aggregation != "sum" else f"{assessment.delta:.2f}"
         result.update(
-            verdict="MATERIAL_CAUSE_UNVERIFIED",
+            verdict="MATERIAL_CAUSE_UNVERIFIED" if assessment.is_material else "SUSTAINED_CAUSE_UNVERIFIED",
             narrative=(
-                f"{kpi_id} changed by {delta_display} {contract.unit} and passed both "
-                "materiality checks. Candidate associations are listed separately from "
-                f"the observational verification result ({verification.verdict}); no cause "
-                "is automatically asserted."
+                f"{kpi_id} changed by {delta_display} {contract.unit}. "
+                f"The observational verification result is {verification.verdict}; no cause is proven."
             ),
         )
         return self._finalize(result)

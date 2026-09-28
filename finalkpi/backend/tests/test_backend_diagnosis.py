@@ -47,24 +47,19 @@ class BackendDiagnosisApiTests(unittest.TestCase):
             self.assertIn("narrative", result)
             json.dumps(result, allow_nan=False)
 
-    def test_governed_marketing_design_is_reached_and_assessed(self):
-        # Stage 1 follow-up: the governed design used to be keyed at
-        # 2023-08-13 (the last day of EVT01), where movement is no longer
-        # material -- run_diagnosis short-circuits before the causal step on
-        # a non-material day, so the design was never actually reached. It
-        # was re-keyed to 2023-08-06, then again (Stage 2 review fix,
-        # log-residual scoring) to 2023-07-25, where movement is material
-        # under the corrected scoring. UNTESTABLE is an acceptable verdict
-        # here (Stage 5 fixes the as-of/exposure plumbing); NOT_ASSESSED is
-        # not, because it would mean the causal step never ran at all.
+    def test_generated_marketing_design_is_reached_and_assessed(self):
+        # Stage 5 removes the date-keyed override. The 2023-07-25 diagnosis
+        # has no eligible attributed driver; 2023-07-31 generates a design
+        # for the ranked marketing driver and screens the contaminated control.
         results = diagnose_scope(
-            kpis=["net_sales_revenue"], target_date="2023-07-25",
+            kpis=["net_sales_revenue"], target_date="2023-07-31",
             region="North", category="Electronics",
         )
         result = results["results"]["net_sales_revenue"]
         self.assertTrue(result["movement_assessment"]["is_material"])
         self.assertIsNotNone(result["causal_verification"])
         self.assertEqual(result["causal_verification"]["driver_id"], "marketing_spend")
+        self.assertTrue(result["causal_verification"]["design_id"].startswith("auto-"))
         self.assertNotEqual(result["confidence_profile"]["causal"]["status"], "NOT_ASSESSED")
         self.assertTrue(result["confidence_profile"]["causal"]["inputs"]["approved_design"])
 

@@ -90,14 +90,16 @@ class PipelineRegressions(unittest.TestCase):
         # same EVT01 marketing-cut window, does (-2.57).
         result = self.run_case(target_date="2023-07-31")
         self.assertEqual(result["verdict"], "MATERIAL_CAUSE_UNVERIFIED")
-        self.assertEqual(result["causal_verdict"], "UNTESTABLE")
-        self.assertEqual(result["confidence"]["status"], "NOT_ASSESSED")
+        # Generated design now runs, but the early effect is still uncertain.
+        self.assertEqual(result["causal_verdict"], "INCONCLUSIVE")
+        self.assertEqual(result["confidence"]["status"], "INCONCLUSIVE")
         self.assertIsNone(result["confidence"]["calibrated_probability"])
         # Stage 4 (F-C3): 2023-07-31 now reconciles via the July MTD snapshot
         # (available from day 15, compared through its own day-9 coverage_end)
         # instead of the old "always NOT_AVAILABLE_FOR_PERIOD mid-month" bug.
         self.assertEqual(result["reconciliation_verdict"]["status"], "AGREED")
         self.assertEqual(result["source_coverage"]["target_marketing_status"], "UNAVAILABLE_OR_MISSING")
+
         # Stage 3: the attribution engine explains this drop with
         # marketing_spend (its own lag selection finds an available lag,
         # unlike CorrelationalRanker's fixed [0, 7] check which used to hit
@@ -130,6 +132,25 @@ class PipelineRegressions(unittest.TestCase):
         self.assertTrue(result["grounding_passed"])
         self.assertTrue(result["narrative_claims"])
         json.dumps(result, allow_nan=False)
+
+    def test_generated_marketing_design_rejects_contaminated_south_control(self):
+        result = self.run_case(target_date="2023-07-31", persona="CFO")
+        causal = result["causal_verification"]
+        self.assertEqual(causal["driver_id"], "marketing_spend")
+        self.assertTrue(causal["design_id"].startswith("auto-"))
+        self.assertIn(
+            {"slice": {"region": "South", "category": "Electronics"}, "reason": "DRIVER_CHANGED"},
+            causal["controls_rejected"],
+        )
+        self.assertNotIn({"region": "South", "category": "Electronics"}, causal["controls_used"])
+
+    def test_stockout_design_supports_observed_orders_movement(self):
+        result = self.run_case(
+            kpi_id="orders", target_date="2024-02-14", persona="CFO",
+            dimension_slice={"region": "South", "category": "Apparel"},
+        )
+        self.assertEqual(result["causal_verdict"], "SUPPORTED_CONDITIONAL")
+        self.assertEqual(result["causal_verification"]["driver_id"], "stock_availability")
 
     def test_stockout_driver_is_eligible_not_constant_series(self):
         # F-R1 (plan §1.1): stockout used to map to lost_units_stockout, which
@@ -348,8 +369,9 @@ class PipelineRegressions(unittest.TestCase):
             target_date="2023-07-31", persona="CFO", verification_design=design,
         )
         self.assertEqual(result["verdict"], "MATERIAL_CAUSE_UNVERIFIED")
+        # A supplied wrong-driver override cannot outrank the attributed driver.
         self.assertEqual(result["causal_verdict"], "INCONCLUSIVE")
-        self.assertEqual(result["causal_verification"]["reason_code"], "CI_INCLUDES_ZERO")
+        self.assertEqual(result["causal_verification"]["reason_code"], "NOT_ATTRIBUTED_DRIVER")
         self.assertEqual(result["confidence"]["status"], "INCONCLUSIVE")
         self.assertEqual(result["decision_cards"][0]["kind"], "NEXT_CHECK")
         self.assertEqual(result["decision_cards"][0]["status"], "AWAITING_REVIEW")
@@ -382,13 +404,10 @@ class PipelineRegressions(unittest.TestCase):
         # build_profile's causal dimension was silently forced to NOT_ASSESSED
         # even after a real DiD ran. An approved design must now change it.
         #
-        # Stage 7 (F-C1/F-C2) update: the causal dimension always reflects the
-        # one approved design's real verdict, but only *counts toward the
-        # overall conclusion* (Plan §7.2) when it targets the top-ranked
-        # driver -- checkout_latency is not top-ranked for this event (it
-        # does not even rank -- price_discount and promo_flag do), so a
-        # REJECTED verdict here must be visible but must not poison
-        # confidence in a different, better-explained driver. See
+        # Stage 5 now marks this wrong-driver override INCONCLUSIVE because
+        # checkout_latency does not rank for the event. The approved design
+        # remains visible, but does not count toward the overall conclusion
+        # when it does not target the top-ranked driver. See
         # test_confidence.py's test_rejected_top_driver_with_no_alternative_is_conflicting /
         # test_rejected_top_driver_with_strong_alternative_is_not_conflicting
         # for the top-driver-targeted cases.
@@ -433,6 +452,20 @@ class PipelineRegressions(unittest.TestCase):
         )
         self.assertEqual(result["verdict"], "ACCESS_DENIED")
         self.assertIsNone(result["causal_verification"])
+        mixed_controls = replace(
+            design,
+            control_slice={"region": "North", "category": "Apparel"},
+            control_slices=(
+                {"region": "North", "category": "Apparel"},
+                {"region": "South", "category": "Electronics"},
+            ),
+        )
+        denied = self.pipeline.verify_event(
+            "net_sales_revenue", mixed_controls, persona="regional_manager_north",
+            sales_csv="nonexistent.csv", marketing_csv="nonexistent.csv",
+            finance_csv="nonexistent.csv",
+        )
+        self.assertEqual(denied["verdict"], "ACCESS_DENIED")
         with self.assertRaisesRegex(ValueError, "as_of cannot precede"):
             self.pipeline.verify_event(
                 "net_sales_revenue", design, as_of="2023-08-12", **self.paths,

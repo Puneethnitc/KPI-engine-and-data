@@ -416,6 +416,7 @@ class AttributionConfidenceEngine:
         source_status: str,
         source_blocking: bool = False,
         causal_verification: Optional[dict[str, Any]] = None,
+        causal_verifications: Optional[list[dict[str, Any]]] = None,
         corroboration_by_driver: Optional[dict[str, dict[str, Any]]] = None,
         driver_priors: Optional[dict[str, float]] = None,
         model: Optional[AttributionConfidenceModel] = None,
@@ -447,11 +448,15 @@ class AttributionConfidenceEngine:
         corroboration_by_driver = corroboration_by_driver or {}
         driver_priors = driver_priors or {}
         records: list[dict[str, Any]] = []
+        causal_by_driver = {
+            item.get("driver_id"): item for item in (causal_verifications or [])
+            if item.get("driver_id")
+        }
         for driver in eligible:
             driver_id = driver.get("driver_id")
-            causal_for_driver = (
-                causal_verification if causal_verification and causal_verification.get("driver_id") == driver_id else None
-            )
+            causal_for_driver = causal_by_driver.get(driver_id)
+            if causal_for_driver is None and causal_verification and causal_verification.get("driver_id") == driver_id:
+                causal_for_driver = causal_verification
             prior = cls.prior(len(eligible), driver_priors.get(driver_id))
             record = cls.compute_driver(
                 driver,

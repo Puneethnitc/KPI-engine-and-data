@@ -908,3 +908,34 @@ separate v2 file on dev only.
   is retained deliberately: a run cached under the pre-merge `ENGINE_VERSION`
   genuinely has no AC field, and the chat still has to say so rather than
   inventing one. The real-AC path is covered by the two new chat tests.
+
+## Stage 5: before → after (causal verification lite)
+
+The same 538 labeled cases were run with `--split all` before and after this
+stage. The holdout figures below are reported from a separate 267-case run;
+no threshold or weight was selected from holdout results.
+
+| Measure | Before | After |
+|---|---:|---:|
+| EVT01 `SUPPORTED_CONDITIONAL` | 0/12 | 0/12 |
+| EVT01 other verdicts | 11 `NOT_ASSESSED`, 1 `UNTESTABLE` | 7 `NOT_ASSESSED`, 4 `UNTESTABLE`, 1 `INCONCLUSIVE` |
+| EVT03 `SUPPORTED_CONDITIONAL` | 0/12 | 2/12 (orders and units sold, 2024-02-14) |
+| EVT04 `UNTESTABLE` | 16/16 | 16/16 |
+| EVT05 `SUPPORTED_CONDITIONAL` | 0/12 | 0/12 |
+| All-split AC gap, true minus false | 0.4868 | 0.4986 |
+| All-split Brier score | 0.1092 | 0.1076 |
+| Quiet-negative false-alarm rate | 0.048 | 0.048 |
+| Holdout AC gap | 0.3843 | 0.3843 |
+| Holdout Brier score | 0.1758 | 0.1758 |
+| Holdout decoy max AC | 0.2142 | 0.2142 |
+
+The generated EVT01 marketing design on 2023-07-31 rejects South for a
+changed marketing driver and uses authorised controls, but its log-outcome
+confidence interval includes zero. This **does not meet** Step B's EVT01
+`SUPPORTED_CONDITIONAL` acceptance item. EVT03 reaches conditional support
+on two outcomes; other EVT03 dates fail the pretrend or coverage checks.
+The wrong-driver price discount override on EVT01 is `INCONCLUSIVE` with
+`NOT_ATTRIBUTED_DRIVER`. Published-week truncation and control rejection are
+covered by regression tests. The holdout causal verdicts did not change:
+EVT02 remains 12 `UNTESTABLE`, EVT05 remains 12 `NOT_ASSESSED`, and EVT06
+remains 6 `NOT_ASSESSED` plus 6 `UNTESTABLE`.

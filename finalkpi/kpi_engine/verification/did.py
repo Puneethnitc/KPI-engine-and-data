@@ -70,7 +70,12 @@ class CausalVerifier:
     @staticmethod
     def _result(design: VerificationDesign, verdict: str, code: str, reason: str,
                 policy: VerificationPolicy | None = None, **values) -> CausalVerificationResult:
-        return CausalVerificationResult(design.driver_id, verdict, code, reason, policy=policy, **values)
+        return CausalVerificationResult(
+            design.driver_id, verdict, code, reason, policy=policy,
+            design_id=design.design_id,
+            controls_used=design.control_slices or (design.control_slice,),
+            controls_rejected=design.controls_rejected, **values,
+        )
 
     @staticmethod
     def _slice(frame: pd.DataFrame, dimensions: dict[str, str]) -> pd.DataFrame:
@@ -83,9 +88,12 @@ class CausalVerifier:
         if not isinstance(design, VerificationDesign):
             raise TypeError("Causal verification requires a VerificationDesign")
         resolved_policy = self.resolve_policy(policy)
+        controls = design.control_slices or (design.control_slice,)
         if (not design.treated_slice or set(design.treated_slice) != set(design.control_slice)
                 or set(design.treated_slice) != set(contract.dimensions)
                 or design.treated_slice == design.control_slice
+                or any(set(scope) != set(design.treated_slice) or scope == design.treated_slice
+                       for scope in controls)
                 or set(design.treated_slice) - set(contract.dimensions)):
             return self._result(design, "UNTESTABLE", "INVALID_GROUPS",
                                 "Treatment and control must be disjoint, fully specified KPI slices",
@@ -125,7 +133,12 @@ class CausalVerifier:
                                 "Outcome data lacks a declared group dimension",
                                 policy=resolved_policy)
         treated = daily_values(self._slice(data, design.treated_slice), contract)
-        control = daily_values(self._slice(data, design.control_slice), contract)
+        control_series = [daily_values(self._slice(data, scope), contract) for scope in controls]
+        if any((series.dropna() <= 0).any() for series in (treated, *control_series)):
+            return self._result(design, "UNTESTABLE", "NONPOSITIVE_OUTCOME",
+                                "Log outcome requires positive treated and control values", policy=resolved_policy)
+        treated = np.log(treated)
+        control = pd.concat([np.log(series) for series in control_series], axis=1).mean(axis=1, skipna=False)
 
         def gap(first: pd.Timestamp, last: pd.Timestamp):
             dates = pd.date_range(first, last, freq="D")
@@ -134,14 +147,6 @@ class CausalVerifier:
                 return None
             return aligned.iloc[:, 0] - aligned.iloc[:, 1]
 
-        pre = gap(pre_start, start - pd.Timedelta(days=1))
-        post = gap(start, end)
-        placebo_gaps = [gap(first, last) for first, last in windows]
-        if pre is None or post is None or any(item is None for item in placebo_gaps):
-            return self._result(design, "UNTESTABLE", "INCOMPLETE_OUTCOME",
-                                "Every treated and control day must be observed in pre, post, and quiet windows",
-                                policy=resolved_policy)
-        pre_days, post_days = len(pre), len(post)
         driver_specs = {item["id"]: item for item in contract.candidate_drivers}
         spec = driver_specs.get(design.driver_id)
         if spec is None or spec["column"] not in data:
@@ -179,6 +184,16 @@ class CausalVerifier:
                 day for day in pd.date_range(start, end, freq="W-MON")
                 if day + pd.Timedelta(days=6) <= end
             ])
+            # The aligned frame contains only observations published by as_of.
+            # Use the last available complete post week for both exposure and outcome.
+            published = pd.concat(
+                [exposure_series(scope, post_dates) for scope in (design.treated_slice, *controls)],
+                axis=1,
+            )
+            available = published.dropna()
+            if not available.empty:
+                post_dates = post_dates[post_dates <= available.index.max()]
+                end = min(end, post_dates[-1] + pd.Timedelta(days=6))
             if len(pre_dates) < 3 or len(post_dates) < 2:
                 return self._result(design, "UNTESTABLE", "INSUFFICIENT_DRIVER_HISTORY",
                                     "Weekly exposure needs 3 complete pre and 2 complete post weeks",
@@ -186,11 +201,19 @@ class CausalVerifier:
         else:
             pre_dates = pd.date_range(pre_start, start - pd.Timedelta(days=1))
             post_dates = pd.date_range(start, end)
+        pre = gap(pre_start, start - pd.Timedelta(days=1))
+        post = gap(start, end)
+        placebo_gaps = [gap(first, last) for first, last in windows]
+        if pre is None or post is None or any(item is None for item in placebo_gaps):
+            return self._result(design, "UNTESTABLE", "INCOMPLETE_OUTCOME",
+                                "Every treated and control day must be observed in pre, post, and quiet windows",
+                                policy=resolved_policy)
+        pre_days, post_days = len(pre), len(post)
         try:
             tp = exposure_series(design.treated_slice, pre_dates)
             tq = exposure_series(design.treated_slice, post_dates)
-            cp = exposure_series(design.control_slice, pre_dates)
-            cq = exposure_series(design.control_slice, post_dates)
+            cp = pd.concat([exposure_series(scope, pre_dates) for scope in controls], axis=1).mean(axis=1, skipna=False)
+            cq = pd.concat([exposure_series(scope, post_dates) for scope in controls], axis=1).mean(axis=1, skipna=False)
         except (KeyError, ValueError) as error:
             return self._result(design, "UNTESTABLE", "INVALID_DRIVER_DATA", str(error), policy=resolved_policy)
         if any(item.isna().any() or not np.isfinite(item.to_numpy(dtype=float)).all()
@@ -209,26 +232,42 @@ class CausalVerifier:
             return self._result(design, "REJECTED", "DRIVER_DIRECTION_MISMATCH",
                                 "The observed driver exposure moved opposite the predeclared hypothesis",
                                 policy=resolved_policy, **exposure)
+        pre_contrast = (tp - cp).to_numpy(dtype=float)
+        steps = np.diff(pre_contrast)
+        step_center = float(np.median(steps)) if len(steps) else 0.0
+        exposure_noise = 1.4826 * float(np.median(np.abs(steps - step_center))) if len(steps) else 0.0
+        if abs(driver_effect) < 1.5 * exposure_noise:
+            return self._result(design, "INCONCLUSIVE", "WEAK_DRIVER_EXPOSURE",
+                                "The driver contrast is within ordinary pre-event exposure noise",
+                                policy=resolved_policy, **exposure)
         onset_effect = float((tq.iloc[0] - tp.mean()) - (cq.iloc[0] - cp.mean()))
         if onset_effect * design.expected_driver_direction <= 0:
             return self._result(design, "UNTESTABLE", "NO_EXPOSURE_AT_START",
                                 "The driver contrast was not present at the declared treatment start",
                                 policy=resolved_policy, **exposure)
-        differences = np.r_[pre.to_numpy(dtype=float), post.to_numpy(dtype=float)]
+        def estimate(values: pd.Series, indicator: np.ndarray, lag: int):
+            # Calendar effects are fixed before the event and absorb recurring
+            # weekday shape without using post-period outcomes to pick controls.
+            weekday = np.eye(7)[values.index.dayofweek, 1:]
+            regressors = np.column_stack((np.ones(len(values)), indicator, weekday))
+            return sm.OLS(values.to_numpy(dtype=float), regressors).fit(
+                cov_type="HAC", cov_kwds={"maxlags": lag}
+            )
+
+        differences = pd.concat([pre, post])
         post_indicator = np.r_[np.zeros(pre_days), np.ones(post_days)]
-        fit = sm.OLS(differences, sm.add_constant(post_indicator)).fit(
-            cov_type="HAC", cov_kwds={"maxlags": min(resolved_policy.max_hac_lags, pre_days - 1, post_days - 1)}
-        )
+        fit = estimate(differences, post_indicator,
+                       min(resolved_policy.max_hac_lags, pre_days - 1, post_days - 1))
         effect = float(fit.params[1])
         ci = tuple(float(value) for value in fit.conf_int(alpha=resolved_policy.alpha)[1])
-        trend = sm.OLS(pre.to_numpy(dtype=float), sm.add_constant(np.arange(pre_days))).fit(
-            cov_type="HAC", cov_kwds={"maxlags": min(resolved_policy.max_hac_lags, pre_days - 1)}
-        )
+        trend = estimate(pre, np.arange(pre_days), min(resolved_policy.max_hac_lags, pre_days - 1))
         slope, trend_p = float(trend.params[1]), float(trend.pvalues[1])
         placebo_effects = []
         for values in placebo_gaps:
             split = len(values) // 2
-            placebo_effects.append(float(values.iloc[split:].mean() - values.iloc[:split].mean()))
+            placebo_indicator = np.r_[np.zeros(split), np.ones(len(values) - split)]
+            placebo_effects.append(float(estimate(values, placebo_indicator,
+                                                 min(resolved_policy.max_hac_lags, split - 1)).params[1]))
         evidence = dict(
             **exposure,
             did_effect=round(effect, 6),
@@ -240,6 +279,10 @@ class CausalVerifier:
             ),
             placebo_effects=tuple(round(value, 6) for value in placebo_effects),
             pre_days=pre_days, post_days=post_days,
+            post_end_effective=end.date().isoformat(),
+            truncated_for_availability=bool(end < pd.Timestamp(design.post_end)),
+            placebo_p_value=round((1 + sum(abs(value) >= abs(effect) for value in placebo_effects)) /
+                                    (1 + len(placebo_effects)), 6),
         )
         if not all(np.isfinite((effect, *ci, slope, *placebo_effects))):
             return self._result(design, "UNTESTABLE", "UNSCORABLE_ESTIMATE",

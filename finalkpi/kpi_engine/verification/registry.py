@@ -6,40 +6,7 @@ from kpi_engine.verification.models import VerificationDesign
 # Server-authorized predeclared event designs.
 # Clients cannot supply arbitrary slices to bypass authorization; they can only
 # trigger server-governed designs for authorized target windows.
-GOVERNED_DESIGNS: Dict[Tuple[str, str, str, str], VerificationDesign] = {
-    # Key: (kpi_id, target_date, region, category)
-    # Stage 1 (plan §1.8, F-V1): the old traffic_drop design (keyed at
-    # 2023-08-06) is deleted outright, simply because traffic_drop was
-    # removed as a driver entirely (F-R2, F-R4 mechanical-component guard) --
-    # it is no longer a declared driver for any KPI, so no design can
-    # reference it. The other original design (ad_spend_drop,
-    # treatment_start 2023-07-01, a Saturday) is corrected below instead of
-    # deleted: it now uses the current driver id and a real Monday treatment
-    # start (2023-07-17). South remains the control for now even though it
-    # ran its own campaign (F-V2) -- Stage 5 replaces this whole registry
-    # with auto-generated, control-validated designs.
-    # The key's target_date must be a date where the movement is actually
-    # material for this slice (run_diagnosis only reaches the causal step
-    # when assessment.is_material). Re-keyed again for the Stage 2 review's
-    # log-residual scoring fix: 2023-08-06 stopped being material once
-    # scoring moved from a pooled absolute-residual MAD to a log-ratio one
-    # (F-D3); 2023-07-25 is material under the corrected scoring. (Stage 3's
-    # AttributionEngine finds no driver moved enough here to explain the
-    # movement -- marketing_spend is SOURCE_UNAVAILABLE at this exact lag --
-    # but that does not block this predeclared design: verify_event's causal
-    # step runs independently of driver_analysis.)
-    ("net_sales_revenue", "2023-07-25", "North", "Electronics"): VerificationDesign(
-        driver_id="marketing_spend",
-        treated_slice={"region": "North", "category": "Electronics"},
-        control_slice={"region": "South", "category": "Electronics"},
-        pre_start="2023-06-05",
-        treatment_start="2023-07-17",
-        post_end="2023-07-25",
-        quiet_windows=(("2023-04-01", "2023-04-14"), ("2023-05-01", "2023-05-14")),
-        expected_driver_direction=-1,
-        expected_outcome_direction=-1,
-    ),
-}
+GOVERNED_DESIGNS: Dict[Tuple[str, str, str, str], VerificationDesign] = {}
 
 
 def resolve_governed_design(

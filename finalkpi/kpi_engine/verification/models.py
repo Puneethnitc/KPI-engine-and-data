@@ -73,6 +73,9 @@ class VerificationDesign:
     quiet_windows: tuple[tuple[str, str], ...]
     expected_outcome_direction: Optional[int] = None  # -1 or +1, predeclared
     expected_driver_direction: Optional[int] = None  # -1 or +1, predeclared
+    design_id: Optional[str] = None
+    control_slices: tuple[dict[str, str], ...] = ()
+    controls_rejected: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -92,8 +95,14 @@ class CausalVerificationResult:
     pre_days: int = 0
     post_days: int = 0
     temporal_precedence_passed: Optional[bool] = None
-    method: str = "daily_gap_did_hac_placebo"
+    method: str = "log_outcome_did_hac_placebo"
     policy: Optional[VerificationPolicy] = None
+    design_id: Optional[str] = None
+    controls_used: tuple[dict[str, str], ...] = ()
+    controls_rejected: tuple[dict[str, Any], ...] = ()
+    placebo_p_value: Optional[float] = None
+    post_end_effective: Optional[str] = None
+    truncated_for_availability: bool = False
 
 
 @dataclass(frozen=True)

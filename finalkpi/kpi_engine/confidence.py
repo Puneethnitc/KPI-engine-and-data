@@ -343,6 +343,7 @@ class ConfidenceEngine:
                 ranked_drivers=candidates, is_material=is_material, source_status=source_status,
                 source_blocking=False,
                 causal_verification=causal_verification if causal_design_approved else None,
+                causal_verifications=result.get("causal_verifications") if causal_design_approved else None,
                 corroboration_by_driver=corroboration_by_driver,
             )
             ac_by_id = {item["driver_id"]: item for item in ac_profile["drivers"]}

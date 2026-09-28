@@ -51,7 +51,8 @@ class VerificationCases(unittest.TestCase):
     def test_support_is_conditional_and_driver_exposure_is_observed(self):
         result = self.verifier.verify(self.frame(), self.contract, self.design)
         self.assertEqual(result.verdict, "SUPPORTED_CONDITIONAL")
-        self.assertAlmostEqual(result.did_effect, -20.0)
+        # Log outcome DiD reports the proportional change, not a 20-order level gap.
+        self.assertAlmostEqual(result.did_effect, -0.200671, places=6)
         self.assertAlmostEqual(result.driver_exposure_effect, -500.0)
         self.assertEqual(len(result.placebo_effects), 2)
         self.assertIn("not proven", result.reason.lower())
@@ -138,6 +139,16 @@ class VerificationCases(unittest.TestCase):
         )
         self.assertEqual((midweek.verdict, midweek.reason_code),
                          ("UNTESTABLE", "COARSE_TREATMENT_TIME"))
+
+        # A requested fourth post week has not been published in this frame.
+        # Outcome and exposure must end together at the last complete week.
+        extended = self.verifier.verify(
+            pd.DataFrame(rows), self.contract,
+            replace(weekly, post_end="2023-04-30"),
+        )
+        self.assertEqual(extended.verdict, "SUPPORTED_CONDITIONAL")
+        self.assertEqual(extended.post_end_effective, "2023-04-23")
+        self.assertTrue(extended.truncated_for_availability)
 
 
 if __name__ == "__main__":
