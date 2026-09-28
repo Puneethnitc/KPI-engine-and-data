@@ -61,7 +61,7 @@ DEMO_IDENTITIES = {
     # has can_view_categories = ALL).
     "demo-category-manager-north-electronics": "category_manager_north_electronics",
 }
-ENGINE_VERSION = "kpi-engine-llm-narrator-v1"
+ENGINE_VERSION = "kpi-engine-aggregate-scope-v1"
 from kpi_engine.verification.registry import resolve_governed_design
 
 
@@ -274,10 +274,17 @@ def _resolve_scope(
     if "target_date" not in effective:
         effective["target_date"] = DEFAULT_DATE
 
+    # "ALL" is an explicit aggregate request: the dimension key is dropped from
+    # the slice (AccessController treats an absent key as unrestricted and only
+    # allows it for ALL-scoped roles, so every other role fails closed).
+    aggregate = {key for key in ("region", "category") if str(effective.get(key, "")).strip().upper() == "ALL"}
+    for key in aggregate:
+        del effective[key]
+
     allowed_dims = _get_allowed_dimensions()
     legacy_defaults = {"region": DEFAULT_REGION, "category": DEFAULT_CATEGORY}
     for key, fallback in legacy_defaults.items():
-        if key in allowed_dims and key not in effective:
+        if key in allowed_dims and key not in effective and key not in aggregate:
             effective[key] = fallback
     return effective
 
@@ -921,7 +928,7 @@ def get_driver_series(kpi_id: str, driver_id: str, region: str, category: str, *
     if spec is None:
         raise ValueError(f"Unsupported driver for {kpi_id}: {driver_id}")
     catalog = SourceCatalog()
-    frame = QueryService(catalog).load_source(spec["source"], scope={"region": region, "category": category}, as_of=as_of)
+    frame = QueryService(catalog).load_source(spec["source"], scope={key: value for key, value in (("region", region), ("category", category)) if str(value).upper() != "ALL"}, as_of=as_of)
     grain = spec.get("grain", "daily")
     date_column = "week_start" if grain == "weekly" else "date"
     if date_column not in frame or frame.empty:
@@ -943,7 +950,7 @@ def _build_timeseries_points(kpi_id: str, region: str, category: str, contract_v
     """Build one governed series without running the full detector per point."""
     catalog = SourceCatalog()
     contract = _registry_with_catalog(catalog).get(kpi_id)
-    scoped = QueryService(catalog).load_source(contract.source, scope={"region": region, "category": category})
+    scoped = QueryService(catalog).load_source(contract.source, scope={key: value for key, value in (("region", region), ("category", category)) if str(value).upper() != "ALL"})
     scoped["date"] = pd.to_datetime(scoped["date"])
     series = daily_values(scoped, contract).sort_index()
     availability = scoped.groupby("date")["available_at"].max() if "available_at" in scoped else pd.Series(dtype="object")
@@ -1022,7 +1029,7 @@ def get_marketing(region: str, category: str, as_of: str | None = None) -> Dict[
     cutoff = pd.Timestamp(as_of) if as_of else None
     if cutoff is not None and cutoff == cutoff.normalize():
         cutoff += pd.Timedelta(days=1, hours=12)
-    scoped = QueryService(SourceCatalog()).load_source("marketing_weekly", scope={"region": region, "category": category}, as_of=cutoff.isoformat() if cutoff is not None else None)
+    scoped = QueryService(SourceCatalog()).load_source("marketing_weekly", scope={key: value for key, value in (("region", region), ("category", category)) if str(value).upper() != "ALL"}, as_of=cutoff.isoformat() if cutoff is not None else None)
     if scoped.empty:
         return {"items": [], "source": "marketing_weekly.csv", "status": "MISSING_REPORT"}
     scoped["week_end"] = pd.to_datetime(scoped["week_end"])

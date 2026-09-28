@@ -9,7 +9,7 @@ test('click target replaces slice, date and KPI, including entitled ALL rollups'
   const target = movementSelection({ kpi_id: 'orders', region: null, category: null, target_date: '2024-05-16' }, '2024-05-15', options, 'CFO')
   assert.deepEqual(target, { scenarioId: '', region: 'ALL', category: 'ALL', date: '2024-05-16', kpiId: 'orders' })
   const request = buildDiagnosisRequest({ apiBase: '/api/backend', scenarioId: '', persona: 'CFO', userId: 'demo-cfo', ...target })
-  assert.deepEqual(request.body.scope, { region: null, category: null })
+  assert.deepEqual([request.body.region, request.body.category, request.body.scope], ['ALL', 'ALL', undefined]) // explicit ALL, not null (aggregate scope)
   assert.equal(request.body.target_date, '2024-05-16')
   assert.equal(movementSelection({ kpi_id: 'orders', region: 'South', category: 'Home', target_date: '2024-05-16' }, '2024-05-15', options, 'CFO')?.kpiId, 'orders')
 })
