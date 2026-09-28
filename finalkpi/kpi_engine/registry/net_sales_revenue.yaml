@@ -40,7 +40,7 @@ comparison_policy:
 
 # Provisional business/statistical alert policy; requires dataset calibration.
 materiality:
-  z_threshold: 2.05
+  z_threshold: 2.5
   abs_threshold: 500.0
   rel_threshold: 0.10 # Stage 2 (F-D3): a slice-relative gate alongside the absolute floor.
 statistical_method: robust rolling baseline z-score with seasonal MSTL review

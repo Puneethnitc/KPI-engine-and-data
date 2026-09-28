@@ -14,7 +14,7 @@ from backend.rag_pipeline import DynamicRAGPipeline
 from backend.query_router import DynamicQueryRouter
 from backend.retrieval import ContextBuilder
 from backend.schemas import ChatRequest as RagChatRequest
-from backend.service import DEMO_IDENTITY_MODE, authorize_scope, build_marketing_brief, diagnose_scope, get_available_filters, get_authorized_candidate_artifact, get_authorized_diagnosis, get_authorized_feedback_run, get_authorized_feedback_record, get_authorized_improvement_proposal, get_authorized_improvement_proposals, get_authorized_proposal_evaluation, get_current_kpi_contract, get_diagnosis, get_evidence, get_feedback, get_feedback_aggregations, get_investigations, get_insights, get_marketing, get_registered_kpis, get_run_kpi_contract, get_timeseries, identity_persona
+from backend.service import DEMO_IDENTITY_MODE, authorize_scope, build_marketing_brief, diagnose_scope, get_available_filters, get_authorized_candidate_artifact, get_authorized_diagnosis, get_authorized_feedback_run, get_authorized_feedback_record, get_authorized_improvement_proposal, get_authorized_improvement_proposals, get_authorized_proposal_evaluation, get_current_kpi_contract, get_diagnosis, get_evidence, get_feedback, get_feedback_aggregations, get_investigations, get_insights, get_marketing, get_movements, get_registered_kpis, get_run_kpi_contract, get_timeseries, identity_persona
 from backend.domain_policy import require_domain, retrieval_tags_for_persona
 from backend.response_projection import project_diagnosis, project_evidence, project_saved_run
 from backend.feedback_learning import aggregate_feedback_records, build_improvement_proposal, proposal_change_idempotency_key
@@ -545,6 +545,18 @@ def api_marketing(region: str = "North", category: str = "Electronics", user_id:
         require_domain(persona, "MARKETING")
         authorize_scope(user_id, region, category)
         return get_marketing(region, category, as_of=as_of)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/movements")
+def api_movements(date: str, user_id: Optional[str] = None, kpis: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        _persona(user_id)
+        kpi_list = [item.strip() for item in kpis.split(",") if item.strip()] if kpis else None
+        return get_movements(date, user_id, kpi_list)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

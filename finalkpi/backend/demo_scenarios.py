@@ -85,7 +85,10 @@ _SCENARIOS: tuple[DemoScenario, ...] = (
         primary_kpi="net_sales_revenue",
         region="North",
         category="Electronics",
-        target_date="2023-07-24",
+        # Stage 2 review fix (log-residual scoring, F-D3): 2023-07-24 no
+        # longer clears the corrected statistical bar on its own; 2023-07-25
+        # does, with both detectors agreeing (BOTH) and 3 ranked drivers.
+        target_date="2023-07-25",
         as_of=None,
         source_mode="production",
         fixture_id=None,

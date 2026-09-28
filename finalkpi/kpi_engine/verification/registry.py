@@ -20,16 +20,18 @@ GOVERNED_DESIGNS: Dict[Tuple[str, str, str, str], VerificationDesign] = {
     # with auto-generated, control-validated designs.
     # The key's target_date must be a date where the movement is actually
     # material for this slice (run_diagnosis only reaches the causal step
-    # when assessment.is_material), so this is keyed at 2023-08-06, not
-    # 2023-08-13 (the last day of the event window, where the movement is
-    # no longer material -- a design keyed there would never be reached).
-    ("net_sales_revenue", "2023-08-06", "North", "Electronics"): VerificationDesign(
+    # when assessment.is_material). Re-keyed again for the Stage 2 review's
+    # log-residual scoring fix: 2023-08-06 stopped being material once
+    # scoring moved from a pooled absolute-residual MAD to a log-ratio one
+    # (F-D3); 2023-07-25 (also this dataset's "material-multi-driver" demo
+    # date) is material under the corrected scoring.
+    ("net_sales_revenue", "2023-07-25", "North", "Electronics"): VerificationDesign(
         driver_id="marketing_spend",
         treated_slice={"region": "North", "category": "Electronics"},
         control_slice={"region": "South", "category": "Electronics"},
         pre_start="2023-06-05",
         treatment_start="2023-07-17",
-        post_end="2023-08-06",
+        post_end="2023-07-25",
         quiet_windows=(("2023-04-01", "2023-04-14"), ("2023-05-01", "2023-05-14")),
         expected_driver_direction=-1,
         expected_outcome_direction=-1,

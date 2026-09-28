@@ -42,7 +42,7 @@ comparison_policy:
 
 # Thresholds use the fraction scale; presentation percentages are separate.
 materiality:
-  z_threshold: 2.05
+  z_threshold: 2.5
   abs_threshold: 0.003
   rel_threshold: 0.10 # Stage 2 (F-D3): a slice-relative gate alongside the absolute floor.
 statistical_method: robust rolling baseline z-score with seasonal MSTL review

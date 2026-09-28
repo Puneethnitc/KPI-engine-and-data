@@ -51,13 +51,14 @@ class BackendDiagnosisApiTests(unittest.TestCase):
         # Stage 1 follow-up: the governed design used to be keyed at
         # 2023-08-13 (the last day of EVT01), where movement is no longer
         # material -- run_diagnosis short-circuits before the causal step on
-        # a non-material day, so the design was never actually reached. It is
-        # now keyed at 2023-08-06, where movement is material. UNTESTABLE is
-        # an acceptable verdict here (Stage 5 fixes the as-of/exposure
-        # plumbing); NOT_ASSESSED is not, because it would mean the causal
-        # step never ran at all.
+        # a non-material day, so the design was never actually reached. It
+        # was re-keyed to 2023-08-06, then again (Stage 2 review fix,
+        # log-residual scoring) to 2023-07-25, where movement is material
+        # under the corrected scoring. UNTESTABLE is an acceptable verdict
+        # here (Stage 5 fixes the as-of/exposure plumbing); NOT_ASSESSED is
+        # not, because it would mean the causal step never ran at all.
         results = diagnose_scope(
-            kpis=["net_sales_revenue"], target_date="2023-08-06",
+            kpis=["net_sales_revenue"], target_date="2023-07-25",
             region="North", category="Electronics",
         )
         result = results["results"]["net_sales_revenue"]

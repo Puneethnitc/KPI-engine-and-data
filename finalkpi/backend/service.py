@@ -9,6 +9,9 @@
 # metadata does not expose unavailable or unauthorized slices.
 # DEMO_IDENTITIES includes a category-restricted role (Stage 1, F-S4) to
 # exercise column/domain-level, not just row/region-level, security.
+# get_movements (Stage 2, F-D4) is a separate fast detection-only scan
+# (kpi_engine/scan.py); movement_priority's formula also replaces
+# build_marketing_brief's old material/decline/other bucket ordering.
 
 from __future__ import annotations
 
@@ -29,6 +32,7 @@ from kpi_engine.access import AccessController
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import daily_values, prepare_metric_request
 from kpi_engine.pipeline import KPIEnginePipeline
+from kpi_engine.scan import MovementScanner
 from kpi_engine.query.catalog import SourceCatalog
 from kpi_engine.query.service import QueryService
 
@@ -54,7 +58,7 @@ DEMO_IDENTITIES = {
     # has can_view_categories = ALL).
     "demo-category-manager-north-electronics": "category_manager_north_electronics",
 }
-ENGINE_VERSION = "kpi-engine-stage1-data-contract-fixes-v1"
+ENGINE_VERSION = "kpi-engine-stage2-weekday-log-detection-v1"
 from kpi_engine.verification.registry import resolve_governed_design
 
 
@@ -425,6 +429,23 @@ def _prepare_requested_kpis(
             as_of=as_of,
         )
     return prepared
+
+
+def get_movements(date: str, user_id: str, kpis: Sequence[str] | None = None) -> Dict[str, Any]:
+    """Stage 2 (F-D4): a fast, detection-only, priority-ranked scan across
+    every KPI/slice the caller's identity is authorised to see. Never runs
+    driver ranking, reconciliation or narrative -- a movement worth
+    investigating still needs a follow-up diagnose_scope call.
+    """
+    persona = identity_persona(user_id)
+    registry = _registry_with_catalog()
+    selected = registry.list_ids() if not kpis else list(kpis)
+    unknown = [kpi_id for kpi_id in selected if kpi_id not in registry._contracts]
+    if unknown:
+        raise ValueError(f"Unknown KPI ID(s): {', '.join(unknown)}")
+    scanner = MovementScanner(ENGINE_REGISTRY_DIR, ACCESS_CSV)
+    movements = scanner.scan(date=date, persona=persona, kpis=selected, sales_csv=SALES_CSV)
+    return {"date": date, "persona": persona, "movements": movements}
 
 
 def diagnose_scope(

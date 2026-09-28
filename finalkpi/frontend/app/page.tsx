@@ -33,6 +33,24 @@ type Movement = {
   status: string
 }
 
+// A single MovementScanner result (GET /api/movements) -- distinct from
+// `Movement` above, which is one diagnosis's own movement_assessment for the
+// KPI/slice currently selected. A ScannedMovement is one row of the
+// persona-wide "Top movements today" feed, across every authorised slice.
+type ScannedMovement = {
+  kpi_id: string
+  region: string | null
+  category: string | null
+  is_material: boolean
+  priority: number
+  delta: number | null
+  rel_delta: number | null
+  actual_value: number | null
+  expected_value: number | null
+  detector_agreement: string
+  status: string
+}
+
 type Decomposition = {
   total_delta: number
   volume_effect: number
@@ -212,6 +230,8 @@ export default function Page() {
   const [evidenceData, setEvidenceData] = useState<EvidenceSummary | null>(null)
   const [marketingBrief, setMarketingBrief] = useState<MarketingBrief | null>(null)
   const [scenarioHistory, setScenarioHistory] = useState<{ baseline_count?: number, required_observation_count?: number } | null>(null)
+  const [movements, setMovements] = useState<ScannedMovement[]>([])
+  const [movementsLoading, setMovementsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [accessDeniedMessage, setAccessDeniedMessage] = useState('')
@@ -265,6 +285,13 @@ export default function Page() {
       .then(setEvidenceData)
       .catch(() => setEvidenceData(null))
   }, [result?.run_id, persona, activeScenario])
+
+  function openMovement(item: ScannedMovement) {
+    if (scenarioLocked) return
+    if (item.region) setRegion(item.region)
+    if (item.category) setCategory(item.category)
+    if (registeredKpis.some(candidate => candidate.kpi_id === item.kpi_id)) setSelected(item.kpi_id)
+  }
 
   async function diagnose() {
     if (!ready) return
@@ -351,6 +378,17 @@ export default function Page() {
 
   useEffect(() => { void loadMetadata() }, [])
   useEffect(() => { if (ready) void diagnose() }, [ready, region, category, date, persona, scenarioId])
+  useEffect(() => {
+    if (!ready || !date) return
+    const userId = activeScenario ? activeScenario.user_id : identityForPersona(persona)
+    setMovementsLoading(true)
+    const params = new URLSearchParams({ date, user_id: userId })
+    fetch(`${API_BASE}/api/movements?${params}`, { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(payload => setMovements(payload?.movements ?? []))
+      .catch(() => setMovements([]))
+      .finally(() => setMovementsLoading(false))
+  }, [ready, date, persona, activeScenario])
   useEffect(() => {
     const runId = new URLSearchParams(window.location.search).get('runId')
     if (!runId) return
@@ -521,6 +559,43 @@ export default function Page() {
         )}
         {error && <div className="alert error"><ShieldAlert size={18} /><span>{error}</span></div>}
         {loading && <div className="alert"><Activity className="spin" size={18} /><span>Running the governed KPI engine across daily, weekly, and monthly sources…</span></div>}
+
+        {movements.length > 0 && (
+          <section className="card" aria-labelledby="movements-title" style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span className="eyebrow">Detection only, ranked by priority</span>
+                <h3 id="movements-title" style={{ margin: '2px 0' }}>Top movements today</h3>
+              </div>
+              {movementsLoading && <Activity className="spin" size={16} />}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+              {movements.slice(0, 5).map(item => {
+                const unit = registeredKpis.find(candidate => candidate.kpi_id === item.kpi_id)?.unit ?? 'count'
+                return (
+                  <button
+                    key={`${item.kpi_id}-${item.region ?? 'ALL'}-${item.category ?? 'ALL'}`}
+                    onClick={() => openMovement(item)}
+                    disabled={scenarioLocked}
+                    style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
+                      width: '100%', textAlign: 'left', background: 'none', cursor: scenarioLocked ? 'default' : 'pointer',
+                      border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 12px',
+                    }}
+                  >
+                    <span><strong>{kpiLabel(item.kpi_id)}</strong> · {item.region ?? 'All regions'} · {item.category ?? 'All categories'}</span>
+                    <span className={`evidence-pill ${item.is_material ? 'warning' : 'neutral'}`}>
+                      {formatDelta(item.delta, unit)}{item.is_material ? ' · material' : ''}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <small style={{ display: 'block', marginTop: '8px', color: 'var(--muted)' }}>
+              Movement detection only -- no driver ranking or causal check yet. Click a row to open that slice's full diagnosis.
+            </small>
+          </section>
+        )}
 
         {marketingBrief && result?.verdict !== 'ACCESS_DENIED' && <section className="marketing-brief" aria-labelledby="briefing-title">
           <div className="briefing-lead"><div><span className="eyebrow">{persona === 'CFO' ? 'Financial reviewer briefing' : 'Marketing manager briefing'}</span><h2 id="briefing-title">What you need to know today</h2><p>{marketingBrief.summary}</p><small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>

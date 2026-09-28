@@ -1,7 +1,12 @@
 # IMPLEMENTATION HANDOFF — primary movement detector
-# Current: scores around a robust center but reports change from the arithmetic
-# mean, using max(30, min_history) prior calendar days. Sustained score uses the
-# seasonal_period as its recent-window length; a constant baseline abstains.
+# Current (Stage 2, F-D1/F-D3): expected value is a same-weekday median (last
+# 8 weeks, weekday-adjusted-median fallback); point/sustained scores are
+# log(actual/expected) over a log-residual MAD scale (log(value / that
+# weekday's median)), not a plain difference -- this dataset's noise is
+# proportional, not additive, and a pooled absolute-residual MAD read weekend
+# false positives as noisier than they really are in relative terms.
+# Materiality requires abs_threshold AND rel_threshold (F-D3). Falls back to a
+# linear residual only when a value is non-positive (log undefined).
 # Next: resolve comparison window, coverage/calendar, sustained window and static
 # baseline policy separately. Consume a prepared series and shared baseline plan.
 # Keep MAD/IQR scaling constants as method math; define unit-aware scale floors.
@@ -15,7 +20,13 @@ import numpy as np
 import pandas as pd
 from typing import Any, Dict, Optional
 
-from kpi_engine.contracts.metrics import ComparisonPlan, daily_values, same_weekday_expected, weekday_adjusted_residuals
+from kpi_engine.contracts.metrics import (
+    ComparisonPlan,
+    daily_values,
+    linear_weekday_adjusted_residuals,
+    same_weekday_expected,
+    weekday_adjusted_residuals,
+)
 from kpi_engine.detection.models import DetectionPolicy, MovementAssessment
 
 class RobustBaselineDetector:
@@ -167,11 +178,23 @@ class RobustBaselineDetector:
             )
         delta = actual_val - expected_val
 
-        # Stage 2 (F-D1): scale is the robust MAD of weekday-adjusted residuals
-        # (each historical day minus its own weekday's median) over the full
-        # baseline window, so an ordinary Saturday is compared against other
-        # Saturdays, not against the whole week's noisier spread.
-        residuals = weekday_adjusted_residuals(baseline)
+        # Stage 2 (F-D1, review fix): scale is the robust MAD of log-ratio
+        # weekday-adjusted residuals (log(value / that weekday's median)),
+        # not a plain difference. This dataset's noise is proportional --
+        # roughly a flat ~10% regardless of a weekday's absolute level, not
+        # a flat absolute amount -- so a pooled absolute-residual MAD reads
+        # weekends (a higher baseline) as noisier than they really are in
+        # relative terms, which pushed false alarms onto Fri/Sat/Sun. Scoring
+        # in log space fixes that. Falls back to a linear (additive) residual
+        # only when the target or expected value is not strictly positive
+        # (log undefined), e.g. a KPI that can be exactly 0.
+        log_scoring = actual_val > 0 and expected_val > 0
+        if log_scoring:
+            residuals = weekday_adjusted_residuals(baseline)
+            score_numerator = float(np.log(actual_val) - np.log(expected_val))
+        else:
+            residuals = linear_weekday_adjusted_residuals(baseline)
+            score_numerator = delta
         score_center, dispersion_val, method_used = self.calculate_robust_dispersion(residuals)
 
         if not np.isfinite(dispersion_val) or dispersion_val <= 0:
@@ -187,13 +210,13 @@ class RobustBaselineDetector:
             )
 
         # Decisions use full-precision scores; rounding is only for the payload.
-        point_score = delta / dispersion_val
+        point_score = score_numerator / dispersion_val
         sustained_score = None
         recent_days = kpi_contract.seasonal_period
         if recent_days >= 4 and len(residuals) - (recent_days - 1) >= 14:
             recent_residuals = pd.concat([
                 residuals.iloc[-(recent_days - 1):],
-                pd.Series([delta], index=[target_dt]),
+                pd.Series([score_numerator], index=[target_dt]),
             ])
             sustained_score = float(recent_residuals.median()) / dispersion_val
 

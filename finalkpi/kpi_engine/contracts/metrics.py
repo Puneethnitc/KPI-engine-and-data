@@ -1,5 +1,10 @@
 # IMPLEMENTATION HANDOFF — current calculation reference
 # Current: aggregate by date using sum, mean, weighted mean or ratio of sums.
+# Stage 2 (F-D1) adds same_weekday_expected (the shared expected-value
+# calculation for detection and decomposition) and weekday_adjusted_residuals
+# (log-ratio residuals for the dispersion scale, with a linear fallback for
+# non-positive values). history_days is now max(90, min_history_periods), up
+# from 30, so there is enough same-weekday depth.
 # Next: keep this as the reference for DuckDB parity, then delegate to one metric
 # service shared by detection, ranking and verification. Define temporal rollup
 # separately from dimension rollup; a mean of daily means may be inappropriate.
@@ -56,13 +61,41 @@ def same_weekday_expected(
 
 
 def weekday_adjusted_residuals(series: pd.Series) -> pd.Series:
-    """De-seasonalise a daily series by each row's own weekday median.
+    """De-seasonalise a daily series by each row's own weekday median, in log
+    space: log(value / that weekday's median).
 
-    Used for the Stage 2 residual dispersion scale (MAD of value minus its
-    weekday's median, over the whole supplied window) -- never for the point
-    "expected value" itself, which uses `same_weekday_expected`'s narrower,
-    more recent k-weeks window.
+    Used for the Stage 2 residual dispersion scale (MAD of these residuals,
+    over the whole supplied window) -- never for the point "expected value"
+    itself, which uses `same_weekday_expected`'s narrower, more recent
+    k-weeks window.
+
+    Log space, not a plain difference (Stage 2 review fix, F-D3): this
+    dataset's noise is proportional, not additive -- weekend absolute levels
+    are higher but the percentage spread is flat at roughly the same rate
+    every day. A pooled absolute-residual MAD therefore reads as tighter on
+    quiet weekdays and looser on weekends, which pushed false alarms onto
+    Fri/Sat/Sun even on ordinary days. Non-positive values (log undefined,
+    e.g. a KPI that can hit exactly 0) are excluded, the same as any other
+    missing observation; robust.py falls back to a linear (additive) residual
+    only when there are too few positive values left to score at all.
     """
+    clean = series.dropna()
+    clean = clean[clean > 0]
+    if clean.empty:
+        return clean
+    weekday_medians = clean.groupby(clean.index.dayofweek).median()
+    weekday_medians = weekday_medians[weekday_medians > 0]
+    clean = clean[clean.index.dayofweek.isin(weekday_medians.index)]
+    if clean.empty:
+        return clean
+    mapped_medians = clean.index.dayofweek.map(weekday_medians).astype(float)
+    return np.log(clean.astype(float)) - np.log(mapped_medians)
+
+
+def linear_weekday_adjusted_residuals(series: pd.Series) -> pd.Series:
+    """Additive fallback for `weekday_adjusted_residuals`: value minus that
+    weekday's median, with no log transform. Only used when a series has
+    non-positive values and a log-ratio residual is undefined for it."""
     clean = series.dropna()
     if clean.empty:
         return clean
