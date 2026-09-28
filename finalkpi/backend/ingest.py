@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
 
 import pandas as pd
 import yaml
@@ -14,16 +15,28 @@ except Exception:  # pragma: no cover
     chromadb = None
     embedding_functions = None
 
-from backend.config import ENGINE_REGISTRY_DIR, EVIDENCE_CSV, ROOT
+from backend.config import CHROMA_DIR, ENGINE_REGISTRY_DIR, EVIDENCE_CSV, ROOT
+
+
+def _tag_string(value: Any) -> str:
+    """Normalise a semicolon- or comma-separated tag list to Chroma's CSV form."""
+    tags = [tag.strip().lower() for tag in str(value or "").replace(";", ",").split(",") if tag.strip()]
+    return ",".join(sorted(set(tags)))
 
 
 class KBIndexer:
     def __init__(self, db_path: str | None = None):
-        self.db_path = db_path or str(ROOT / "backend" / "data" / "chroma")
+        # Stage 6-lite: ingest and retrieval previously wrote to two different
+        # folders (backend/data/chroma and config.CHROMA_DIR), so every document
+        # this class indexed was invisible to ContextBuilder. There is now one
+        # store, config.CHROMA_DIR, and an explicit db_path may still override it
+        # for tests and alternate deployments.
+        self.db_path = db_path or str(CHROMA_DIR)
         if chromadb is None:
             self.client = None
             self.collection = None
             return
+        Path(self.db_path).mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(path=self.db_path)
         self.ef = embedding_functions.DefaultEmbeddingFunction() if embedding_functions is not None else None
         self.collection = self.client.get_or_create_collection(
@@ -98,13 +111,72 @@ class KBIndexer:
         # Governed diagnosis/query services remain the quantitative source for chat.
         return
 
+    def process_evidence_documents(self, evidence_csv: str = EVIDENCE_CSV) -> Dict[str, Any]:
+        """Stage 6-lite: index data/unstructured_evidence.csv into the shared store.
+
+        The same availability, scope and entitlement columns the engine's
+        EvidenceCorroborator filters on are carried into metadata, so
+        retrieve_vector_chunks can apply the identical filter chain to the chat
+        path. Injection-bearing documents are indexed too: they are still
+        retrieved and then dropped by the filter, which is what makes that filter
+        observable. A prompt-injection document is untrusted input to be
+        excluded, not a secret to be hidden from the index.
+        """
+        if self.collection is None:
+            return {"status": "skipped", "indexed": 0, "reason": "chromadb unavailable"}
+        frame = pd.read_csv(evidence_csv, dtype=str).fillna("")
+        required = {"doc_id", "date", "source_type", "region", "category", "text", "available_at", "access_tags", "driver_tags", "stance"}
+        missing = sorted(required - set(frame.columns))
+        if missing:
+            raise ValueError(
+                f"{evidence_csv} is missing {missing}; run data/patches/enrich_evidence.py first"
+            )
+
+        ids: List[str] = []
+        documents: List[str] = []
+        metadatas: List[Dict[str, Any]] = []
+        for row in frame.to_dict("records"):
+            doc_id = str(row["doc_id"]).strip()
+            available_at = pd.to_datetime(row["available_at"], errors="coerce")
+            if pd.isna(available_at):
+                raise ValueError(f"Evidence document {doc_id} has an unparseable available_at")
+            tags = _tag_string(row["access_tags"]) or "public"
+            ids.append(doc_id)
+            documents.append(str(row["text"]))
+            metadatas.append({
+                "source": f"evidence:{doc_id}",
+                "evidence_type": "unstructured_evidence",
+                "line_ref": str(row["source_type"]),
+                "kpi": "all",
+                "region": str(row["region"] or "ALL"),
+                "category": str(row["category"] or "ALL"),
+                # A document with no declared entitlement is readable by nobody.
+                # Marking it public would silently grant access to every persona.
+                "access_tags": tags if tags != "public" or str(row["access_tags"]).strip() else "unentitled",
+                "timestamp": f"{available_at.date().isoformat()}T00:00:00Z",
+                "available_at": str(row["available_at"]),
+                "document_date": str(row["date"]),
+                "driver_tags": _tag_string(row["driver_tags"]),
+                "stance": str(row["stance"] or "neutral"),
+            })
+        if ids:
+            self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+        return {"status": "ok", "indexed": len(ids)}
+
 
 def ingest_kb() -> Dict[str, Any]:
     indexer = KBIndexer()
     indexer.process_yaml_contracts(ENGINE_REGISTRY_DIR)
     indexer.process_markdown_docs(str(ROOT / "docs"))
     indexer.process_csv_summaries(str(ROOT / "data"))
-    return {"status": "ok", "collection": "kpi_knowledge_base", "retrieval_ready": indexer.collection is not None}
+    evidence = indexer.process_evidence_documents(EVIDENCE_CSV)
+    return {
+        "status": "ok",
+        "collection": "kpi_knowledge_base",
+        "chroma_dir": indexer.db_path,
+        "evidence_documents": evidence,
+        "retrieval_ready": indexer.collection is not None,
+    }
 
 
 if __name__ == "__main__":

@@ -724,3 +724,91 @@ abstention paths are unit-tested directly instead).
   inspection (both encode plan §1.2/§1.3's table) and this file's direction-aware
   numbers were cross-checked directly against `ranked_drivers[0]["direction"]`
   above.
+
+---
+
+# Stage 6: Unstructured evidence
+
+Recorded on `fix/stage-06-evidence` (based on `fix/stage-04-source-reconciliation`),
+after Step C of `FAST_TRACK.md` landed. `data/unstructured_evidence.csv` was
+previously never read by the engine; it is now the corpus behind
+`kpi_engine/corroborate.py:EvidenceCorroborator`, which runs after attribution
+in both `run_diagnosis` and `verify_event` and writes a `corroboration` block
+onto every ranked driver.
+
+## Stage 6: before → after
+
+**This stage deliberately does not move any headline metric.** Corroboration is
+an evidence layer over drivers the attribution engine has already ranked; it
+does not change detection, ranking, or a verdict. Every row below is identical
+before and after, which is the intended result and is reported as measured.
+
+| metric (split) | before | after |
+|---|---|---|
+| Cases evaluated (all) | 538 | 538 |
+| False-alarm rate, quiet negatives (all) | 0.048 | 0.048 |
+| Top-1 driver accuracy, any sign (all) | 0.703 (64 scored) | 0.703 (64 scored) |
+| Top-1 driver accuracy, direction-aware (all) | 0.688 | 0.688 |
+| Top-3 driver accuracy (all) | 0.766 | 0.766 |
+| Events with true driver at #1 (all) | 5/5 | 5/5 |
+| Decoy false-alarm rate (all) | 0.0 | 0.0 |
+| Decoy confident-driver rate (all) | 0.25 | 0.25 |
+| False-alarm rate (dev) | 0.039 | 0.039 |
+| Top-1 accuracy, any sign (dev) | 0.85 (40 scored) | 0.85 (40 scored) |
+| Top-1 accuracy (holdout) | 0.458 (24 scored) | 0.458 (24 scored) |
+| Top-3 accuracy (holdout) | 0.625 | 0.625 |
+| False-alarm rate (holdout) | 0.056 | 0.056 |
+| Revenue reconciliation resolved rate | 1.0 | 1.0 |
+
+The full `--split all` markdown output is byte-identical before and after
+(`diff` on the two generated reports reports no differences).
+
+## What the corroboration layer produced (new, not previously measured)
+
+Counted over the 311 evaluated runs that reached a ranked driver:
+
+| measure | value |
+|---|---|
+| runs with a ranked driver | 311 |
+| run-level status `CORROBORATED` | 60 |
+| run-level status `NONE` (nothing in scope) | 251 |
+| run-level status `CONTRADICTED` | 0 |
+| distinct drivers given ≥1 in-scope document | 6 (of 8 governed) |
+
+Corroborated true drivers by event, as a check that the evidence is attached to
+the right driver rather than merely present:
+
+| event | true drivers corroborated | non-true drivers corroborated |
+|---|---|---|
+| EVT01 (marketing_spend) | 9 | 0 |
+| EVT02 (price_discount) | 12 | 12 |
+| EVT03 (stock_availability) | 9 | 0 |
+| EVT04 (checkout_latency) | 16 | 0 |
+| EVT06 (weather_temp) | 2 | 0 |
+
+EVT02's 12 non-true corroborations are `promo_flag`, which shares the same
+promo-calendar and news documents as `price_discount` (PROMO-2001, NEWS-2002).
+The flash sale genuinely both discounted prices and was flagged as a promotion,
+so both drivers are honestly corroborated by the same two documents. This is a
+property of the evidence, not a filter failure, and it is left visible rather
+than tuned away.
+
+Corroboration is **not** a stage-6 acceptance gate: `FAST_TRACK.md` step C
+requires the filter behaviour (no cross-region leakage, no future documents,
+injection dropped, EVT01/EVT03 corroborated by the named documents), all of
+which is asserted in `tests/test_corroboration.py`. The counts above are
+reported for transparency about what the layer does, and are not used to tune
+any threshold.
+
+## Not done in this stage
+
+- Attribution Confidence (step A / Stage 7) is not present on this branch, so
+  no `attribution_confidence` field is read or produced here. The chat fallback
+  reads it defensively and says "no confidence score in this run" when it is
+  absent, which is asserted in `tests/test_corroboration.py`.
+- The engine reads a CSV while the chat path reads Chroma. They now share one
+  folder (`config.CHROMA_DIR`) and one filter chain, but are still two
+  components; a document could be in one corpus and not the other. Recorded as
+  the open "Next" item in `kpi_engine/corroborate.py`.
+- No new rows were added to `data/labels/eval_cases.csv`; the label file is
+  unchanged so the before/after columns stay comparable.

@@ -39,6 +39,7 @@ from kpi_engine.attribution import AttributionEngine
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import prepare_metric_request, same_weekday_expected
 from kpi_engine.contracts.registry import resolve_driver_id
+from kpi_engine.corroborate import EvidenceCorroborator
 from kpi_engine.contribute import ContributionScenario, ShapleyContributor
 from kpi_engine.confidence import ConfidenceEngine
 from kpi_engine.decompose import DeterministicDecomposer
@@ -92,6 +93,64 @@ class KPIEnginePipeline:
             raise FileNotFoundError(f"Access policy is required: {access_path}")
         self.access_controller = AccessController(str(access_path))
         self.feedback_logger = FeedbackLogger(log_filepath=feedback_log_path)
+        self.evidence_csv = evidence_csv
+        # Stage 6-lite: the evidence corpus is loaded lazily on the first
+        # diagnosis that reaches attribution. A load failure is recorded as
+        # RETRIEVAL_FAILED rather than raised: a missing corpus must not stop a
+        # diagnosis, but it must also never be presented as "no evidence found".
+        self.corroborator: Optional[EvidenceCorroborator] = None
+        self.evidence_load_error: Optional[str] = None
+
+    def _get_corroborator(self) -> Optional[EvidenceCorroborator]:
+        if self.corroborator is not None or self.evidence_load_error is not None:
+            return self.corroborator
+        try:
+            self.corroborator = EvidenceCorroborator(self.evidence_csv)
+        except Exception as error:  # noqa: BLE001 -- reported to the caller, never hidden
+            self.evidence_load_error = f"{type(error).__name__}: {error}"
+        return self.corroborator
+
+    def _corroborate_drivers(
+        self,
+        driver_analysis: Optional[Dict[str, Any]],
+        target_date: str,
+        as_of: str,
+        scope: Optional[Dict[str, str]],
+        persona: str,
+    ) -> Dict[str, Any]:
+        """Stage 6-lite: attach a per-driver corroboration block after attribution.
+
+        Reads the ranked drivers already produced by _attribute_drivers and
+        writes `corroboration` onto each of them in place, so every downstream
+        consumer of driver_analysis (narrative, actions, chat context, the
+        frontend) sees the same evidence. Ranked driver dicts and the
+        correlational_candidates list share these objects, so the two views
+        cannot disagree about which documents were seen.
+        """
+        ranked = (driver_analysis or {}).get("ranked_drivers") or []
+        corroborator = self._get_corroborator()
+        if corroborator is None:
+            summary = EvidenceCorroborator.failure_summary(
+                self.evidence_load_error or "The evidence corpus is unavailable."
+            )
+        else:
+            summary = corroborator.corroborate(
+                ranked,
+                target_date=target_date,
+                as_of=as_of,
+                scope=scope or {},
+                persona=persona,
+            )
+        for driver in ranked:
+            driver_id = str(driver.get("driver_id") or "")
+            block = (summary.get("drivers") or {}).get(driver_id) or {
+                "status": "NONE", "documents": [], "document_count": 0,
+                "match_basis": "none", "supporting_documents": [], "refuting_documents": [],
+            }
+            if summary.get("status") == "RETRIEVAL_FAILED":
+                block = {**block, "status": "RETRIEVAL_FAILED"}
+            driver["corroboration"] = block
+        return summary
 
     def submit_feedback(
         self,
@@ -400,6 +459,11 @@ class KPIEnginePipeline:
             "causal_verdict": None,
             "causal_verification": None,
             "confidence": None,
+            "evidence_corroboration": {
+                "status": "NOT_ASSESSED",
+                "reason": "This run did not reach driver attribution.",
+                "drivers": {},
+            },
             # F-C4: mirrors run_diagnosis so build_profile's causal dimension
             # is not silently forced to NOT_ASSESSED after a real DiD ran.
             "_causal_design_approved": approved_causal_design,
@@ -521,6 +585,17 @@ class KPIEnginePipeline:
         result["correlational_candidates"] = driver_analysis["ranked_drivers"]
         result["driver_exclusions"] = driver_analysis["excluded_drivers"]
 
+        # Stage 6-lite: same call as run_diagnosis, bound to the event's end
+        # date and the treated slice, so an assessed event sees the documents
+        # that were knowable at its own cutoff.
+        result["evidence_corroboration"] = self._corroborate_drivers(
+            driver_analysis,
+            end.date().isoformat(),
+            cutoff.isoformat(),
+            verification_design.treated_slice,
+            persona,
+        )
+
         # Only CONTRADICTED is a hard gate. NOT_APPLICABLE, NOT_AVAILABLE_FOR_PERIOD
         # and PENDING_CLOSE are informational; diagnosis continues for those statuses.
         if reconciliation.status == "CONTRADICTED":
@@ -599,6 +674,14 @@ class KPIEnginePipeline:
             "correlational_candidates": [],
             "driver_exclusions": [],
             "driver_analysis": None,
+            # Stage 6-lite: every run carries the key, set to NOT_ASSESSED on
+            # the early exits that never reach attribution, so a consumer can
+            # tell "no documents were in scope" from "evidence was not assessed".
+            "evidence_corroboration": {
+                "status": "NOT_ASSESSED",
+                "reason": "This run did not reach driver attribution.",
+                "drivers": {},
+            },
             "causal_verdict": None,
             "causal_verification": None,
             "confidence": None,
@@ -793,6 +876,22 @@ class KPIEnginePipeline:
         result["correlational_candidates"] = driver_analysis["ranked_drivers"]
         result["driver_exclusions"] = driver_analysis["excluded_drivers"]
         self._record_runtime(result, "driver_analysis", "STATISTICAL", "joint_robust_regression_explained_movement", stage_started)
+
+        # Stage 6-lite: unstructured corroboration runs after attribution and
+        # before the causal gate, so the evidence a driver is judged against is
+        # fixed by the same as-of cutoff as the numbers. Placed before the
+        # not-material early return below because corroboration is evidence
+        # about the movement, not an explanation of it: a non-material day is
+        # still worth showing the documents that were in scope.
+        stage_started = time.monotonic_ns()
+        result["evidence_corroboration"] = self._corroborate_drivers(
+            driver_analysis,
+            target.date().isoformat(),
+            cutoff.isoformat(),
+            dimension_slice,
+            persona,
+        )
+        self._record_runtime(result, "evidence_corroboration", "DETERMINISTIC", "availability_scope_and_entitlement_filtered_retrieval", stage_started)
         if not assessment.is_material:
             if assessment.detector_agreement == "SEASONAL_ONLY":
                 result.update(

@@ -23,6 +23,16 @@ def safe_citation_id(source: Any, evidence_type: Any = "evidence") -> str:
 
 
 def _metadata_visible(meta: Dict[str, Any], request: ChatRequest) -> bool:
+    """Stage 6-lite: the same availability / scope / entitlement chain the engine
+    applies to evidence, so a document the engine refuses to corroborate with is
+    also a document the chat path cannot quote.
+
+    Previously this checked entitlements and scope but compared the as-of
+    timestamp as a raw string, and it had no notion of a document's own
+    availability. It is now parsed and compared as datetimes, and a document
+    stamped after the request's as-of is dropped even when the request itself
+    is dated later.
+    """
     tags = {tag.strip().lower() for tag in str(meta.get("access_tags", "public")).split(",") if tag.strip()}
     allowed = {tag.strip().lower() for tag in request.user_access_tags}
     if "public" not in tags and not tags.intersection(allowed):
@@ -31,6 +41,30 @@ def _metadata_visible(meta: Dict[str, Any], request: ChatRequest) -> bool:
         declared = str(meta.get(key) or "ALL")
         if declared.lower() not in {"all", "*", ""} and requested and str(requested).lower() not in {"all", declared.lower()}:
             return False
+    return True
+
+
+def _parse_timestamp(value: Any):
+    import pandas as pd
+
+    parsed = pd.to_datetime(str(value or "").strip(), errors="coerce")
+    if pd.isna(parsed):
+        return None
+    # A Z-suffixed stamp and a naive stamp must be comparable, so everything is
+    # normalised to naive UTC before the comparison.
+    if parsed.tzinfo is not None:
+        parsed = parsed.tz_convert("UTC").tz_localize(None)
+    return parsed
+
+
+def _available_by_as_of(meta: Dict[str, Any], request: ChatRequest) -> bool:
+    cutoff = _parse_timestamp(request.as_of_timestamp)
+    if cutoff is None:
+        return True
+    for key in ("available_at", "timestamp"):
+        stamp = _parse_timestamp(meta.get(key))
+        if stamp is not None:
+            return stamp <= cutoff
     return True
 
 
@@ -127,7 +161,7 @@ Quality & Cards:
             meta = metadatas[idx] if idx < len(metadatas) else {}
             if not _metadata_visible(meta, request):
                 continue
-            if meta.get("timestamp") and request.as_of_timestamp and meta["timestamp"] > request.as_of_timestamp:
+            if not _available_by_as_of(meta, request):
                 continue
             citation_id = safe_citation_id(meta.get("source"), meta.get("evidence_type"))
             retrieved_text.append(f"--- RETRIEVED CHUNK [{meta.get('evidence_type')}] ---\nSource ID: {citation_id}\n{doc}")
@@ -185,17 +219,27 @@ def _document_rows() -> List[Dict[str, Any]]:
         text = str(row.get("text") or row.get("evidence_text") or row.get("summary") or row.get("content") or "").strip()
         if not text:
             continue
+        raw_tags = str(row.get("access_tags") or "").replace(";", ",")
+        tags = sorted({tag.strip().lower() for tag in raw_tags.split(",") if tag.strip()})
+        document_date = str(row.get("date") or row.get("as_of") or "").strip()
         rows.append(
             {
                 "id": str(row.get("doc_id") or row.get("id") or row.get("source_id") or f"doc-{hashlib.sha1(text.encode()).hexdigest()[:12]}"),
                 "text": text,
                 "source": str(row.get("source") or row.get("document_name") or row.get("doc_id") or "unstructured_evidence"),
                 "document_version": str(row.get("document_version") or "v1"),
-                "evidence_type": str(row.get("evidence_type") or "evidence"),
+                "evidence_type": str(row.get("evidence_type") or "unstructured_evidence"),
                 "kpi_id": str(row.get("kpi_id") or "all"),
                 "region": str(row.get("region") or "ALL"),
                 "category": str(row.get("category") or "ALL"),
-                "date": str(row.get("date") or row.get("as_of") or ""),
+                "date": document_date,
+                # Blank access_tags means nobody is entitled, not everybody: an
+                # unentitled document is marked so it can never match the public
+                # fast path in _metadata_visible.
+                "access_tags": ",".join(tags) if tags else "unentitled",
+                "available_at": str(row.get("available_at") or document_date).strip(),
+                "driver_tags": str(row.get("driver_tags") or "").replace(";", ",").strip(),
+                "stance": str(row.get("stance") or "neutral").strip().lower(),
             }
         )
     return rows
@@ -231,6 +275,10 @@ def ingest_documents(force: bool = False) -> Dict[str, Any]:
             "region": row["region"],
             "category": row["category"],
             "date": row["date"],
+            "access_tags": row["access_tags"],
+            "available_at": row["available_at"],
+            "driver_tags": row["driver_tags"],
+            "stance": row["stance"],
         })
 
     existing = set(collection.get(include=["ids"]).get("ids", []))
@@ -244,7 +292,26 @@ def ingest_documents(force: bool = False) -> Dict[str, Any]:
     return {"status": "ok", "retrieval_ready": True, "count": len(rows), "message": "Ingestion completed."}
 
 
-def retrieve_relevant_documents(*, query: str, kpi_id: str | None = None, region: str | None = None, category: str | None = None, date: str | None = None, limit: int = 5) -> List[Dict[str, Any]]:
+def retrieve_relevant_documents(
+    *,
+    query: str,
+    kpi_id: str | None = None,
+    region: str | None = None,
+    category: str | None = None,
+    date: str | None = None,
+    limit: int = 5,
+    as_of: str | None = None,
+    persona: str | None = None,
+) -> List[Dict[str, Any]]:
+    """Vector retrieval under the engine's scope, as-of and entitlement rules.
+
+    Stage 6-lite: the previous `where` clause could not express an entitlement
+    or an availability test, so an out-of-scope or not-yet-available document
+    could be returned to any caller. Both are now applied in Python after the
+    query, because Chroma's metadata filters cannot express a server-owned tag
+    set safely here, and over-fetching first keeps the entitlement decision on
+    this side of the boundary.
+    """
     client = _client()
     if chromadb is None or client is None:
         return []
@@ -259,17 +326,39 @@ def retrieve_relevant_documents(*, query: str, kpi_id: str | None = None, region
     if date:
         filters["date"] = {"$in": [date, ""]}
 
-    results = collection.query(query_texts=[query], n_results=limit, where=filters or None)
+    # Over-fetch: the entitlement and availability filters below run after the
+    # query, so a small n_results would return fewer than `limit` survivors.
+    over_fetch = min(limit * 5, 50)
+    results = collection.query(query_texts=[query], n_results=over_fetch, where=filters or None)
     ids = results.get("ids", [[]])[0]
     docs = results.get("documents", [[]])[0]
     metas = results.get("metadatas", [[]])[0]
     distances = results.get("distances", [[]])[0]
+
+    allowed_tags: set[str] | None = None
+    if persona:
+        from backend.domain_policy import retrieval_tags_for_persona
+
+        allowed_tags = {tag.strip().lower() for tag in retrieval_tags_for_persona(persona)}
+    cutoff = _parse_timestamp(as_of) if as_of else None
+
     entries = []
     for idx, _id in enumerate(ids):
+        meta = metas[idx] if idx < len(metas) else {}
+        if allowed_tags is not None:
+            tags = {tag.strip().lower() for tag in str(meta.get("access_tags", "")).split(",") if tag.strip()}
+            if "public" not in tags and not (tags & allowed_tags):
+                continue
+        if cutoff is not None:
+            stamp = _parse_timestamp(meta.get("available_at") or meta.get("date"))
+            if stamp is not None and stamp > cutoff:
+                continue
         entries.append({
             "id": _id,
             "text": docs[idx],
-            "metadata": metas[idx] if idx < len(metas) else {},
+            "metadata": meta,
             "distance": distances[idx] if idx < len(distances) else None,
         })
+        if len(entries) >= limit:
+            break
     return entries

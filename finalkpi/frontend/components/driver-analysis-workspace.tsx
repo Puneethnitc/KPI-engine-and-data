@@ -1,3 +1,4 @@
+import CorroborationPanel from './corroboration-panel'
 import {
   driverAnalysisViewModel,
   driverContributionLabel,
@@ -52,6 +53,7 @@ export default function DriverAnalysisWorkspace({
           <span><small>Adjusted p-value</small><strong>{driver.p_value_adj == null ? 'Not estimated' : driver.p_value_adj.toFixed(4)}</strong></span>
           <span><small>Sample</small><strong>{driverCoverageLabel(driver.coverage_ratio, driver.sample_size)}</strong></span>
         </div>
+        <CorroborationPanel corroboration={driver.corroboration} />
         <p><strong>Temporal order:</strong> {driverTemporalLabel(driver.temporal_order, driver.temporal_order_supported)}</p>
         <p><strong>Important limitation:</strong> {driver.limitations[0] ?? 'No additional limitation recorded.'}</p>
         <p className="driver-boundary">{driver.claim_boundary}</p>

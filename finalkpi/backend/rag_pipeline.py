@@ -23,6 +23,38 @@ from backend.schemas import ChatRequest, ChatResponse, Citation, QueryIntent
 from backend.retrieval import ContextBuilder, safe_citation_id
 
 
+_FORECAST_PATTERNS = (
+    "next month", "next week", "next quarter", "next year", "next period",
+    "next time", "next day", "coming month", "coming weeks",
+    "forecast", "forecasting", "project", "projection", "projected",
+    "going to", "how long until", "predict", "predicted", "prediction",
+    "expected next", "look ahead", "lookahead", "outlook",
+    "will ", "won't ", "shall ",
+)
+
+
+def _is_forecast_question(question: str) -> bool:
+    """True for a request for a future value the engine cannot support.
+
+    Matched on the question only, deliberately: intent classification by the
+    LLM router is not a reliable gate for a capability refusal, so this is a
+    plain substring test that does not depend on a model being available. It
+    errs toward declining, because the cost of wrongly declining a "why" or
+    "what changed" question is one clarifying follow-up, while the cost of
+    answering a forecast is a fabricated number presented as measured.
+    """
+    return any(pattern in question for pattern in _FORECAST_PATTERNS)
+
+
+def _is_why_question(question: str) -> bool:
+    """True for a question asking what explains the movement."""
+    return any(pattern in question for pattern in (
+        "why did", "why is", "why was", "why are", "why does", "why do",
+        "why has", "why have", "why it", "what caused", "what driver",
+        "which driver", "what explains", "explain why", "root cause",
+    ))
+
+
 class DynamicRAGPipeline:
     def __init__(self, router: DynamicQueryRouter, context_builder: ContextBuilder):
         self.router = router
@@ -114,6 +146,111 @@ class DynamicRAGPipeline:
         location = " / ".join(f"{key}={scope[key]}" for key in sorted(scope)) or "global"
         return f"The current {contract.kpi_id} value for {location} on {request.active_date or 'the selected date'} is {numeric_value:,.6f} {contract.unit}."
 
+    @staticmethod
+    def _ranked_drivers(diagnosis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Ranked drivers, unless the run blocked or never assessed them."""
+        analysis = diagnosis.get("driver_analysis") or {}
+        if analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE"}:
+            return []
+        return list(analysis.get("ranked_drivers") or [])
+
+    @staticmethod
+    def _confidence_text(driver: Dict[str, Any]) -> str:
+        """Attribution Confidence, when step A's fields are present.
+
+        Stage 6-lite deliberately does not assume those fields exist: this
+        branch ships in parallel with Stage 7. When `attribution_confidence` is
+        absent the answer falls back to the explained share, and says so, rather
+        than reporting a number that was never computed.
+        """
+        value = driver.get("attribution_confidence")
+        if isinstance(value, (int, float)):
+            label = str(driver.get("label") or driver.get("band") or "").strip()
+            return f"{value * 100:.0f}% confidence{f' ({label})' if label else ''}"
+        share = driver.get("explained_share")
+        if isinstance(share, (int, float)):
+            return f"{share * 100:.0f}% of the movement (no confidence score in this run)"
+        return "no quantified share available"
+
+    def _why_answer(
+        self,
+        request: ChatRequest,
+        diagnosis: Dict[str, Any],
+        citations: List[Citation],
+        verdict: str,
+    ) -> ChatResponse:
+        """Answer a "why" question from the engine's own ranked drivers.
+
+        Every number here is read from the saved run: the driver's contribution,
+        its explained share, its Attribution Confidence and the doc_ids the
+        engine's EvidenceCorroborator attached. Nothing is recomputed and no
+        document is re-retrieved at answer time, so this answer cannot cite a
+        document the engine did not itself see under the run's as-of cutoff.
+        """
+        drivers = self._ranked_drivers(diagnosis)[:3]
+        if not drivers:
+            return ChatResponse(
+                answer=(
+                    f"This run does not have a ranked driver to explain the change in "
+                    f"{request.active_kpi} on {request.active_date}. The engine status is "
+                    f"{verdict}, which means the movement was either not assessed, blocked by "
+                    "a source contradiction, or not explained beyond the checks the contract allows. "
+                    "I will not name a cause the engine did not rank."
+                ),
+                citations=citations,
+                evidence_status=verdict,
+                limitations=[
+                    "No driver passed the contract's attribution checks for this run.",
+                    "Naming a cause here would not be supported by the saved evidence.",
+                ],
+                suggested_followups=[
+                    "What changed in this KPI?",
+                    "What is the source and reconciliation state?",
+                ],
+            )
+
+        lines = [
+            f"For {request.active_kpi} on {request.active_date}, the engine ranked "
+            f"{len(drivers)} driver{'s' if len(drivers) != 1 else ''} as explaining the observed movement."
+        ]
+        cited_doc_ids: List[str] = []
+        for index, driver in enumerate(drivers, start=1):
+            name = driver.get("display_name") or driver.get("driver_id") or "unnamed driver"
+            share = driver.get("explained_share")
+            share_text = f"{share * 100:.0f}% of the movement" if isinstance(share, (int, float)) else "share not estimated"
+            corroboration = driver.get("corroboration") or {}
+            documents = corroboration.get("documents") or []
+            doc_ids = [str(doc.get("doc_id")) for doc in documents if doc.get("doc_id")]
+            cited_doc_ids.extend(doc_ids)
+            evidence_text = ""
+            if doc_ids:
+                evidence_text = f", corroborated by {', '.join(doc_ids)} ({corroboration.get('status', 'NONE').lower()})"
+            lines.append(
+                f"{index}. {name} explains {share_text} with {self._confidence_text(driver)}{evidence_text}."
+            )
+
+        causal = diagnosis.get("causal_verdict") or "UNTESTABLE"
+        lines.append(
+            f"The causal verification label for this run is {causal}. Contribution and "
+            "corroboration describe what moved and what the documents say; neither is proof of "
+            "causation, and a contradicting document is shown alongside a supporting one where both exist."
+        )
+        return ChatResponse(
+            answer=" ".join(lines),
+            citations=citations,
+            evidence_status=verdict,
+            limitations=[
+                "Attribution is a statistical decomposition of the observed movement, not a causal claim.",
+                "Corroboration is untrusted prose retrieved under the run's as-of, scope and entitlement filters.",
+                f"Causal verification status is {causal}; a SUPPORTED verdict is not present unless stated.",
+            ],
+            suggested_followups=[
+                "What changed in this KPI?",
+                "What is the source and reconciliation state?",
+                "What evidence supports the source status?",
+            ],
+        )
+
     def _fallback_answer(self, request: ChatRequest, analysis, default_citations: List[Dict[str, Any]]) -> ChatResponse:
         diagnosis = request.diagnosis_json or {}
         question = request.question.lower()
@@ -122,6 +259,34 @@ class DynamicRAGPipeline:
         citations = [Citation(**c) for c in default_citations] if default_citations else [
             Citation(source_path=f"engine/diagnosis_runs/{request.active_kpi}_{request.active_date}.json", evidence_type="diagnosis_json", line_or_row_ref="root", kpi=request.active_kpi)
         ]
+
+        # Stage 6-lite: forecasting is declined before any other branch. The
+        # engine is an as-of diagnostic and holds no forward model, so a
+        # forecast is not an answer this system is able to give on evidence --
+        # the question is refused on capability grounds rather than answered
+        # with an extrapolation the LLM would invent.
+        if _is_forecast_question(question):
+            return ChatResponse(
+                answer=(
+                    "I cannot forecast or project future values. This system diagnoses what "
+                    f"already happened to {request.active_kpi} as of {request.active_date} and "
+                    "explains the drivers of that observed movement. I have no forward model, "
+                    "no future calendar of promotions or supply, and no basis for projecting a "
+                    "future period, so any number I gave you would be invented rather than "
+                    "measured. I can tell you what changed on the selected date, which drivers "
+                    "explain it, and what the evidence does and does not establish."
+                ),
+                citations=citations,
+                evidence_status="OUT_OF_SCOPE",
+                limitations=[
+                    "This tool does not produce forecasts; it is an as-of diagnostic.",
+                    "A future-period answer would require a documented forecasting model that this system does not have.",
+                ],
+                suggested_followups=[
+                    f"What changed in {request.active_kpi} on {request.active_date}?",
+                    "Why did it change, and how certain is that?",
+                ],
+            )
 
         if "conversion rate" in question or "calculate" in question or "formula" in question:
             contract = self._contract_citation(request.active_kpi or "conversion_rate")
@@ -136,6 +301,9 @@ class DynamicRAGPipeline:
                 "How does the current diagnosis compare to the expected baseline?",
             ]
             return ChatResponse(answer=answer, citations=citations, evidence_status=verdict, limitations=limitations, suggested_followups=suggested)
+
+        if _is_why_question(question):
+            return self._why_answer(request, diagnosis, citations, verdict)
 
         if "cause" in question or ("traffic" in question and "drop" in question):
             driver_analysis = diagnosis.get("driver_analysis") or {}
