@@ -156,17 +156,25 @@ class DynamicRAGPipeline:
 
     @staticmethod
     def _confidence_text(driver: Dict[str, Any]) -> str:
-        """Attribution Confidence, when step A's fields are present.
+        """Attribution Confidence, read from the saved run.
 
-        Stage 6-lite deliberately does not assume those fields exist: this
-        branch ships in parallel with Stage 7. When `attribution_confidence` is
-        absent the answer falls back to the explained share, and says so, rather
-        than reporting a number that was never computed.
+        Stage 7 merged, so a current run always carries a real AC for every
+        ranked driver. Three cases, kept distinct because they mean different
+        things to the reader:
+          - a number: the AC the engine computed, with its band label;
+          - present but null: the engine scored this driver and declined to
+            emit a value, because its history is too short (the sparse-history
+            row carries status INSUFFICIENT_HISTORY);
+          - absent entirely: a run saved under an older ENGINE_VERSION, before
+            AC existed. We report the explained share and say the score is
+            missing rather than inventing or back-filling one.
         """
         value = driver.get("attribution_confidence")
         if isinstance(value, (int, float)):
             label = str(driver.get("label") or driver.get("band") or "").strip()
             return f"{value * 100:.0f}% confidence{f' ({label})' if label else ''}"
+        if "attribution_confidence" in driver:
+            return "no confidence score (insufficient driver history)"
         share = driver.get("explained_share")
         if isinstance(share, (int, float)):
             return f"{share * 100:.0f}% of the movement (no confidence score in this run)"

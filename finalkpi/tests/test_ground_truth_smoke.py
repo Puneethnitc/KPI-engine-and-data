@@ -18,7 +18,15 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from run_ground_truth_eval import DEFAULT_LABELS, build_pipeline, evaluate  # noqa: E402
+ROOT_EVENTS = TESTS_DIR.parent / "data" / "ground_truth_events.csv"
+
+from run_ground_truth_eval import (  # noqa: E402
+    DEFAULT_LABELS,
+    build_pipeline,
+    evaluate,
+    load_cases,
+    true_driver_ids,
+)
 
 # One representative case per event (first positive date) plus 2 negatives.
 SMOKE_CASE_IDS = {
@@ -108,6 +116,65 @@ class GroundTruthSmokeTest(unittest.TestCase):
         self.assertIn("ac_gap", ac_metrics)
         self.assertIn("decoy_max_ac", ac_metrics)
         self.assertTrue(confidence["overall_status_counts"])
+
+
+class MultiTrueDriverLabellingTests(unittest.TestCase):
+    """One event can genuinely have more than one true cause.
+
+    EVT02 is a flash sale, which is a price discount AND a promotion, so both
+    price_discount and promo_flag are true causes. Scoring it against a single
+    id would report promo_flag as a miss on a case it does explain.
+    """
+
+    def test_evt02_lists_both_of_its_true_drivers(self) -> None:
+        with open(ROOT_EVENTS, newline="", encoding="utf-8") as handle:
+            events = {row["event_id"]: row for row in csv.DictReader(handle)}
+        self.assertEqual(
+            set(events["EVT02"]["true_driver_ids"].split("|")),
+            {"price_discount", "promo_flag"},
+        )
+
+    def test_every_evt02_case_carries_both_true_drivers(self) -> None:
+        cases = [row for row in load_cases(DEFAULT_LABELS, "all") if row["event_id"] == "EVT02"]
+        self.assertTrue(cases)
+        for row in cases:
+            self.assertEqual(true_driver_ids(row), {"price_discount", "promo_flag"})
+
+    def test_single_driver_events_are_unaffected(self) -> None:
+        cases = {row["event_id"]: row for row in load_cases(DEFAULT_LABELS, "all") if row["event_id"]}
+        self.assertEqual(true_driver_ids(cases["EVT01"]), {"marketing_spend"})
+        self.assertEqual(true_driver_ids(cases["EVT03"]), {"stock_availability"})
+        self.assertEqual(true_driver_ids(cases["EVT06"]), {"weather_temp"})
+        # The decoy has no true driver at all.
+        self.assertEqual(true_driver_ids(cases["EVT05"]), set())
+
+    def test_a_hit_on_either_listed_true_driver_counts(self) -> None:
+        """End to end on the harness scoring path: ranking promo_flag first on
+        an EVT02 case is a correct answer, not a miss."""
+        case = next(row for row in load_cases(DEFAULT_LABELS, "all")
+                    if row["case_id"] == "EVT02-2023-11-05-net_sales_revenue")
+
+        def result_with_top(driver_id: str) -> dict:
+            return {
+                "movement_assessment": {"status": "OK", "is_material": True,
+                                        "is_statistically_significant": True, "is_business_material": True},
+                "driver_analysis": {"status": "ASSESSED", "ranked_drivers": [
+                    {"driver_id": driver_id, "explained_share": 0.4, "attribution_confidence": 0.6,
+                     "band": "MODERATE", "moved": True, "offsetting": False, "sample_size": 40},
+                ]},
+            }
+
+        pipeline = build_pipeline()
+        for driver_id in ("price_discount", "promo_flag"):
+            with self.subTest(driver_id=driver_id):
+                metrics = evaluate([case], pipeline, runner=lambda row: result_with_top(driver_id))
+                self.assertEqual(metrics["attribution"]["top1_accuracy"], 1.0)
+                self.assertEqual(metrics["attribution"]["events_with_any_top1_hit"], 1)
+
+        # A driver that is not a true cause is still a miss.
+        metrics = evaluate([case], pipeline, runner=lambda row: result_with_top("weather_temp"))
+        self.assertEqual(metrics["attribution"]["top1_accuracy"], 0.0)
+        self.assertEqual(metrics["attribution"]["events_with_any_top1_hit"], 0)
 
 
 if __name__ == "__main__":

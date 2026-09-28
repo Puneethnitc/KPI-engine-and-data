@@ -82,7 +82,13 @@ def build_positive_rows(events: pd.DataFrame) -> list[dict]:
             kpis.append("conversion_rate")
         region = "" if event["region"] == "ALL" else event["region"]
         category = "" if event["category"] == "ALL" else event["category"]
-        true_driver_id = "" if event["is_decoy"] else event["true_driver_ids"]
+        # One event can be genuinely caused by more than one driver. EVT02 is a
+        # flash sale, which is a price discount AND a promotion, so both
+        # price_discount and promo_flag are true causes; the harness scores a
+        # hit against any listed true driver. `true_driver_id` stays the first
+        # listed id for the single-driver case shape the CSV has always had.
+        true_driver_ids = "" if event["is_decoy"] else event["true_driver_ids"]
+        true_driver_id = true_driver_ids.split("|")[0] if true_driver_ids else ""
         # A decoy event is present (something happened) but never explained by
         # a confident driver; revenue/orders/units are not expected to move
         # materially, so event_present is False for the movement-recall metric.
@@ -97,6 +103,7 @@ def build_positive_rows(events: pd.DataFrame) -> list[dict]:
                     category=category,
                     event_present=event_present,
                     true_driver_id=true_driver_id,
+                    true_driver_ids=true_driver_ids,
                     split=EVENT_SPLIT[event_id],
                     reviewer=REVIEWER,
                     event_id=event_id,
@@ -160,6 +167,7 @@ def build_negative_rows(events: pd.DataFrame) -> list[dict]:
                 category=category,
                 event_present=False,
                 true_driver_id="",
+                true_driver_ids="",
                 split=split,
                 reviewer=REVIEWER,
                 event_id="",
@@ -173,7 +181,7 @@ def main() -> None:
     rows = build_positive_rows(events) + build_negative_rows(events)
     fieldnames = [
         "case_id", "kpi_id", "date", "region", "category", "event_present",
-        "true_driver_id", "split", "reviewer", "event_id", "is_decoy",
+        "true_driver_id", "true_driver_ids", "split", "reviewer", "event_id", "is_decoy",
     ]
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT_CSV, "w", newline="", encoding="utf-8") as handle:

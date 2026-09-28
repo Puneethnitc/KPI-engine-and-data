@@ -114,6 +114,109 @@ class ConfidenceProfileTests(unittest.TestCase):
                 profile = self.engine.build_profile(result, causal_design_approved=approved)
                 self.assertEqual(profile["overall"]["status"], expected_status)
 
+    # -- corroboration reaching the AC calculation (Step C -> Step A) -----
+
+    def test_corroboration_on_a_ranked_driver_raises_its_ac(self):
+        """Stage 6-lite writes `corroboration` in the pipeline; Step A's
+        build_profile is what has to read it and hand it to the AC model.
+
+        This is the seam the two wave-1 agents could not both own: before this
+        the field was produced but never consumed, so AC evidence item E8 was
+        permanently dead and a document that corroborated a driver had no
+        effect on how confident the engine was about it.
+        """
+        weak = dict(explained_share=0.22, driver_change_z=1.6, p_value_adj=0.06,
+                    stability_status="SENSITIVE", lag_days=0)
+        corroborated = make_driver(
+            "marketing_spend", **weak,
+            corroboration={"status": "CORROBORATED", "documents": [{"doc_id": "TCK-1001"}]},
+        )
+        unmatched = make_driver("promo_flag", **weak, corroboration={"status": "NONE", "documents": []})
+
+        def ac_of(profile, driver_id):
+            return next(item["attribution_confidence"] for item in profile["attribution_confidence"]
+                        if item["driver_id"] == driver_id)
+
+        with_docs = self.engine.build_profile(self.base_result(ranked_drivers=[corroborated, unmatched]))
+        without_docs = self.engine.build_profile(
+            self.base_result(ranked_drivers=[make_driver("marketing_spend", **weak), make_driver("promo_flag", **weak)]),
+        )
+
+        self.assertGreater(ac_of(with_docs, "marketing_spend"), ac_of(without_docs, "marketing_spend"))
+        # A driver with no documents in scope must be unaffected: absent
+        # corroboration contributes 0, never a penalty.
+        self.assertEqual(ac_of(with_docs, "promo_flag"), ac_of(without_docs, "promo_flag"))
+
+    def test_corroboration_cannot_score_a_driver_while_source_evidence_is_blocking(self):
+        result = self.base_result(
+            ranked_drivers=[make_driver(corroboration={"status": "CORROBORATED", "documents": [{"doc_id": "T"}]})],
+        )
+        result["source_evidence"]["reconciliation"] = {
+            "status": "CONTRADICTED", "applicable": True, "blocking": True,
+            "reason": "Ledger disagrees with the bank feed",
+        }
+        result["reconciliation_verdict"] = result["source_evidence"]["reconciliation"]
+        profile = self.engine.build_profile(result)
+        self.assertEqual(profile["attribution"]["status"], "CONFLICTING_EVIDENCE")
+        # Blocked means no AC at all, not a low one: documents cannot rescue a
+        # driver whose own source contradicts itself.
+        self.assertEqual(profile["attribution_status"], "BLOCKED")
+        self.assertEqual(profile["attribution_confidence"], [])
+
+    # -- non-material and seasonal-review runs ---------------------------
+
+    def test_non_material_run_caps_its_driver_ac_at_0_5_and_marks_it_exploratory(self):
+        """A driver can clear every material band and still be capped out,
+        because the movement itself never cleared materiality. Reporting that
+        as MODERATE would be a number the engine does not believe."""
+        result = self.base_result(ranked_drivers=[make_driver()])
+        result["movement_assessment"]["is_material"] = False
+        profile = self.engine.build_profile(result)
+        driver = next(item for item in profile["attribution_confidence"] if item["driver_id"] == "marketing_spend")
+        self.assertLessEqual(driver["attribution_confidence"], 0.5)
+        self.assertEqual(driver["band"], "EXPLORATORY")
+        self.assertTrue(any(cap["name"] == "non_material" for cap in driver["caps_applied"]))
+
+    def test_seasonal_only_day_is_not_treated_as_material_just_because_the_delta_was_large(self):
+        """The regression that motivated reading the ensemble's own verdict.
+
+        A big delta can clear business materiality while still failing
+        significance, which is exactly a SEASONAL_REVIEW day: the pipeline
+        declines to diagnose it, but AC used to be computed as if it had, and
+        the driver came out at 0.75 / MODERATE.
+        """
+        result = self.base_result(ranked_drivers=[make_driver()])
+        result["movement_assessment"].update({
+            "is_material": False, "is_statistically_significant": False,
+            "is_business_material": True, "detector_agreement": "SEASONAL_ONLY",
+        })
+        profile = self.engine.build_profile(result)
+        driver = next(item for item in profile["attribution_confidence"] if item["driver_id"] == "marketing_spend")
+        self.assertLessEqual(driver["attribution_confidence"], 0.5)
+        self.assertEqual(driver["band"], "EXPLORATORY")
+
+    def test_every_ranked_driver_carries_an_ac_field(self):
+        """No ranked driver may be shown without an AC.
+
+        Offsetting drivers (they moved against the KPI) used to fall out of the
+        AC set entirely, so they reached the UI with no score at all, which
+        reads as "never assessed" rather than "scored, and low".
+        """
+        result = self.base_result(ranked_drivers=[
+            make_driver("marketing_spend"),
+            make_driver("weather_temp", offsetting=True, direction_consistent=False,
+                        expected_direction="negative", contribution=-120),
+        ])
+        profile = self.engine.build_profile(result)
+        for driver in result["driver_analysis"]["ranked_drivers"]:
+            self.assertIn("attribution_confidence", driver)
+            self.assertIsNotNone(driver["attribution_confidence"])
+        by_id = {item["driver_id"]: item for item in profile["attribution_confidence"]}
+        self.assertIn("weather_temp", by_id)
+        self.assertLess(
+            by_id["weather_temp"]["attribution_confidence"], by_id["marketing_spend"]["attribution_confidence"],
+        )
+
     def test_rejected_top_driver_with_no_alternative_is_conflicting(self):
         result = self.base_result(
             ranked_drivers=[make_driver()],

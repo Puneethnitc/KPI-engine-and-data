@@ -381,6 +381,57 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertEqual(summary["window_start"], "2023-07-03")
         self.assertIn("never establish causation", " ".join(summary["limitations"]).lower())
 
+    def test_corroboration_raises_the_attribution_confidence_of_the_driver_it_supports(self):
+        """End to end: the document Stage 6-lite retrieved has to change the
+        number Stage 7 shows. This is the wave-1 integration seam -- both
+        halves existed, and neither one read the other."""
+        result = run(self.pipeline, "2024-02-06", "South", "Apparel")
+        corroborated = next(
+            driver for driver in result["driver_analysis"]["ranked_drivers"]
+            if driver["driver_id"] == "stock_availability"
+        )
+        self.assertEqual(corroborated["corroboration"]["status"], "CORROBORATED")
+        e8 = next(item for item in corroborated["evidence"] if item["id"] == "E8")
+        self.assertEqual(e8["value"], "CORROBORATED")
+        self.assertIn("TCK-3001", e8["doc_ids"])
+        self.assertGreater(e8["weight_contribution"], 0.0)
+
+    def test_every_ranked_driver_is_shown_with_an_attribution_confidence(self):
+        """No ranked driver may reach the UI without an AC.
+
+        Offsetting drivers used to be left out of the AC set, so they rendered
+        with no score at all; a missing score reads as "not assessed" rather
+        than "scored, and low".
+        """
+        for date, region, category in (
+            ("2024-02-06", "South", "Apparel"),
+            ("2023-07-24", "North", "Electronics"),
+            ("2023-10-28", "West", "Home"),
+        ):
+            with self.subTest(date=date, region=region, category=category):
+                result = run(self.pipeline, date, region, category)
+                ranked = result["driver_analysis"]["ranked_drivers"]
+                self.assertTrue(ranked, f"expected at least one ranked driver on {date}")
+                for driver in ranked:
+                    self.assertIn("attribution_confidence", driver)
+                    self.assertIsNotNone(driver["attribution_confidence"])
+                    self.assertGreaterEqual(driver["attribution_confidence"], 0.0)
+                    self.assertLessEqual(driver["attribution_confidence"], 1.0)
+                    self.assertIn("band", driver)
+
+    def test_a_seasonal_review_day_is_reported_as_exploratory_not_moderate(self):
+        """2023-07-24 is a large delta that fails significance, so the engine
+        declines to diagnose it. Its driver must not come out at 0.75 /
+        MODERATE just because the delta was big."""
+        result = run(self.pipeline, "2023-07-24", "North", "Electronics")
+        self.assertEqual(result["verdict"], "SEASONAL_REVIEW")
+        self.assertFalse(result["movement_assessment"]["is_material"])
+        driver = result["driver_analysis"]["ranked_drivers"][0]
+        self.assertLessEqual(driver["attribution_confidence"], 0.5)
+        self.assertEqual(driver["band"], "EXPLORATORY")
+        self.assertIn("not material", driver["label"])
+        self.assertTrue(any(cap["name"] == "non_material" for cap in driver["caps_applied"]))
+
 
 class RetrievalFilterTests(unittest.TestCase):
     def test_vector_chunk_retrieval_applies_the_as_of_rule_to_evidence_metadata(self):
@@ -539,6 +590,41 @@ class ChatFallbackTests(unittest.TestCase):
         response = self.pipeline._fallback_answer(request, None, [])
         self.assertIn("40% of the movement", response.answer)
         self.assertIn("no confidence score in this run", response.answer)
+
+    def test_why_question_quotes_the_exploratory_band_for_a_non_material_run(self):
+        """Step A merged, so a current run always carries a real AC, and a
+        non-material day carries one capped at 0.5 and labelled EXPLORATORY.
+
+        The chat must say that, rather than paraphrasing it back to the
+        explained share as if no score existed.
+        """
+        diagnosis = {"driver_analysis": {"status": "EXPLORATORY_NON_MATERIAL", "ranked_drivers": [{
+            "driver_id": "marketing_spend", "display_name": "Marketing spend",
+            "explained_share": 0.55, "attribution_confidence": 0.5,
+            "band": "EXPLORATORY", "label": "Exploratory: the movement is not material",
+        }]}}
+        request = self._request("why did it drop?")
+        request.diagnosis_json = diagnosis
+        response = self.pipeline._fallback_answer(request, None, [])
+        self.assertIn("50% confidence", response.answer)
+        self.assertIn("the movement is not material", response.answer)
+        self.assertNotIn("no confidence score in this run", response.answer)
+
+    def test_why_question_distinguishes_an_unscored_driver_from_a_missing_score(self):
+        """A null AC on a present field means the engine scored the driver and
+        declined to emit a value (sparse history). A field that is absent
+        entirely means a run saved before AC existed. They are not the same
+        statement and must not be phrased the same way."""
+        request = self._request("why did it drop?")
+        request.diagnosis_json = {"driver_analysis": {"status": "ASSESSED", "ranked_drivers": [{
+            "driver_id": "stock_availability", "display_name": "Stock availability",
+            "explained_share": 0.4, "attribution_confidence": None,
+            "status": "INSUFFICIENT_HISTORY",
+        }]}}
+        response = self.pipeline._fallback_answer(request, None, [])
+        self.assertIn("40% of the movement", response.answer)
+        self.assertIn("insufficient driver history", response.answer)
+        self.assertNotIn("no confidence score in this run", response.answer)
 
     def test_why_question_with_no_ranked_driver_refuses_to_name_a_cause(self):
         request = self._request("why did revenue change?")

@@ -64,6 +64,12 @@ bands:
   VERY_LOW:
     min: 0.0
     label: "Unlikely to explain this change"
+  # Not a rung on the material scale: a non-material movement is capped at
+  # 0.5 whatever the evidence says, so it is always reported as exploratory
+  # rather than being read as "MODERATE, but a bit lower".
+  EXPLORATORY:
+    min: 0.0
+    label: "Exploratory: the movement is not material"
 
 thresholds:
   material_share: 0.20

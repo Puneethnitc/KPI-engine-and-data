@@ -225,7 +225,21 @@ class ConfidenceEngine:
         # Event mode has no daily materiality gate; treat the predeclared
         # event as material so overall status follows explanation_conclusion,
         # not a movement dimension that was never assessed (Plan §7.2).
-        is_material = True if event_mode else bool(movement.get("is_business_material"))
+        #
+        # Otherwise use the detector ensemble's own `is_material`, which is the
+        # same gate the pipeline used to decide whether to diagnose at all
+        # (detection/ensemble.py: a seasonal-only hit is evidence to review,
+        # not an alert). Reading `is_business_material` instead let a
+        # SEASONAL_REVIEW day score its driver at 0.75 / MODERATE, because a
+        # large enough delta can clear business materiality while still
+        # failing significance. Fall back to the business flag only for
+        # payloads that predate the ensemble's field.
+        if event_mode:
+            is_material = True
+        elif "is_material" in movement:
+            is_material = bool(movement["is_material"])
+        else:
+            is_material = bool(movement.get("is_business_material"))
 
         source_evidence = result.get("source_evidence") or {}
         source_ready = source_evidence.get("source_readiness") or {}
@@ -306,6 +320,17 @@ class ConfidenceEngine:
         if reason_code in {"CONTROL_NOT_AUTHORIZED", "TREATMENT_SLICE_MISMATCH", "UNDECLARED_DRIVER", "FUTURE_POST_PERIOD"}:
             causal_design_approved = False
 
+        # Stage 6-lite writes `corroboration` onto each ranked driver in
+        # pipeline.py, immediately after attribution and before this call.
+        # Feeding it in here is what makes AC evidence item E8 fire: a
+        # CORROBORATED driver gets E8's positive weight, a CONTRADICTED one its
+        # penalty, and an unmatched driver contributes 0 (never a penalty).
+        corroboration_by_driver = {
+            candidate["driver_id"]: candidate["corroboration"]
+            for candidate in candidates
+            if candidate.get("driver_id") and isinstance(candidate.get("corroboration"), dict)
+        }
+
         if source_blocking:
             attribution_status = "CONFLICTING_EVIDENCE"
             attribution_reasons.append("Driver interpretation is blocked by contradictory source evidence.")
@@ -318,6 +343,7 @@ class ConfidenceEngine:
                 ranked_drivers=candidates, is_material=is_material, source_status=source_status,
                 source_blocking=False,
                 causal_verification=causal_verification if causal_design_approved else None,
+                corroboration_by_driver=corroboration_by_driver,
             )
             ac_by_id = {item["driver_id"]: item for item in ac_profile["drivers"]}
             for candidate in candidates:

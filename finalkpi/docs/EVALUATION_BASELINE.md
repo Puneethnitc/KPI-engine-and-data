@@ -812,3 +812,99 @@ any threshold.
   the open "Next" item in `kpi_engine/corroborate.py`.
 - No new rows were added to `data/labels/eval_cases.csv`; the label file is
   unchanged so the before/after columns stay comparable.
+
+## Wave 1 merged: Stage 7 (confidence) + Stage 6-lite (evidence)
+
+Branch `fix/wave-1-merged` = `fix/stage-07-confidence` merged with
+`fix/stage-06-evidence` (both branched off
+`fix/stage-04-source-reconciliation`). `ENGINE_VERSION` is
+`kpi-engine-wave1-confidence-evidence-v2`. The "merged" column is the plain
+merge commit `2642d61`; the "after" column adds the three wave-1 integration
+fixes. The numbers each agent reported on its own branch were measured before
+merging and are not comparable to these; the "merged" column is the honest
+"before" for this table.
+
+Three changes account for the difference between the last two columns:
+
+1. **Corroboration now reaches AC.** Step C wrote a `corroboration` block onto
+   every ranked driver and step A never read it, so AC evidence item E8 was
+   permanently dead: a document that corroborated a driver had no effect on the
+   confidence the engine showed. `build_profile` now builds
+   `corroboration_by_driver` from the ranked drivers and passes it to
+   `AttributionConfidenceEngine.compute_profile`.
+2. **AC is computed for every ranked driver, on every run.** Two gaps: the
+   materiality gate read `is_business_material` instead of the detector
+   ensemble's own `is_material`, so a `SEASONAL_REVIEW` day (a large delta that
+   fails significance) scored its driver at 0.75 / MODERATE; and offsetting
+   drivers were excluded from the AC set entirely, so 197 ranked drivers across
+   the label set reached the UI with no AC at all — which reads as "never
+   assessed" rather than "scored, and low". Non-material runs are now capped at
+   0.5 with a real `EXPLORATORY` band and its own label.
+3. **EVT02 has two true drivers.** A flash sale is a price discount *and* a
+   promotion, so `true_driver_ids` is now `price_discount|promo_flag` and the
+   harness credits a hit against any listed true driver. `eval_cases.csv` was
+   regenerated; the case count is unchanged at 538, but EVT02's label changed,
+   which is why its top-1 accuracy moves (0.833 → 1.0 on `all`) — the later
+   number is the correct one and the earlier one was scoring against a single
+   id that cannot describe the event.
+
+`--split all`, 538 cases:
+
+| Metric | merged (2642d61) | after | Accept |
+|---|---|---|---|
+| Top-1 accuracy (any sign) | 0.703 | 0.734 | — |
+| Top-1 accuracy (direction-aware) | 0.688 | 0.719 | — |
+| Top-3 accuracy | 0.766 | 0.766 | — |
+| Events with a #1 hit (any sign) | 5/5 | 5/5 | — |
+| Mean AC, true driver | 0.6612 (n=49) | 0.6398 (n=61) | — |
+| Mean AC, false drivers | 0.2770 (n=26) | 0.1530 (n=52) | — |
+| **AC gap (true − false)** | 0.3842 | **0.4868** | ≥ 0.30 |
+| **Decoy (EVT05) max AC** | None (n=0) | **0.2142** (n=3) | < 0.5 |
+| Brier score | 0.1390 | 0.1092 | reported |
+| False-alarm rate, quiet negatives | 0.048 | 0.048 | — |
+| Decoy false-alarm rate (all KPIs) | 0.0 | 0.0 | — |
+| Decoy confident-driver rate | 0.25 | 0.25 | — |
+| Overall status distribution | LOW 408 / MOD 32 / INSUF 98 | LOW 492 / MOD 30 / INSUF 16 | — |
+| Ranked drivers shown without an AC | 197 | 0 | 0 |
+
+`--split holdout`, 267 cases (reported honestly, not tuned against):
+
+| Metric | merged (2642d61) | after | Accept |
+|---|---|---|---|
+| Top-1 accuracy (any sign) | 0.458 | 0.542 | — |
+| Top-1 accuracy (direction-aware) | 0.417 | 0.5 | — |
+| Top-3 accuracy | 0.625 | 0.625 | — |
+| **AC gap (true − false)** | 0.1634 | **0.3843** | ≥ 0.30 |
+| **Decoy (EVT05) max AC** | None (n=0) | **0.2142** (n=3) | < 0.5 |
+| Brier score | 0.2291 | 0.1758 | reported |
+| Decoy false-alarm rate (all KPIs) | 0.0 | 0.0 | — |
+
+Reading the two splits honestly: the holdout AC gap of 0.3843 clears the 0.30
+gate, but it is thinner than the 0.4868 on `all`, and the holdout Brier of
+0.1758 is worse than the 0.1092 on `all`. That is expected — `all` contains the
+dev events whose labels the hand-set weights were judged against — and the
+holdout number is the one to quote. The holdout gap also moved a lot
+(0.1634 → 0.3843) largely because more drivers are now *scored at all*: 27 true
+and 17 false, against 15 and 15 before, because offsetting drivers no longer
+fall out of the set. Decoy max AC is 0.2142 in both splits (the decoy's 3
+scored drivers are the same 3), comfortably under the 0.5 gate.
+
+Thresholds and weights were **not** retuned for any of this. `E8_corroborated`
+is still the hand-set 1.0, the non-material cap is still 0.5, and no weight was
+fitted on holdout data; the movement in these numbers comes from wiring and
+labelling, not from tuning. `--calibrate` is still available and still writes a
+separate v2 file on dev only.
+
+### Not done in the wave-1 merge
+
+- The corroboration evidence layer is the CSV reader; the chat path still reads
+  Chroma. Unchanged from step C and still recorded as the open "Next" item.
+- No causal design was added: `causal_verification` verdicts are still
+  `UNTESTABLE` for every event, so AC's E7 evidence item contributes 0 and every
+  driver is capped at 0.75 by `no_causal_test_max`. That cap is why several
+  corroborated EVT02 drivers show no AC change — they were already at it. Step B
+  (Stage 5-lite) is what unblocks E7.
+- `test_why_question_without_step_a_confidence_fields_says_so_rather_than_inventing_one`
+  is retained deliberately: a run cached under the pre-merge `ENGINE_VERSION`
+  genuinely has no AC field, and the chat still has to say so rather than
+  inventing one. The real-AC path is covered by the two new chat tests.

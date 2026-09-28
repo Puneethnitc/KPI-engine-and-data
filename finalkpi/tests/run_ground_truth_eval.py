@@ -28,7 +28,7 @@ import math
 from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -52,6 +52,24 @@ LEGACY_DRIVER_ID_ALIASES = {
 
 def canonical_driver_id(driver_id: str) -> str:
     return LEGACY_DRIVER_ID_ALIASES.get(driver_id, driver_id)
+
+
+def true_driver_ids(row: dict[str, Any]) -> set[str]:
+    """Every driver that is a true cause for this case, canonically resolved.
+
+    Most events have a single true cause, but not all do: EVT02 is a flash
+    sale, which is a price discount AND a promotion, so the ground truth lists
+    both. Scoring against a single id would call promo_flag a miss on a case it
+    genuinely explains, so a hit is credited when the engine names ANY listed
+    true driver. `true_driver_id` (the first listed id) is kept as the fallback
+    for older copies of eval_cases.csv that lack the `true_driver_ids` column.
+    """
+    listed = row.get("true_driver_ids") or row.get("true_driver_id") or ""
+    return {
+        canonical_driver_id(item.strip())
+        for item in listed.replace(",", "|").split("|")
+        if item.strip()
+    }
 
 
 # Expected sign of the driver-vs-KPI relationship (plan §1.2/§1.3), used only
@@ -165,10 +183,10 @@ def collect_ac_training_rows(
     fit new weights by L2-regularised logistic regression (dev split only)."""
     rows: list[dict[str, Any]] = []
     for row in cases:
-        if row["is_decoy"] or not (row.get("event_id") and row["event_present"] and row["true_driver_id"]):
+        true_ids = true_driver_ids(row)
+        if row["is_decoy"] or not (row.get("event_id") and row["event_present"] and true_ids):
             continue
         result = run_case(pipeline, row)
-        true_id = canonical_driver_id(row["true_driver_id"])
         source_status = ((result.get("confidence_profile") or {}).get("source") or {}).get("status")
         causal_verification = result.get("causal_verification") or {}
         causal_design_approved = bool(result.get("_causal_design_approved"))
@@ -182,12 +200,13 @@ def collect_ac_training_rows(
                 and causal_verification.get("driver_id") == driver.get("driver_id") else None
             )
             features = AttributionConfidenceEngine.feature_activations(
-                driver, causal_result=causal_for_driver, corroboration=None,
+                driver, causal_result=causal_for_driver,
+                corroboration=driver.get("corroboration"),
                 source_status=source_status, model=model,
             )
             rows.append({
                 "features": features,
-                "label": 1 if canonical_driver_id(driver["driver_id"]) == true_id else 0,
+                "label": 1 if canonical_driver_id(driver["driver_id"]) in true_ids else 0,
             })
     return rows
 
@@ -287,7 +306,12 @@ def calibrate_attribution_confidence(
     }
 
 
-def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[str, Any]:
+def evaluate(
+    cases: list[dict[str, Any]], pipeline: KPIEnginePipeline,
+    runner: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Score every case. `runner` defaults to running the engine; tests pass a
+    stub so the scoring rules can be exercised without a full diagnosis."""
     detection_by_event: dict[str, Counter] = defaultdict(Counter)
     revenue_recall_by_event: dict[str, Counter] = defaultdict(Counter)
     negatives_total = Counter()
@@ -315,7 +339,7 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
     decoy_ac_values: list[float] = []
 
     for row in cases:
-        result = run_case(pipeline, row)
+        result = (runner or (lambda case: run_case(pipeline, case)))(row)
         movement = result.get("movement_assessment") or {}
         is_material = bool(movement.get("is_material"))
         weekday = WEEKDAY_NAMES[date.fromisoformat(row["date"]).weekday()]
@@ -350,30 +374,36 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
                 if is_material:
                     rbucket["detected"] += 1
 
-            if row["true_driver_id"]:
-                true_id = canonical_driver_id(row["true_driver_id"])
+            true_ids = true_driver_ids(row)
+            if true_ids:
                 driver_cases_scored += 1
                 event_bucket = driver_by_event[event_id]
                 event_bucket["scored"] += 1
                 top1 = top_ranked_driver(result)
                 top3_ids = top_driver_ids(result, 3)
-                hit1 = bool(top1) and canonical_driver_id(top1["driver_id"]) == true_id
+                hit1 = bool(top1) and canonical_driver_id(top1["driver_id"]) in true_ids
                 if hit1:
                     driver_top1_hits += 1
                     event_bucket["top1"] += 1
                     top1_hit_kpis_by_event[event_id].add(row["kpi_id"])
-                    expected_sign = expected_direction_sign(true_id, row["category"])
+                    # Check the sign against the driver the engine actually
+                    # named, not against every listed true driver: the label
+                    # only makes sense for the one whose contract hypothesis
+                    # was actually being asserted.
+                    expected_sign = expected_direction_sign(
+                        canonical_driver_id(top1["driver_id"]), row["category"],
+                    )
                     if expected_sign is not None and top1.get("direction") == expected_sign:
                         driver_top1_direction_hits += 1
                         event_bucket["top1_direction"] += 1
-                if true_id in top3_ids:
+                if true_ids & set(top3_ids):
                     driver_top3_hits += 1
                     event_bucket["top3"] += 1
                 for item in (result.get("driver_analysis") or {}).get("ranked_drivers") or []:
                     ac = item.get("attribution_confidence")
                     if ac is None:
                         continue
-                    label = 1 if canonical_driver_id(item["driver_id"]) == true_id else 0
+                    label = 1 if canonical_driver_id(item["driver_id"]) in true_ids else 0
                     ac_labels.append((ac, label))
 
             causal = result.get("causal_verification") or {}

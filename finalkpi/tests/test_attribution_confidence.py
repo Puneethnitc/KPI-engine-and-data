@@ -167,6 +167,101 @@ class CorroborationMonotonicityTests(unittest.TestCase):
             contradicted_record["attribution_confidence"], none_record["attribution_confidence"],
         )
 
+    def test_compute_profile_raises_the_ac_of_the_corroborated_driver_only(self):
+        """E8 wired through the profile, not just compute_driver.
+
+        A corroborated driver must end up with a strictly higher AC than the
+        same driver with no documents in scope, and the corroborating doc_id
+        must be named in its E8 evidence row. The other driver's AC must not
+        move: corroboration is per-driver, never a run-level bonus.
+        """
+        corroboration = {
+            "marketing_spend": {"status": "CORROBORATED", "documents": [{"doc_id": "TCK-1001"}]},
+            "promo_flag": {"status": "NONE", "documents": []},
+        }
+        base = dict(is_material=True, source_status="HIGH")
+        # Deliberately middling drivers: a strong one sits on the 0.75 "no
+        # causal test" cap either way, and the cap would hide whether E8 was
+        # applied at all. Identical apart from the id, so the only thing that
+        # can move one of the two ACs is its own corroboration block.
+        weak = dict(explained_share=0.22, driver_change_z=1.6, p_value_adj=0.06,
+                    stability_status="SENSITIVE", lag_days=0)
+        ranked = [make_driver("marketing_spend", **weak), make_driver("promo_flag", **weak)]
+        with_docs = AttributionConfidenceEngine.compute_profile(
+            ranked_drivers=ranked, corroboration_by_driver=corroboration, **base,
+        )
+        without_docs = AttributionConfidenceEngine.compute_profile(ranked_drivers=ranked, **base)
+
+        def ac_by_id(profile, driver_id):
+            return next(item["attribution_confidence"] for item in profile["drivers"]
+                        if item["driver_id"] == driver_id)
+
+        self.assertLess(
+            ac_by_id(without_docs, "marketing_spend"), default_model().caps["no_causal_test_max"],
+        )
+        self.assertGreater(
+            ac_by_id(with_docs, "marketing_spend"), ac_by_id(without_docs, "marketing_spend"),
+        )
+        self.assertEqual(
+            ac_by_id(with_docs, "promo_flag"), ac_by_id(without_docs, "promo_flag"),
+        )
+        # Corroboration is what moves it across a band boundary, not just a digit.
+        self.assertLess(ac_by_id(without_docs, "marketing_spend"), 0.60)
+        self.assertGreaterEqual(ac_by_id(with_docs, "marketing_spend"), 0.60)
+        e8 = next(item for item in with_docs["drivers"][0]["evidence"] if item["id"] == "E8")
+        self.assertEqual(e8["value"], "CORROBORATED")
+        self.assertEqual(e8["doc_ids"], ["TCK-1001"])
+        self.assertGreater(e8["weight_contribution"], 0.0)
+
+
+class OffsettingDriverCoverageTests(unittest.TestCase):
+    def test_an_offsetting_ranked_driver_still_gets_an_ac(self):
+        """No ranked driver may be shown without an AC.
+
+        An offsetting driver moved against the KPI's direction. That is a
+        statement about the driver, and it is already scored through E2
+        (strong movement) and E3 (direction conflict), so it is scored like any
+        other mover instead of being left out of the profile entirely -- a
+        ranked driver with no AC reads to the user as "never assessed".
+        """
+        profile = AttributionConfidenceEngine.compute_profile(
+            ranked_drivers=[
+                make_driver("marketing_spend"),
+                make_driver("weather_temp", offsetting=True, direction_consistent=False,
+                            expected_direction="negative"),
+            ],
+            is_material=True, source_status="HIGH",
+        )
+        by_id = {item["driver_id"]: item for item in profile["drivers"]}
+        self.assertIn("weather_temp", by_id)
+        self.assertIsNotNone(by_id["weather_temp"]["attribution_confidence"])
+        # Moved the wrong way for a movement it is being ranked against, so it
+        # must not outrank the driver whose direction agrees.
+        self.assertEqual(profile["top_driver_id"], "marketing_spend")
+
+
+class NonMaterialBandTests(unittest.TestCase):
+    def test_non_material_driver_reports_the_exploratory_label(self):
+        record = AttributionConfidenceEngine.compute_driver(
+            make_driver(), prior=0.5, is_material=False, source_status="HIGH",
+            causal_result={"driver_id": "marketing_spend", "verdict": "SUPPORTED_CONDITIONAL"},
+        )
+        self.assertEqual(record["band"], "EXPLORATORY")
+        # The band is not just renamed: its label must not still claim the
+        # driver is a "likely contributing cause".
+        self.assertNotIn("Likely", record["label"])
+        self.assertIn("not material", record["label"])
+
+    def test_exploratory_is_a_separate_band_not_a_material_rung(self):
+        model = default_model()
+        self.assertIn("EXPLORATORY", model.bands)
+        # A material run is never labelled exploratory, however low it scores.
+        record = AttributionConfidenceEngine.compute_driver(
+            make_driver(explained_share=0.01, driver_change_z=1.6, p_value_adj=0.4),
+            prior=0.5, is_material=True, source_status="LOW",
+        )
+        self.assertNotEqual(record["band"], "EXPLORATORY")
+
 
 class ProfileAmbiguityTests(unittest.TestCase):
     def test_confident_single_driver(self):

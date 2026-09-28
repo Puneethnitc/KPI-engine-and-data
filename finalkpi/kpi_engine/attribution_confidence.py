@@ -27,7 +27,7 @@ from typing import Any, Optional
 import yaml
 
 MODEL_DIR = Path(__file__).resolve().parent / "models"
-BAND_ORDER = ("HIGH", "MODERATE", "LOW", "VERY_LOW")
+BAND_ORDER = ("HIGH", "MODERATE", "LOW", "VERY_LOW", "EXPLORATORY")
 
 
 def _logit(p: float) -> float:
@@ -368,8 +368,12 @@ class AttributionConfidenceEngine:
         ac_final = max(0.0, min(1.0, ac_final))
 
         band, label = model.band_for(ac_final)
-        if not is_material:
-            band = "EXPLORATORY" if ac_final <= model.caps["non_material_max"] else band
+        if not is_material and ac_final <= model.caps["non_material_max"]:
+            # The 0.5 cap is why this is not just "MODERATE": a driver can
+            # clear every material band's evidence and still be capped out,
+            # because the movement itself never cleared materiality.
+            exploratory = model.bands["EXPLORATORY"]
+            band, label = "EXPLORATORY", exploratory["label"]
 
         return {
             "driver_id": driver.get("driver_id"),
@@ -430,7 +434,12 @@ class AttributionConfidenceEngine:
                 "top_driver_id": None,
             }
 
-        movers = [d for d in ranked_drivers if d.get("moved") and not d.get("offsetting")]
+        # Every driver that moved is scored, including offsetting ones. An
+        # offsetting driver moved against the KPI's direction, which is a
+        # statement about it (its E2 movement is large and its E3 direction
+        # conflicts), not a reason to leave it unscored: a ranked driver shown
+        # with no AC would read as "not assessed" rather than "scored and low".
+        movers = [d for d in ranked_drivers if d.get("moved")]
         min_history = model.thresholds["min_history_periods"]
         eligible = [d for d in movers if (d.get("sample_size") or 0) >= min_history]
         sparse = [d for d in movers if d not in eligible]
