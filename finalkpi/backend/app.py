@@ -14,7 +14,7 @@ from backend.rag_pipeline import DynamicRAGPipeline
 from backend.query_router import DynamicQueryRouter
 from backend.retrieval import ContextBuilder
 from backend.schemas import ChatRequest as RagChatRequest
-from backend.service import DEMO_IDENTITY_MODE, authorize_scope, build_marketing_brief, diagnose_scope, get_available_filters, get_authorized_candidate_artifact, get_authorized_diagnosis, get_authorized_feedback_run, get_authorized_feedback_record, get_authorized_improvement_proposal, get_authorized_improvement_proposals, get_authorized_proposal_evaluation, get_current_kpi_contract, get_diagnosis, get_evidence, get_feedback, get_feedback_aggregations, get_investigations, get_insights, get_marketing, get_movements, get_registered_kpis, get_run_kpi_contract, get_timeseries, identity_persona
+from backend.service import DEMO_IDENTITY_MODE, authorize_scope, build_persona_brief, diagnose_scope, get_available_filters, get_authorized_candidate_artifact, get_authorized_diagnosis, get_authorized_feedback_run, get_authorized_feedback_record, get_authorized_improvement_proposal, get_authorized_improvement_proposals, get_authorized_proposal_evaluation, get_current_kpi_contract, get_diagnosis, get_evidence, get_feedback, get_feedback_aggregations, get_investigations, get_insights, get_marketing, get_movements, get_registered_kpis, get_run_kpi_contract, get_timeseries, identity_persona
 from backend.domain_policy import require_domain, retrieval_tags_for_persona
 from backend.response_projection import project_diagnosis, project_evidence, project_saved_run
 from backend.feedback_learning import aggregate_feedback_records, build_improvement_proposal, proposal_change_idempotency_key
@@ -447,7 +447,7 @@ def api_diagnoses(payload: DiagnosisRequest) -> Dict[str, Any]:
         )
         first_result = next(iter(response["results"].values()), {})
         segment = first_result.get("segment", {})
-        response["marketing_brief"] = None if first_result.get("verdict") == "ACCESS_DENIED" else build_marketing_brief(response["results"], {
+        response["marketing_brief"] = None if first_result.get("verdict") == "ACCESS_DENIED" else build_persona_brief(response["results"], {
             "region": segment.get("region", payload.region),
             "category": segment.get("category", payload.category),
             "target_date": first_result.get("target_date", payload.target_date),

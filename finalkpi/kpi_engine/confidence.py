@@ -246,6 +246,9 @@ class ConfidenceEngine:
         recon = result.get("reconciliation_verdict") or source_evidence.get("reconciliation") or {}
         recon_status = recon.get("status", "NOT_ASSESSED")
         readiness = source_ready.get("status", "NOT_ASSESSED")
+        mtd_neutral = recon_status == "PENDING_CLOSE" or (
+            recon_status == "AGREED" and recon.get("details", {}).get("mode") == "snapshot"
+        )
         source_reasons: list[str] = []
         source_limits = list(source_ready.get("limitations") or [])
         source_blocking = recon_status == "CONTRADICTED" or bool(recon.get("blocking"))
@@ -255,15 +258,15 @@ class ConfidenceEngine:
         elif readiness in ("MISSING", "QUALITY_FAILED") or recon_status == "DRIFT" and (recon.get("details") or {}).get("quality_flag"):
             source_status = "INSUFFICIENT_EVIDENCE"
             source_reasons.append(f"Required-source readiness is {readiness}.")
-        elif readiness in ("PARTIAL", "STALE") or recon_status in ("DRIFT", "NOT_AVAILABLE_FOR_PERIOD"):
+        elif (readiness in ("PARTIAL", "STALE") and not mtd_neutral) or recon_status in ("DRIFT", "NOT_AVAILABLE_FOR_PERIOD"):
             source_status = "LOW"
             source_reasons.append(f"Source readiness/reconciliation needs review ({readiness}; {recon_status}).")
-        elif readiness == "READY" and recon_status in ("AGREED", "NOT_APPLICABLE", "PENDING_CLOSE"):
+        elif (readiness == "READY" or mtd_neutral) and recon_status in ("AGREED", "NOT_APPLICABLE", "PENDING_CLOSE"):
             source_status = "HIGH"
             if recon_status == "AGREED":
-                source_reasons.append("Required sources are ready and independent reconciliation agrees.")
+                source_reasons.append("Independent reconciliation agrees; the MTD snapshot readiness is neutral." if mtd_neutral else "Required sources are ready and independent reconciliation agrees.")
             elif recon_status == "PENDING_CLOSE":
-                source_reasons.append("Required sources are ready; the finance comparator is not yet due and is neutral.")
+                source_reasons.append("The finance comparator is not yet due; MTD snapshot readiness is neutral." if mtd_neutral else "Required sources are ready; the finance comparator is not yet due and is neutral.")
             else:
                 source_reasons.append("Required sources are ready; reconciliation is not applicable and is neutral.")
         else:

@@ -1,0 +1,74 @@
+# Persona configuration: Marketing manager.
+#
+# Same contract as cfo.yaml: selection and order only, no facts. What changes is
+# the question this role is asking. Marketing does not reconcile finance, so
+# ACCOUNTING_NOT_CAUSAL is not in its claim order, and it is accountable for
+# spend, price and promotion -- so those lever families come first and the
+# accounting bridge is not in the list at all.
+persona_id: marketing_manager
+display_name: Marketing manager
+aliases:
+  - marketing_manager
+
+claim_order:
+  - OBSERVED_MOVEMENT
+  - MATERIALITY
+  - ATTRIBUTED_DRIVER
+  - CORROBORATION
+  - CORRELATIONAL
+  - FUNNEL_BRIDGE
+  - OBSERVATIONAL
+  - CLARIFICATION_REQUEST
+  - SOURCE_STATUS
+  - ABSTENTION
+  - REVIEW
+  - EVENT_WINDOW
+  - ACCESS_BOUNDARY
+
+# Lever families, highest priority first. Marketing owns the levers it can pull
+# this quarter; checkout performance and source integrity are not its calls.
+driver_priority:
+  - marketing
+  - promotions
+  - pricing
+  - contextual
+  - availability
+  - performance
+  - source_integrity
+
+# No source_integrity: reconciling finance postings is not a marketing action,
+# so the engine will not offer this persona a card on that lever.
+allowed_action_levers:
+  - marketing
+  - promotions
+  - pricing
+  - availability
+  - performance
+  - contextual
+  - evidence_collection
+
+approval_threshold: 0.6
+
+# Three drivers is the most a campaign owner can act on at once; the rest stay
+# in the driver analysis and are reachable by asking.
+max_driver_claims: 3
+
+default_owner: marketing_lead
+lever_owners:
+  marketing: marketing_lead
+  promotions: pricing_lead
+  pricing: pricing_lead
+  availability: operations_lead
+  performance: engineering_lead
+  contextual: merchandising_lead
+  evidence_collection: marketing_lead
+
+decision_right: Marketing budget approval
+
+brief_prefix: Marketing review
+brief_focus: >-
+  Controllable levers only: {material}. Source integrity and finance
+  reconciliation are not assessed here; correlation is not incrementality.
+workspace_headline: Marketing manager workspace
+workspace_briefing: Marketing manager briefing
+workspace_footer: Marketing manager

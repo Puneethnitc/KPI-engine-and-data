@@ -909,6 +909,30 @@ separate v2 file on dev only.
   genuinely has no AC field, and the chat still has to say so rather than
   inventing one. The real-AC path is covered by the two new chat tests.
 
+## Wave 2 merged: before → after
+
+The before values are the recorded Stage 8 results on the incoming branch; the
+after values use the regenerated 538-case labels and the merged implementation.
+No thresholds or weights were retuned on holdout.
+
+| Measure | Before | After |
+|---|---:|---:|
+| All-split AC gap | 0.4868 | 0.5126 |
+| All-split Brier score | 0.1092 | 0.0977 |
+| All-split decoy max AC | 0.2142 | 0.2142 |
+| Holdout top-1 accuracy, any sign | 0.458 | 0.542 |
+| Holdout AC gap | 0.3843 | 0.4189 |
+| Holdout Brier score | 0.1758 | 0.1488 |
+| Holdout decoy max AC | 0.2142 | 0.2142 |
+| All-split false-alarm rate | 0.039 | 0.048 |
+
+The holdout AC gap is 0.4189 and the decoy maximum is 0.2142 (3 decoy cases
+scored). The holdout includes 267 cases; all-split includes 538. The source
+dimension for `units_sold`, North/Home, 2023-11-01 is HIGH with a PENDING_CLOSE
+reconciliation, and its overall status is MODERATE. A non-supported causal test
+is capped at 0.75 under `no_supported_causal_test`; the historical
+`no_causal_test` cap label remains as a compatibility alias.
+
 ## Stage 5: before → after (causal verification lite)
 
 The same 538 labeled cases were run with `--split all` before and after this
@@ -939,3 +963,52 @@ The wrong-driver price discount override on EVT01 is `INCONCLUSIVE` with
 covered by regression tests. The holdout causal verdicts did not change:
 EVT02 remains 12 `UNTESTABLE`, EVT05 remains 12 `NOT_ASSESSED`, and EVT06
 remains 6 `NOT_ASSESSED` plus 6 `UNTESTABLE`.
+
+## Stage 8: before → after
+
+**Problem:** the CFO, marketing and regional personas all get an identical narrative and cards. Expected impact is always null.
+
+| metric (split) | before (Stage 7) | after (Stage 8) |
+|---|---|---|
+| Cases evaluated (all) | 538 | 538 |
+| Top-1 driver accuracy, any sign (all) | 0.734 | 0.734 |
+| Top-1 driver accuracy, direction-aware (all) | 0.688 | 0.688 |
+| Top-3 driver accuracy (all) | 0.766 | 0.766 |
+| Events with true driver at #1 (all) | 5/5 | 5/5 |
+| False-alarm rate (all) | 0.039 | 0.039 |
+| Top-1 accuracy, any sign (dev) | 0.85 (40 scored) | 0.85 (40 scored) |
+| Top-1 accuracy (holdout) | 0.458 (24 scored) | 0.458 (24 scored) |
+| Top-3 accuracy (holdout) | 0.625 | 0.625 |
+| Revenue reconciliation resolved rate | 1.0 | 1.0 |
+| Personas with distinct claim sets (all) | 1 (CFO only) | 3 (CFO, marketing_manager, regional_manager_north) |
+| Causal wording "likely caused" at AC<0.6 (all) | N/A | Rejected (gate enforced) |
+| Card kinds by AC (all) | Only NEXT_CHECK | ACTION_PROPOSAL/VERIFY_THEN_ACT/NEXT_CHECK/ADVISORY |
+| Expected impact non-null (all) | 0 | Variable (β CI range, −contribution×7) |
+
+**What changed:**
+1. `kpi_engine/personas/{cfo,marketing_manager,regional_manager}.yaml` — three persona configs with per-role `claim_order`, `driver_priority` (lever families first), `allowed_action_levers`, `approval_threshold` (CFO 0.6, marketing 0.6, regional 0.75), `max_driver_claims` and alias mappings (`CFO`/`finance_owner` → `cfo`; `regional_manager_north` → `regional_manager`).
+2. `kpi_engine/narrative.py` — `_claims(payload, persona_cfg)` uses `PersonaConfig` to select, order and reword claims; `CAUSAL_WORDING_MIN_AC=0.6` gate; `CAUSAL_PHRASE="likely caused"` only when AC≥0.6 **and** causal verdict is `SUPPORTED_CONDITIONAL`; `validate()` rejects claims that smuggle a causal verb past the gate; new claim types `CORROBORATION` and `CLARIFICATION_REQUEST`.
+3. `kpi_engine/action.py` — up to 3 cards with kind hierarchy: ACTION_PROPOSAL (AC≥0.6+SUPPORTED), VERIFY_THEN_ACT (AC≥0.6), NEXT_CHECK (0.35–0.6), ADVISORY (contextual); `expected_impact = −contribution × 7D` with β CI range; weak-overall gate `{LOW, INSUFFICIENT_EVIDENCE, CONFLICTING_EVIDENCE}` downgrades stronger kinds; new card fields `persona`, `attribution_confidence`, `attribution_band`, `attribution_label`, `expected_impact_low`, `expected_impact_high`, `approval_threshold`; `LEVER_FAMILY` map shared with narrative.
+4. `backend/service.py` — `build_marketing_brief` → `build_persona_brief(persona)` with persona-framed summary (CFO string preserved for test compatibility); `SUPPORTED_PERSONAS` gains `regional_manager_north`; `ENGINE_VERSION` bumped to `kpi-engine-personas-actions-v3`; `get_available_filters` lists all three personas.
+5. `frontend/lib/action-workspace.ts` — `ActionContract` gains `persona`, `attribution_*`, `expected_impact_*` fields; `actionImpactLabel` and `actionStatusLabel` handle new kinds; impact range displayed when present.
+6. `frontend/components/app-shell.tsx` — persona selector includes "Regional manager (North)" option; allowed personas list updated.
+7. `frontend/app/page.tsx` — CFO/marketing/regional header/briefing/footer text replaced with persona-aware strings; existing substrings `'approval, decision risk, reconciliation'` and `'operational next checks, controllable levers'` preserved.
+8. `tests/test_personas.py` (new) — 4 required cases: same payload → different claim sets/order for 3 personas all passing `validate()`; causal wording rejected at low AC; impact calculation; card kinds by AC.
+9. `kpy_engine = ["registry/*.yaml", "models/*.yaml", "personas/*.yaml"]` added to `pyproject.toml` package-data.
+
+**Eval results --split dev** (271 cases): top1 attribution 0.85, AC gap 0.5565, Brier 0.0668, overall status `{LOW: 238, INSUFFICIENT_EVIDENCE: 7, MODERATE: 26}`, false-alarm 0.039 (unchanged from Stage 7).
+**Eval results --split all** (538 cases): top1 0.734, AC gap 0.4868, Brier 0.1092, decoy_max_ac 0.2142, overall `{LOW: 492, MODERATE: 30, INSUFFICIENT_EVIDENCE: 16}` (same as Stage 7 distribution, since no dev-weight retuning was done).
+
+### Not done in the wave-1 merge (continued)
+
+- The corroboration evidence layer is the CSV reader; the chat path still reads
+  Chroma. Unchanged from step C and still recorded as the open "Next" item.
+- No causal design was added: `causal_verification` verdicts are still
+  `UNTESTABLE` for every event, so AC's E7 evidence item contributes 0 and every
+  driver is capped at 0.75 by `no_causal_test_max`. That cap is why several
+  corroborated EVT02 drivers show no AC change — they were already at it. Step B
+  (Stage 5-lite) is what unblocks E7.
+- `test_why_question_without_step_a_confidence_fields_says_so_rather_than_inventing_one`
+  is retained deliberately: a run cached under the pre-merge `ENGINE_VERSION`
+  genuinely has no AC field, and the chat still has to say so rather than
+  inventing one. The real-AC path is covered by the two new chat tests.

@@ -82,7 +82,7 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
       setRegion(params.get('region') || safeRegion)
       setCategory(params.get('category') || safeCategory)
       setDate(params.get('date') || safeDate)
-      setAllowed({ personas: ['marketing_manager', 'CFO'], regions: [params.get('region') || safeRegion], categories: [params.get('category') || safeCategory], dates: [params.get('date') || safeDate] })
+      setAllowed({ personas: ['marketing_manager', 'CFO', 'regional_manager_north'], regions: [params.get('region') || safeRegion], categories: [params.get('category') || safeCategory], dates: [params.get('date') || safeDate] })
     }).finally(() => setHydrated(true))
   }, [])
   useEffect(() => {

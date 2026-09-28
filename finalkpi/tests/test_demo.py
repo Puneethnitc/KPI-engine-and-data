@@ -23,7 +23,7 @@ class DemoTests(unittest.TestCase):
             self.assertIn(f"<h2>{kpi}</h2>", report)
         self.assertIn("No action is executed", report)
         self.assertIn("Evidence-bound claims", report)
-        self.assertIn("AWAITING_REVIEW", report)
+        self.assertIn("AWAITING_APPROVAL", report)
 
 
 if __name__ == "__main__":

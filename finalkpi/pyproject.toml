@@ -31,4 +31,4 @@ dev = [
 include = ["kpi_engine*"]
 
 [tool.setuptools.package-data]
-kpi_engine = ["registry/*.yaml"]
+kpi_engine = ["registry/*.yaml", "models/*.yaml", "personas/*.yaml"]

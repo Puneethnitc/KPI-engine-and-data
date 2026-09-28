@@ -1,0 +1,88 @@
+# Persona configuration: CFO.
+#
+# This file selects and orders approved narrative claims and gates which
+# decision cards the engine is allowed to raise for this role. It contains no
+# numbers, no facts and no prose of its own: every claim it can order is still
+# rebuilt from the evidence payload and re-validated by NarrativeEngine.validate,
+# and every card it can gate is still built by ActionRecommendationEngine.
+# Editing claim_order changes what this persona reads first, never what is true.
+persona_id: cfo
+display_name: CFO
+aliases:
+  - CFO
+  - finance_owner
+
+# Finance reads the reconciliation verdict and the accounting bridge first, then
+# the movement, then the drivers it is being asked to fund. Raw associations
+# (CORRELATIONAL) are deliberately not in this order: a ranked association with
+# no contribution and no confidence is noise in a financial review, and the
+# attribution dimension already carries the drivers that do have a number.
+claim_order:
+  - SOURCE_STATUS
+  - OBSERVED_MOVEMENT
+  - MATERIALITY
+  - ACCOUNTING_NOT_CAUSAL
+  - FUNNEL_BRIDGE
+  - ATTRIBUTED_DRIVER
+  - CORROBORATION
+  - OBSERVATIONAL
+  - CLARIFICATION_REQUEST
+  - ABSTENTION
+  - REVIEW
+  - EVENT_WINDOW
+  - ACCESS_BOUNDARY
+
+# Lever families, highest priority first. A finance review is owned by whoever
+# has to absorb the change, so availability and price come before spend, and
+# context comes last.
+driver_priority:
+  - source_integrity
+  - availability
+  - pricing
+  - promotions
+  - performance
+  - marketing
+  - contextual
+
+# The CFO is the approval authority in this prototype, so the card set is the
+# full lever catalog plus the two non-driver cards.
+allowed_action_levers:
+  - source_integrity
+  - availability
+  - pricing
+  - promotions
+  - performance
+  - marketing
+  - contextual
+  - evidence_collection
+
+# Minimum Attribution Confidence at which this persona may approve a proposal
+# rather than escalate it. Below this the strongest card is VERIFY_THEN_ACT.
+approval_threshold: 0.6
+
+# No truncation: finance reviews the whole ranked list, in its own order.
+max_driver_claims: 12
+
+# Owner used when the KPI contract declares no owner for a candidate driver.
+# A declared contract owner always wins; this is only the fallback.
+default_owner: finance_owner
+lever_owners:
+  source_integrity: finance_owner
+  availability: operations_lead
+  pricing: pricing_lead
+  promotions: pricing_lead
+  performance: engineering_lead
+  marketing: marketing_lead
+  contextual: merchandising_lead
+
+# Printed on any card that needs a signature.
+decision_right: Finance change control (CFO)
+
+brief_prefix: Financial review
+brief_focus: >-
+  Material KPI movements: {material}. Treat contribution, reconciliation and
+  source-quality checks as separate evidence; no causal attribution is
+  established.
+workspace_headline: Financial reviewer workspace
+workspace_briefing: Financial reviewer briefing
+workspace_footer: CFO

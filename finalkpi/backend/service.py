@@ -47,7 +47,7 @@ from backend.storage import find_diagnosis_run, get_feedback_submission, get_leg
 from backend.storage import get_improvement_proposal, list_improvement_proposals
 from backend.storage import get_candidate_artifact, get_proposal_evaluation
 
-SUPPORTED_PERSONAS = ("CFO", "marketing_manager")
+SUPPORTED_PERSONAS = ("CFO", "marketing_manager", "regional_manager_north")
 DEMO_IDENTITY_MODE = "DEMO_SIMULATED"
 DEMO_IDENTITIES = {
     "demo-cfo": "CFO",
@@ -58,7 +58,7 @@ DEMO_IDENTITIES = {
     # has can_view_categories = ALL).
     "demo-category-manager-north-electronics": "category_manager_north_electronics",
 }
-ENGINE_VERSION = "kpi-engine-stage5-causal-v1"
+ENGINE_VERSION = "kpi-engine-wave2-merged-v1"
 from kpi_engine.verification.registry import resolve_governed_design
 
 
@@ -644,7 +644,7 @@ def movement_priority(movement: Dict[str, Any], contract_snapshot: Optional[Dict
     return abs(delta) * min(abs(score) / z_threshold, 3.0) * kpi_weight
 
 
-def build_marketing_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, Any], persona: str = "marketing_manager") -> Dict[str, Any]:
+def build_persona_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, Any], persona: str = "marketing_manager") -> Dict[str, Any]:
     def confidence_status(result: Dict[str, Any]) -> str:
         profile = result.get("confidence_profile") or {}
         return (profile.get("overall") or {}).get("status") or (result.get("confidence") or {}).get("status", "NOT_ASSESSED")
@@ -803,6 +803,9 @@ def build_marketing_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, A
         "uncertainty": list(dict.fromkeys(uncertainty))[:5],
         "method": "deterministic movement ordering; statistical materiality from the KPI engine; correlated indicators remain non-causal",
     }
+
+
+build_marketing_brief = build_persona_brief  # keep old name as alias
 
 
 def get_diagnosis(run_id: str) -> Dict[str, Any] | None:

@@ -1,0 +1,72 @@
+# Persona configuration: Regional manager (North).
+#
+# Third of the three roles the brief requires to differ. A regional manager
+# answers "what happened in my region and what can my people do about it", so
+# this order leads with the movement and the drivers, keeps the accounting
+# bridge out (they do not reconcile finance), and reads the two drivers whose
+# levers they actually control.
+persona_id: regional_manager
+display_name: Regional manager (North)
+aliases:
+  - regional_manager_north
+
+claim_order:
+  - OBSERVED_MOVEMENT
+  - ATTRIBUTED_DRIVER
+  - CORROBORATION
+  - FUNNEL_BRIDGE
+  - CORRELATIONAL
+  - MATERIALITY
+  - OBSERVATIONAL
+  - CLARIFICATION_REQUEST
+  - SOURCE_STATUS
+  - ABSTENTION
+  - REVIEW
+  - EVENT_WINDOW
+  - ACCESS_BOUNDARY
+
+# Availability and price are the levers a regional team can move this week.
+# Marketing spend and checkout latency are owned by other functions; they stay
+# in the ranking but rank below this persona's own levers.
+driver_priority:
+  - availability
+  - promotions
+  - pricing
+  - contextual
+  - performance
+  - marketing
+  - source_integrity
+
+# Deliberately narrower than the other two: a regional manager is not offered
+# spend or engineering cards, and never a source-integrity card.
+allowed_action_levers:
+  - availability
+  - promotions
+  - pricing
+  - contextual
+  - evidence_collection
+
+# Narrower authority than the CFO or the marketing owner: a proposal needs a
+# stronger Attribution Confidence before it is routed for approval, so anything
+# below 0.75 stops at VERIFY_THEN_ACT and escalates.
+approval_threshold: 0.75
+
+max_driver_claims: 2
+
+default_owner: regional_operations_lead
+lever_owners:
+  availability: regional_operations_lead
+  promotions: regional_manager
+  pricing: regional_manager
+  contextual: merchandising_lead
+  evidence_collection: regional_operations_lead
+
+decision_right: Regional operating review (North)
+
+brief_prefix: Regional review (North)
+brief_focus: >-
+  Region-scoped movements: {material}. Only levers this region controls are
+  listed; spend and engineering decisions sit with other functions.
+workspace_headline: Regional manager workspace
+workspace_briefing: Regional manager briefing (North)
+workspace_footer: Regional manager (North)

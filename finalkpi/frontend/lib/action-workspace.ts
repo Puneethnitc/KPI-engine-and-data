@@ -36,6 +36,13 @@ export type ActionContract = {
   stop_conditions?: string[] | null
   limitations?: string[] | null
   evidence_paths?: string[] | null
+  persona?: string | null
+  attribution_confidence?: number | null
+  attribution_band?: string | null
+  attribution_label?: string | null
+  expected_impact_low?: number | null
+  expected_impact_high?: number | null
+  approval_threshold?: number | null
 }
 
 const structuredActionFields = [
