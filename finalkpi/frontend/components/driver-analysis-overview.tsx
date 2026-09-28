@@ -6,6 +6,8 @@ import { attributionPercent, type ConfidenceProfile, type AttributionConfidenceD
 import { driverRows, exclusionReason } from '../lib/driver-analysis-overview'
 import { formatKpiValue } from '../lib/driver-waterfall'
 import DriverWaterfall from './driver-waterfall'
+import { ChartEmpty, SharePie, SignedBarChart } from './simple-charts'
+import { driverChartPlan, sortedContributions } from '../lib/simple-charts'
 
 export type CausalTest = {
   driver_id?: string
@@ -37,7 +39,7 @@ function causalVerdict(value?: string) {
   return value === 'SUPPORTED_CONDITIONAL' ? 'SUPPORTED' : value ?? 'Not assessed'
 }
 
-export default function DriverAnalysisOverview({ analysis, profile, causalTest, expected, actual, isMaterial, unit, displayNames }: {
+export default function DriverAnalysisOverview({ analysis, profile, causalTest, expected, actual, isMaterial, unit, displayNames, seriesChart }: {
   analysis?: DriverAnalysis | null
   profile?: ConfidenceProfile | null
   causalTest?: CausalTest | null
@@ -46,6 +48,7 @@ export default function DriverAnalysisOverview({ analysis, profile, causalTest, 
   isMaterial?: boolean | null
   unit: string
   displayNames?: Record<string, string>
+  seriesChart?: (driverId: string, label: string) => React.ReactNode
 }) {
   const [infoOpen, setInfoOpen] = useState(false)
   if (!analysis) return <section className="card driver-overview"><span className="eyebrow">Driver analysis</span><h2>Analysis not available for this older run</h2><p>No saved driver snapshot can be shown.</p></section>
@@ -73,7 +76,24 @@ export default function DriverAnalysisOverview({ analysis, profile, causalTest, 
     <div className={`driver-main-banner ${isMaterial !== false && mainDriver ? 'has-main' : ''}`}>
       {isMaterial === false ? <strong>This change is within the normal range. Drivers are shown for exploration only</strong> : mainDriver ? <><strong>Main cause: {mainDriver.display_name ?? displayNames?.[mainDriver.driver_id] ?? humanize(mainDriver.driver_id)}</strong><span>{mainConfidence == null ? 'Confidence not available' : `${attributionPercent(mainConfidence)}% ${main?.confidence?.label ?? mainDriver.label ?? humanize(main?.confidence?.band ?? mainDriver.band)}`}{verified ? ` · Verified by causal test${causalPercent == null ? '' : ` (${causalPercent < 0 ? '−' : '+'}${Math.abs(causalPercent).toFixed(0)}%${controls ? `, ${controls} comparison slices` : ''})`}` : ''}{docs.length ? ` · Supported by ${docs.join(', ')}` : ''}</span></> : <><strong>No confident cause</strong><span>{question}</span></>}
     </div>
-    <div className="driver-overview-chart"><div className="driver-overview-subhead"><h3>Expected to Actual</h3><small>Saved statistical contributions; the causal test is shown separately</small></div><DriverWaterfall expected={expected} actual={actual} drivers={(analysis.ranked_drivers ?? []).map(driver => ({ label: driver.display_name ?? displayNames?.[driver.driver_id] ?? humanize(driver.driver_id), value: driver.contribution, offsetting: driver.offsetting }))} residual={analysis.residual} unit={unit} /></div>
+    <div className="driver-overview-chart">
+      {(() => {
+        const ranked = analysis.ranked_drivers ?? []
+        const name = (driver: RankedDriver) => driver.display_name ?? displayNames?.[driver.driver_id] ?? humanize(driver.driver_id)
+        const plan = driverChartPlan(ranked.map(driver => ({ label: name(driver), share: driver.explained_share })), analysis.residual_share)
+        const pie = plan.mode === 'pie'
+        return <>
+          <div className="driver-overview-subhead"><h3>{pie ? 'What explains the change?' : 'Contribution of each driver'}</h3><small>Saved statistical contributions; the causal test is shown separately</small></div>
+          {plan.mode === 'pie' ? <SharePie slices={plan.slices} />
+            : plan.mode === 'bars' ? <>
+              <SignedBarChart title="Contribution of each driver" items={sortedContributions(ranked.map(driver => ({ label: name(driver), value: driver.contribution })))} format={value => formatKpiValue(value, unit, true)} />
+              <small className="simple-chart-note">{plan.reason}</small></>
+            : <ChartEmpty>Driver shares are not available for this run.</ChartEmpty>}
+        </>
+      })()}
+      <details className="driver-detail-toggle"><summary>Detailed view (waterfall)</summary><DriverWaterfall expected={expected} actual={actual} drivers={(analysis.ranked_drivers ?? []).map(driver => ({ label: driver.display_name ?? displayNames?.[driver.driver_id] ?? humanize(driver.driver_id), value: driver.contribution, offsetting: driver.offsetting }))} residual={analysis.residual} unit={unit} /></details>
+    </div>
+    {isMaterial !== false && mainDriver && seriesChart && (mainConfidence ?? 0) >= 0.6 && seriesChart(mainDriver.driver_id, mainDriver.display_name ?? displayNames?.[mainDriver.driver_id] ?? humanize(mainDriver.driver_id))}
     <div className="driver-overview-subhead"><h3>All drivers for this KPI</h3><small>{rows.length} candidates · includes excluded drivers</small></div>
     {rows.length ? <div className="driver-table-scroll"><table className="driver-table"><thead><tr><th>Driver</th><th>Moved?</th><th>Contribution</th><th>Direction</th><th>Causal test</th><th>Evidence</th><th>Confidence</th><th>Role</th></tr></thead><tbody>
       {rows.map(row => {
