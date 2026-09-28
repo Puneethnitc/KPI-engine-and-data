@@ -1134,3 +1134,11 @@ The 538-case `--split all` report is byte-for-byte unchanged. The new graph is a
 | Brier score | 0.0977 | 0.0977 |
 
 Real-data checks: North/Electronics 2023-07-31 → traffic / marketing_spend; South/Apparel 2024-02-13 → conversion / stock_availability; aggregate 2024-05-15 → conversion / no qualifying chain. The aggregate checkout_latency candidate has AC 0.0522 and a negative explained share, below the required 0.35 gate.
+
+## Simple charts (feat/simple-charts, UI + driver-series endpoint only)
+
+| Metric | Before | After |
+|---|---|---|
+| Engine output / ENGINE_VERSION | unchanged | unchanged (no engine change, no bump) |
+| Ground-truth harness | n/a | not affected; run completed |
+| Python tests / backend tests / frontend tests | 320 / 125 / 206 | 320 / 129 / 212 |

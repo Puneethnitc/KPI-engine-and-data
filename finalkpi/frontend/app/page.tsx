@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { AppHeader, DateFilter, identityForPersona, useDemoContext } from '../components/app-shell'
 import ActionWorkspace from '../components/action-workspace'
+import { DriverVsKpiChart } from '../components/simple-charts'
 import FunnelBridgeCard, { type FunnelBridge } from '../components/funnel-bridge'
 import type { DriverAnalysis } from '../lib/driver-analysis'
 import type { ActionContract } from '../lib/action-workspace'
@@ -784,8 +785,8 @@ export default function Page() {
           </div>
         )}
 
-            <DriverAnalysisOverview analysis={result?.driver_analysis} profile={result?.confidence_profile} causalTest={result?.causal_verification} expected={movement?.expected_value} actual={movement?.actual_value} isMaterial={movement?.is_material} unit={kpi.unit} displayNames={overviewDriverNames} />
-            {result?.funnel_bridge && <FunnelBridgeCard bridge={result.funnel_bridge} status={result.funnel_bridge_status} expected={movement?.expected_value} actual={movement?.actual_value} unit={kpi.unit} />}
+            <DriverAnalysisOverview analysis={result?.driver_analysis} profile={result?.confidence_profile} causalTest={result?.causal_verification} expected={movement?.expected_value} actual={movement?.actual_value} isMaterial={movement?.is_material} unit={kpi.unit} displayNames={overviewDriverNames} seriesChart={(driverId, label) => activeScenario?.source_mode === 'demo_fixture' ? null : <DriverVsKpiChart apiBase={API_BASE} kpiId={selected} kpiLabel={selectedKpiLabel} kpiUnit={kpi.unit} driverId={driverId} driverLabel={label} region={region} category={category} targetDate={date} userId={activeScenario ? activeScenario.user_id : identityForPersona(persona)} asOf={result?.as_of} />} />
+            {result?.funnel_bridge && <FunnelBridgeCard bridge={result.funnel_bridge} status={result.funnel_bridge_status} movements={Object.fromEntries(Object.entries(results).map(([id, item]) => [id, item.movement_assessment]))} />}
 
         <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Executive conclusion</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{result?.narrative || 'Narrative is not available for this run.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article>
         </section>

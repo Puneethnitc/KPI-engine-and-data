@@ -15,7 +15,7 @@ from backend.query_router import DynamicQueryRouter
 from backend.retrieval import ContextBuilder
 from backend.schemas import ChatRequest as RagChatRequest
 from kpi_engine.kpi_graph import build_kpi_story
-from backend.service import DEMO_IDENTITY_MODE, authorize_scope, build_persona_brief, diagnose_scope, get_available_filters, get_authorized_candidate_artifact, get_authorized_diagnosis, get_authorized_feedback_run, get_authorized_feedback_record, get_authorized_improvement_proposal, get_authorized_improvement_proposals, get_authorized_proposal_evaluation, get_current_kpi_contract, get_diagnosis, get_evidence, get_feedback, get_feedback_aggregations, get_investigations, get_insights, get_marketing, get_movements, get_registered_kpis, get_run_kpi_contract, get_timeseries, identity_persona
+from backend.service import DEMO_IDENTITY_MODE, authorize_scope, build_persona_brief, diagnose_scope, get_available_filters, get_authorized_candidate_artifact, get_authorized_diagnosis, get_authorized_feedback_run, get_authorized_feedback_record, get_authorized_improvement_proposal, get_authorized_improvement_proposals, get_authorized_proposal_evaluation, get_current_kpi_contract, get_diagnosis, get_driver_series, get_evidence, get_feedback, get_feedback_aggregations, get_investigations, get_insights, get_marketing, get_movements, get_registered_kpis, get_run_kpi_contract, get_timeseries, identity_persona
 from backend.domain_policy import require_domain, retrieval_tags_for_persona
 from backend.response_projection import project_diagnosis, project_evidence, project_saved_run
 from backend.feedback_learning import aggregate_feedback_records, build_improvement_proposal, proposal_change_idempotency_key
@@ -534,6 +534,16 @@ def api_timeseries(kpi_id: str, region: str = "North", category: str = "Electron
     try:
         _persona(user_id)
         return get_timeseries(kpi_id, region, category, user_id=user_id, start_date=start_date, end_date=end_date)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc: raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/kpis/{kpi_id}/driver-series")
+def api_driver_series(kpi_id: str, driver_id: str, region: str = "North", category: str = "Electronics", user_id: Optional[str] = None, end_date: Optional[str] = None, as_of: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        _persona(user_id)
+        return get_driver_series(kpi_id, driver_id, region, category, user_id=user_id, end_date=end_date, as_of=as_of)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc: raise HTTPException(status_code=400, detail=str(exc)) from exc

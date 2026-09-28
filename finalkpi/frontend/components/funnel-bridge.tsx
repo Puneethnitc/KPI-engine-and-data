@@ -1,4 +1,5 @@
-import DriverWaterfall from './driver-waterfall'
+import { SignedBarChart, ChartEmpty } from './simple-charts'
+import { formatPercent, kpiChangeBars } from '../lib/simple-charts'
 
 export type FunnelBridgeComponent = {
   name: string
@@ -23,24 +24,23 @@ const componentLabel: Record<string, string> = {
 export default function FunnelBridgeCard({
   bridge,
   status,
-  unit,
-  expected,
-  actual,
+  movements,
 }: {
   bridge?: FunnelBridge | null
   status?: string | null
-  unit: string
-  expected?: number | null
-  actual?: number | null
+  movements: Record<string, { actual_value?: number | null; expected_value?: number | null } | null | undefined>
 }) {
   if (!bridge && !status) return <article className="card funnel-bridge-card" aria-label="Funnel bridge"><p>Funnel bridge is not available for this older run.</p></article>
   if (!bridge) return null
+  const bars = kpiChangeBars(movements)
   return <article className="card funnel-bridge-card" aria-label="Funnel bridge">
     <div className="card-heading">
       <div><span className="eyebrow">Where the movement happened</span><h3>Funnel bridge</h3></div>
       <span className={`evidence-pill ${bridge.identity_held ? 'good' : 'limited'}`}>{bridge.identity_held ? 'Identity reconciled' : 'Incomplete'}</span>
     </div>
     <p className="method-note">Revenue = traffic x conversion x average order value. This is an exact accounting split of the movement, not a cause.</p>
-    <DriverWaterfall title="Funnel accounting waterfall" expected={expected} actual={actual} drivers={(bridge.components ?? []).map(item => ({ label: componentLabel[item.name] ?? item.name, value: item.effect }))} residual={actual != null && expected != null ? actual - expected - bridge.components.reduce((sum, item) => sum + item.effect, 0) : null} unit={unit} />
+    <h4 className="simple-chart-title">How much each KPI changed (%)</h4>
+    {bars.length ? <SignedBarChart title="How much each KPI changed (%)" items={bars} format={value => formatPercent(value)} /> : <ChartEmpty>Percent changes are not available for this run.</ChartEmpty>}
+    <small className="simple-chart-note">Actual compared with expected for the selected scope and date.</small>
   </article>
 }

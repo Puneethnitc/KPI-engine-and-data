@@ -29,6 +29,8 @@ import pandas as pd
 import numpy as np
 
 from kpi_engine.access import AccessController
+from kpi_engine.attribution import AttributionEngine
+from kpi_engine.contracts.registry import resolve_driver_id
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import daily_values, prepare_metric_request
 from kpi_engine.pipeline import KPIEnginePipeline
@@ -876,6 +878,36 @@ def get_timeseries(kpi_id: str, region: str, category: str, *, user_id: str = "d
     )
     payload["telemetry"] = telemetry.finalize()
     return payload
+
+
+def get_driver_series(kpi_id: str, driver_id: str, region: str, category: str, *, user_id: str = "demo-marketing", end_date: str | None = None, as_of: str | None = None, days: int = 60) -> Dict[str, Any]:
+    """Daily (or weekly) values of one candidate driver from its governed source."""
+    require_domain(identity_persona(user_id), "SALES")
+    registry = _registry_with_catalog(SourceCatalog())
+    if kpi_id not in registry.list_ids():
+        raise ValueError(f"Unsupported KPI: {kpi_id}")
+    authorize_scope(user_id, region, category)
+    contract = registry.get(kpi_id)
+    driver_id = resolve_driver_id(driver_id)
+    spec = next((item for item in contract.candidate_drivers if item.get("id") == driver_id), None)
+    if spec is None:
+        raise ValueError(f"Unsupported driver for {kpi_id}: {driver_id}")
+    catalog = SourceCatalog()
+    frame = QueryService(catalog).load_source(spec["source"], scope={"region": region, "category": category}, as_of=as_of)
+    grain = spec.get("grain", "daily")
+    date_column = "week_start" if grain == "weekly" else "date"
+    if date_column not in frame or frame.empty:
+        return {"kpi_id": kpi_id, "driver_id": driver_id, "region": region, "category": category, "grain": grain, "unit": spec.get("unit"), "display_name": spec.get("display_name", driver_id), "points": []}
+    frame = frame.copy()
+    frame[date_column] = pd.to_datetime(frame[date_column])
+    calendar = pd.DatetimeIndex(sorted(frame[date_column].unique()))
+    series, _, status = AttributionEngine._driver_series(frame, driver_id, spec, None, calendar)
+    points = []
+    if series is not None:
+        end = pd.Timestamp(end_date) if end_date else series.index.max()
+        series = series[(series.index <= end) & (series.index > end - pd.Timedelta(days=days))]
+        points = [{"observation_date": index.date().isoformat(), "value": None if pd.isna(value) else float(value)} for index, value in series.items()]
+    return {"kpi_id": kpi_id, "driver_id": driver_id, "region": region, "category": category, "grain": grain, "unit": spec.get("unit"), "display_name": spec.get("display_name", driver_id), "status": status, "points": points, "source": spec["source"], "end_date": end_date, "as_of": as_of}
 
 
 @lru_cache(maxsize=32)
