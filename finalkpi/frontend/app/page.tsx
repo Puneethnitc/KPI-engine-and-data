@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { AppHeader, DateFilter, identityForPersona, useDemoContext } from '../components/app-shell'
 import ActionWorkspace from '../components/action-workspace'
+import ExecutiveSummary, { type ExecutiveSummaryData } from '../components/executive-summary'
 import { DriverVsKpiChart } from '../components/simple-charts'
 import FunnelBridgeCard, { type FunnelBridge } from '../components/funnel-bridge'
 import type { DriverAnalysis } from '../lib/driver-analysis'
@@ -243,6 +244,7 @@ export default function Page() {
   const [evidenceData, setEvidenceData] = useState<EvidenceSummary | null>(null)
   const [marketingBrief, setMarketingBrief] = useState<MarketingBrief | null>(null)
   const [kpiStory, setKpiStory] = useState<KpiStory | null>(null)
+  const [executiveSummary, setExecutiveSummary] = useState<ExecutiveSummaryData | null>(null)
   const [scenarioHistory, setScenarioHistory] = useState<{ baseline_count?: number, required_observation_count?: number } | null>(null)
   const [movements, setMovements] = useState<ScannedMovement[]>([])
   const [movementsLoading, setMovementsLoading] = useState(false)
@@ -329,7 +331,7 @@ export default function Page() {
     setLoading(true)
     setResults({})
     setMarketingBrief(null)
-    setKpiStory(null)
+    setKpiStory(null); setExecutiveSummary(null)
     pendingMovement.current = target.kpiId
     diagnosisRequest.current += 1
     setMovementRunToken(value => value + 1)
@@ -342,7 +344,7 @@ export default function Page() {
       setLoading(false)
       setResults({})
       setMarketingBrief(null)
-      setKpiStory(null)
+      setKpiStory(null); setExecutiveSummary(null)
       return
     }
     const requestId = ++diagnosisRequest.current
@@ -351,7 +353,7 @@ export default function Page() {
     setAccessDeniedMessage('')
     setResults({})
     setMarketingBrief(null)
-    setKpiStory(null)
+    setKpiStory(null); setExecutiveSummary(null)
     setScenarioHistory(null)
     setScenarioMeta(null)
 
@@ -390,7 +392,7 @@ export default function Page() {
            const payload = execution.payload!
            setResults(payload.results as Record<string, Result> ?? {})
            setMarketingBrief(payload.marketing_brief as MarketingBrief ?? null)
-           setKpiStory(payload.kpi_story as KpiStory ?? null)
+           setKpiStory(payload.kpi_story as KpiStory ?? null); setExecutiveSummary((payload.executive_summary as ExecutiveSummaryData) ?? null)
            setScenarioMeta(buildScenarioMetadata(payload))
            setMessages([])
            setConversationId(undefined)
@@ -417,7 +419,7 @@ export default function Page() {
 
       setResults(payload.results as Record<string, Result> ?? {})
       setMarketingBrief(payload.marketing_brief as MarketingBrief ?? null)
-      setKpiStory(payload.kpi_story as KpiStory ?? null)
+      setKpiStory(payload.kpi_story as KpiStory ?? null); setExecutiveSummary((payload.executive_summary as ExecutiveSummaryData) ?? null)
       setScenarioHistory(payload.history as any ?? null)
       if (scenarioId) {
         setScenarioMeta(buildScenarioMetadata(payload))
@@ -467,7 +469,7 @@ export default function Page() {
       .then(payload => {
         const run = payload.result ?? payload
         setResults(current => ({ ...current, [run.kpi_id]: run }))
-        setKpiStory(null)
+        setKpiStory(null); setExecutiveSummary(null)
         setSelected(run.kpi_id as KpiId)
         if (new URLSearchParams(window.location.search).get('assistant') === 'open') setAssistantMode('open')
       })
@@ -529,19 +531,6 @@ export default function Page() {
   }
 
   const materialCount = Object.values(results).filter(item => item.movement_assessment?.is_material).length
-  const briefStories = marketingBrief ? (marketingBrief.stories ?? marketingBrief.ranked_insights.map(insight => ({
-    id: `KPI_${insight.kpi_id}`,
-    title: `${insight.label} ${insight.direction === 'up' ? 'improved' : insight.direction === 'down' ? 'declined' : 'moved'}`,
-    what_changed: insight.narrative || `${insight.label} moved in the selected scope.`,
-    affected_kpis: [insight.kpi_id],
-    business_impact: insight.material ? 'Material business movement.' : 'Observed movement did not meet both materiality checks.',
-    evidence_strength: insight.material ? 'Material movement' : 'Observed movement',
-    confidence_status: insight.confidence_status,
-    recommended_action: null,
-    causal_boundary: 'Observed movement does not establish causal attribution.',
-    technical_details: [insight.narrative, insight.confidence_status, insight.kpi_id],
-  }))) : []
-  const hasPositiveOpportunity = marketingBrief?.positive_opportunity ?? false
   const regionOptions = mergeScopeOption(movementScopeOptions(options.regions, 'region', persona), region)
   const categoryOptions = mergeScopeOption(movementScopeOptions(options.categories, 'category', persona), category)
   const scenarioOptions = [{ value: '', label: 'Standard view' }, ...scenarios.map(s => ({ value: s.scenario_id, label: s.title }))]
@@ -658,42 +647,10 @@ export default function Page() {
           </section>
         )}
 
+        {!loading && result?.verdict !== 'ACCESS_DENIED' && <ExecutiveSummary summary={executiveSummary} />}
+
         {marketingBrief && result?.verdict !== 'ACCESS_DENIED' && <section className="marketing-brief" aria-labelledby="briefing-title">
-          <div className="briefing-lead"><div><span className="eyebrow">{persona === 'CFO' ? 'Financial reviewer briefing' : persona === 'regional_manager_north' ? 'Regional manager (North) briefing' : 'Marketing manager briefing'}</span><h2 id="briefing-title">What you need to know today</h2><p>{marketingBrief.summary}</p><small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
-          <div className="funnel-strip" aria-label="Connected marketing funnel">{marketingBrief.funnel.map((stage, index) => {
-            const unit = registeredKpis.find(item => item.kpi_id === stage.kpi_id)?.unit ?? 'count'
-            return <article className={`funnel-stage ${stage.direction}`} key={stage.kpi_id}><small>{stage.stage}</small><strong>{formatValue(stage.actual, unit)}</strong><span>{formatDelta(stage.delta, unit)} · {stage.material ? 'material' : stage.status === 'OK' ? 'not material' : titleCase(stage.status)}</span><b>{stage.label}</b>{index < marketingBrief.funnel.length - 1 && <ArrowRight className="funnel-arrow" size={15} />}</article>
-          })}</div>
-          <div className="brief-insights">
-            {briefStories.slice(0, 5).map((story, index) => {
-              const storyKey = [story.id, ...(story.affected_kpis ?? []), index].join('-')
-              return (
-                <article className="brief-insight story-card" key={storyKey}>
-                  <span className="brief-rank">{String(index + 1).padStart(2, '0')}</span>
-                  <div>
-                    <strong>{story.title}</strong>
-                    <p>{story.what_changed}</p>
-                    <small>{story.affected_kpis.map(kpiLabel).join(' · ')} · {story.evidence_strength} · {statusLabelForBrief(story.confidence_status)}</small>
-                    <p className="story-impact">{story.business_impact}</p>
-                    {story.recommended_action && <p>Next: {story.recommended_action.recommendation} · Owner {statusLabel(story.recommended_action.owner)}</p>}
-                    <small>{story.causal_boundary}</small>
-                    {story.technical_details?.filter(Boolean).length ? (
-                      <details className="technical-details">
-                        <summary>View evidence details</summary>
-                        {story.technical_details.filter(Boolean).map((detail, detailIndex) => (
-                          <p key={`${storyKey}-detail-${detailIndex}`}>{detail}</p>
-                        ))}
-                      </details>
-                    ) : null}
-                  </div>
-                  <button onClick={() => { setSelected((story.affected_kpis[0] ?? selected) as KpiId); setDraft(`Explain the ${story.title.toLowerCase()} story and supporting evidence.`); setAssistantMode('open') }} aria-label={`Investigate ${story.title}`}>
-                    <ArrowRight size={17} />
-                  </button>
-                </article>
-              )
-            })}
-            {!hasPositiveOpportunity && <p className="brief-no-positive">No verified positive opportunity was identified in this scope.</p>}
-          </div>
+          <div className="briefing-lead"><div><span className="eyebrow">{persona === 'CFO' ? 'Financial reviewer briefing' : persona === 'regional_manager_north' ? 'Regional manager (North) briefing' : 'Marketing manager briefing'}</span><h2 id="briefing-title">What you need to know today</h2>{executiveSummary?.status === 'LLM' ? null : <p>{marketingBrief.summary}</p>}<small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
           {marketingBrief.uncertainty.length > 0 && <details className="brief-limits"><summary>Evidence limitations ({marketingBrief.uncertainty.length})</summary><p>{marketingBrief.uncertainty.map(statusLabelForBrief).join(' · ')}</p></details>}
           <details className="brief-method"><summary>Method and evidence details</summary><p>{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</p><small>Overall evidence: {result?.confidence_profile?.overall.status ?? 'PROFILE_NOT_SAVED'} · Causal verification: {result?.causal_verdict ?? 'UNTESTABLE'} · Engine verdict: {result?.verdict}</small></details>
         </section>}
@@ -792,7 +749,7 @@ export default function Page() {
             <DriverAnalysisOverview analysis={result?.driver_analysis} profile={result?.confidence_profile} causalTest={result?.causal_verification} expected={movement?.expected_value} actual={movement?.actual_value} isMaterial={movement?.is_material} unit={kpi.unit} displayNames={overviewDriverNames} seriesChart={(driverId, label) => activeScenario?.source_mode === 'demo_fixture' ? null : <DriverVsKpiChart apiBase={API_BASE} kpiId={selected} kpiLabel={selectedKpiLabel} kpiUnit={kpi.unit} driverId={driverId} driverLabel={label} region={region} category={category} targetDate={date} userId={activeScenario ? activeScenario.user_id : identityForPersona(persona)} asOf={result?.as_of} />} />
             {result?.funnel_bridge && <FunnelBridgeCard bridge={result.funnel_bridge} status={result.funnel_bridge_status} movements={Object.fromEntries(Object.entries(results).map(([id, item]) => [id, item.movement_assessment]))} />}
 
-        <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Executive conclusion</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{result?.narrative || 'Narrative is not available for this run.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article>
+        <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Technical narrative</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{result?.narrative || 'Narrative is not available for this run.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article>
         </section>
 
         <ActionWorkspace actions={result?.decision_cards} persona={persona} verdict={result?.verdict} onAsk={recommendation => void askQuestion(`What evidence supports this recommendation: ${recommendation}`)} />

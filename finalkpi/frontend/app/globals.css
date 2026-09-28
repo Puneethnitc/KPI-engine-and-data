@@ -923,3 +923,8 @@ button, a, select, textarea { outline-offset: 3px; }
 .driver-detail-toggle { margin-top: 14px; }
 .driver-detail-toggle > summary { cursor: pointer; font-size: 14px; font-weight: 700; padding: 6px 0; }
 .simple-chart-title { margin: 12px 0 8px; font-size: 16px; }
+
+.executive-summary { margin: 20px 0; }
+.executive-summary-text { font-size: 17px; line-height: 1.6; margin: 12px 0; }
+.executive-summary-first { font-size: 16px; margin: 8px 0; }
+.fact-chip { display: inline-block; margin-right: 4px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; text-decoration: none; cursor: help; color: var(--muted); background: var(--panel-2); }
