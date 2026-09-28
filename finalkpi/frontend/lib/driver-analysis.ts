@@ -40,6 +40,29 @@ export type RankedDriver = {
   limitations: string[]
   claim_boundary: string
   evidence_references: Record<string, unknown>[]
+  corroboration?: Corroboration | null
+}
+
+export type CorroborationDocument = {
+  doc_id: string
+  date: string
+  available_at: string
+  source_type: string
+  region: string
+  category: string
+  stance: 'supports' | 'refutes' | 'neutral'
+  matched_by: 'driver_tag' | 'keyword'
+  matched_terms: string[]
+  snippet: string
+}
+
+export type Corroboration = {
+  status: 'CORROBORATED' | 'CONTRADICTED' | 'NONE' | 'RETRIEVAL_FAILED' | string
+  documents: CorroborationDocument[]
+  document_count: number
+  match_basis: 'driver_tag' | 'keyword' | 'none' | string
+  supporting_documents: string[]
+  refuting_documents: string[]
 }
 
 export type ExcludedDriver = {
@@ -126,6 +149,82 @@ export function driverTemporalLabel(order: string, supported: boolean | null): s
   if (order === 'COINCIDENT') return 'Coincident changes; temporal precedence is not supported'
   if (order === 'AFTER') return 'Driver changes followed KPI changes'
   return 'Temporal order not assessed'
+}
+
+const corroborationText: Record<string, string> = {
+  CORROBORATED: 'Documents support this driver',
+  CONTRADICTED: 'Documents contradict this driver',
+  NONE: 'No documents found in scope',
+  RETRIEVAL_FAILED: 'Evidence corpus unavailable',
+}
+
+const stanceText: Record<string, string> = {
+  supports: 'Supports',
+  refutes: 'Refutes',
+  neutral: 'Neutral',
+}
+
+const sourceTypeText: Record<string, string> = {
+  support_ticket: 'Support ticket',
+  internal_note: 'Internal note',
+  promo_calendar: 'Promotion calendar',
+  news: 'News',
+}
+
+export function corroborationStatusLabel(status: string): string {
+  return corroborationText[status] ?? status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, letter => letter.toUpperCase())
+}
+
+export function corroborationStanceLabel(stance: string): string {
+  return stanceText[stance] ?? stance
+}
+
+export function corroborationSourceTypeLabel(sourceType: string): string {
+  return sourceTypeText[sourceType] ?? sourceType.replaceAll('_', ' ').replace(/(^|\s)\S/g, letter => letter.toUpperCase())
+}
+
+/**
+ * Stage 6-lite: build the per-driver corroboration view model.
+ *
+ * The status is never inferred here -- it is read from the engine, which is the
+ * only place that has seen the as-of, scope and entitlement filters. A driver
+ * with no corroboration block at all (an older saved run) renders as
+ * "not assessed" rather than "no evidence found", because those are different
+ * claims and the run predates the feature.
+ */
+export function corroborationViewModel(corroboration: Corroboration | null | undefined) {
+  if (!corroboration) {
+    return {
+      assessed: false,
+      statusLabel: 'Not assessed in this run',
+      boundary: 'This run predates evidence corroboration, so no document was checked against this driver.',
+      documents: [],
+      supporting: 0,
+      refuting: 0,
+      tone: 'none' as const,
+    }
+  }
+  const documents = corroboration.documents ?? []
+  const supporting = documents.filter(doc => doc.stance === 'supports').length
+  const refuting = documents.filter(doc => doc.stance === 'refutes').length
+  return {
+    assessed: true,
+    statusLabel: corroborationStatusLabel(corroboration.status),
+    boundary:
+      corroboration.status === 'RETRIEVAL_FAILED'
+        ? 'The evidence corpus could not be loaded. This is a retrieval failure, not an absence of evidence.'
+        : corroboration.status === 'CORROBORATED' || corroboration.status === 'CONTRADICTED'
+          ? 'These documents support or contradict the driver. They do not establish that it caused the change.'
+          : 'No in-scope, entitled, published document mentioned this driver inside the evidence window.',
+    documents,
+    supporting,
+    refuting,
+    tone: corroboration.status === 'CORROBORATED'
+      ? 'good' as const
+      : corroboration.status === 'CONTRADICTED'
+        ? 'warning' as const
+        : 'limited' as const,
+  }
 }
 
 export function driverAnalysisViewModel(
