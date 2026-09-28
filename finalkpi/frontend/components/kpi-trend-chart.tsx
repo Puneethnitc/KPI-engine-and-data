@@ -390,7 +390,7 @@ export function KpiTrendChart({
         }}
       >
         <RefreshCw size={16} className="spin" />
-        <span>Loading governed KPI historical trend series for {userId}…</span>
+        <span>Loading governed KPI historical trend series for {region === 'ALL' ? 'All regions' : region} · {category === 'ALL' ? 'All categories' : category}…</span>
       </div>
     )
   }
@@ -447,7 +447,7 @@ export function KpiTrendChart({
         }}
       >
         <div>
-          <span className="eyebrow">Governed Trend Series ({userId})</span>
+          <span className="eyebrow">Governed trend series · {region === 'ALL' ? 'All regions' : region} · {category === 'ALL' ? 'All categories' : category}</span>
           <h3 style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 650, color: 'var(--text)' }}>
             {kpiLabel} Historical Performance
           </h3>

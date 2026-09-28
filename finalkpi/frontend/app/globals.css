@@ -285,6 +285,55 @@ td strong, td:nth-child(2) { color: var(--text); }
 .source-status.contradicted { color: #822320; background: #fbd8d6; }
 .source-reconciliation { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 @media (max-width: 600px) { .source-summary-grid { grid-template-columns: 1fr; } }
+.driver-overview { position: relative; margin-top: 25px; padding: 22px; }
+.driver-overview-heading { align-items: center; }
+.driver-overview-heading h2 { margin: 7px 0 0; font-size: 20px; }
+.driver-overview-actions { display: flex; align-items: center; gap: 9px; }
+.driver-info-popover { position: absolute; z-index: 20; top: 65px; right: 20px; width: min(440px, calc(100% - 40px)); padding: 14px 17px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); box-shadow: var(--shadow); font-size: 12px; line-height: 1.5; }
+.driver-info-popover p { margin: 0 0 9px; }
+.driver-info-popover p:last-child { margin-bottom: 0; }
+.driver-main-banner { display: grid; gap: 5px; margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+.driver-main-banner.has-main { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); background: color-mix(in srgb, var(--green) 7%, var(--panel)); }
+.driver-main-banner strong { font-size: 17px; }
+.driver-main-banner span { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.driver-overview-chart { margin: 22px 0; }
+.driver-overview-subhead { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 7px; margin-bottom: 11px; }
+.driver-overview-subhead h3 { margin: 0; font-size: 16px; }
+.driver-overview-subhead small { color: var(--muted); font-size: 11px; }
+.driver-waterfall { padding: 8px 4px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+.driver-waterfall-scroll { width: 100%; overflow-x: auto; }
+.driver-waterfall svg { display: block; max-width: none; }
+.waterfall-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.waterfall-connector { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.waterfall-axis-label { fill: var(--muted); font-size: 10px; }
+.waterfall-value { fill: var(--text); font-size: 13px; font-weight: 750; }
+.waterfall-bar-label { fill: var(--text); font-size: 11px; font-weight: 600; }
+.waterfall-bar.total { fill: var(--blue); }
+.waterfall-bar.up { fill: var(--green); }
+.waterfall-bar.down { fill: var(--red); }
+.waterfall-bar.offsetting { fill: var(--amber); }
+.waterfall-bar.residual { fill: var(--muted); }
+.driver-waterfall-note, .driver-waterfall-empty { margin: 9px; color: var(--muted); font-size: 12px; }
+.driver-table-scroll { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 9px; }
+.driver-table { width: 100%; min-width: 1050px; border-collapse: collapse; font-size: 11px; line-height: 1.4; }
+.driver-table th, .driver-table td { padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.driver-table th { color: var(--muted); background: var(--panel-2); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.driver-table tr:last-child td { border-bottom: 0; }
+.driver-table tbody tr:hover { background: var(--panel-2); }
+.driver-table td strong { display: block; font-weight: 650; }
+.driver-table td small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+.driver-table td details { margin-top: 7px; }
+.driver-table td summary { color: var(--blue); cursor: pointer; white-space: nowrap; }
+.driver-table td ul { margin: 6px 0 0; padding-left: 15px; }
+.driver-table td li { margin: 3px 0; }
+.driver-confidence-track { height: 7px; min-width: 90px; margin-top: 5px; overflow: hidden; border-radius: 8px; background: var(--panel-3); }
+.driver-confidence-track i { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
+.driver-role { display: inline-block; padding: 4px 7px; border-radius: 5px; background: var(--panel-3); white-space: nowrap; }
+.driver-role.main-cause { color: var(--green); background: color-mix(in srgb, var(--green) 14%, var(--panel)); }
+.driver-role.offsetting { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, var(--panel)); }
+.funnel-bridge-card { margin-top: 16px; padding: 21px; }
+.funnel-bridge-card .driver-waterfall svg { width: min(100%, 740px); }
+@media (max-width: 420px) { .driver-overview { padding: 15px; } .driver-overview-heading { align-items: flex-start; } .driver-overview-actions { flex-wrap: wrap; justify-content: flex-end; } .driver-main-banner strong { font-size: 15px; } }
 
 .section-heading { justify-content: space-between; gap: 18px; margin: 32px 0 13px; }
 .section-heading h2 { margin: 0 0 5px; font-size: 19px; letter-spacing: -.35px; }

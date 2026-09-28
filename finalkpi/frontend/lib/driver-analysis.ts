@@ -41,6 +41,9 @@ export type RankedDriver = {
   claim_boundary: string
   evidence_references: Record<string, unknown>[]
   corroboration?: Corroboration | null
+  attribution_confidence?: number | null
+  band?: string | null
+  label?: string | null
 }
 
 export type CorroborationDocument = {

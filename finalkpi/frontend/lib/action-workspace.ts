@@ -84,6 +84,12 @@ export function actionImpactLabel(action?: ActionContract | null): string {
   return `${action.expected_impact}${action.expected_impact_unit ? ` ${action.expected_impact_unit}` : ''}`
 }
 
+export function actionImpactRangeLabel(action?: ActionContract | null): string | null {
+  if (action?.expected_impact_low == null || action.expected_impact_high == null) return null
+  const unit = action.expected_impact_unit ? ` ${action.expected_impact_unit}` : ''
+  return `${action.expected_impact_low.toLocaleString('en-IN')} to ${action.expected_impact_high.toLocaleString('en-IN')}${unit}`
+}
+
 export function safeEvidencePath(path?: string | null): string {
   if (!path || path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path)) return 'Protected evidence reference'
   return path

@@ -5,7 +5,7 @@
 # driver on the history window (time-series split out-of-sample fit, never
 # the target day). OLS with HAC standard errors is used unless there are more
 # than 4 active drivers or VIF > 5, in which case a small-penalty ridge fit
-# replaces it (point estimates only; no p-values/interval in that case).
+# replaces it (block-bootstrap intervals; no p-values in that case).
 # Benjamini-Hochberg corrects the per-driver p-values across drivers x lags
 # tried. A driver's contribution is its destandardised beta times its own
 # residual movement at the chosen lag, rescaled from log-residual space back
@@ -13,7 +13,7 @@
 # approximation) when the KPI was deseasonalised in log space.
 # Next: Huber-robust regression as an alternative to HAC-OLS; monthly-driver
 # contextual handling once a monthly candidate driver is actually declared;
-# a real bootstrap for ridge contribution intervals instead of omitting them.
+# further sensitivity checks for ridge intervals.
 # Check: future rows appended after the fit/exclusion cutoff must not change
 # any output; a driver that did not move must never rank; collinear near-
 # duplicate drivers must not double count; the linear model's Shapley
@@ -255,9 +255,23 @@ class AttributionEngine:
             penalty[0, 0] = 0.0
             beta = np.linalg.solve(X_design.T @ X_design + penalty, X_design.T @ y.to_numpy())
             coefficients = {name: float(beta[i + 1]) for i, name in enumerate(columns)}
+            # Weekly circular blocks preserve local time dependence while
+            # resampling. The seed makes a saved diagnosis reproducible.
+            rng = np.random.default_rng(0)
+            block = min(7, n)
+            draws = np.empty((128, k), dtype=float)
+            outcome = y.to_numpy()
+            for draw in range(len(draws)):
+                starts = rng.integers(0, n, size=(n + block - 1) // block)
+                indices = np.concatenate([(start + np.arange(block)) % n for start in starts])[:n]
+                sampled = X_design[indices]
+                fitted = np.linalg.solve(sampled.T @ sampled + penalty, sampled.T @ outcome[indices])
+                draws[draw] = fitted[1:]
+            bounds = np.percentile(draws, [2.5, 97.5], axis=0)
+            intervals = {name: (float(bounds[0, i]), float(bounds[1, i])) for i, name in enumerate(columns)}
             return {
                 "method": "RIDGE", "collinearity_warning": collinearity_warning, "vif": vifs,
-                "beta_std": coefficients, "beta_ci_std": {name: (None, None) for name in columns},
+                "beta_std": coefficients, "beta_ci_std": intervals,
                 "p_value": {name: None for name in columns}, "stds": {name: float(value) for name, value in stds.to_dict().items()},
             }
         X_design = sm.add_constant(standardized.to_numpy())
@@ -547,7 +561,7 @@ class AttributionEngine:
                         "was chosen by in-sample fit rather than a held-out out-of-sample test."
                     )
                 if fitted["method"] == "RIDGE":
-                    candidate_limitations.append("Ridge-penalised fit: no p-value or contribution interval is reported for this driver.")
+                    candidate_limitations.append("Ridge-penalised fit: the contribution interval uses a deterministic seven-day block bootstrap; no p-value is reported.")
                 if stability_info.get("status") == "SENSITIVE":
                     candidate_limitations.append("Beta estimate changes materially across the two disjoint history halves.")
                 if dir_consistent is False:

@@ -2,6 +2,7 @@ import {
   actionBoundary,
   actionCountLabel,
   actionImpactLabel,
+  actionImpactRangeLabel,
   actionPersonaFrame,
   actionStatusLabel,
   isLegacyAction,
@@ -67,6 +68,7 @@ function ActionItem({ action, index, onAsk }: { action: ActionContract; index: n
       <OptionalFact label="Evidence" value={action.evidence_status ? statusLabel(action.evidence_status) : null} />
       <OptionalFact label="Confidence" value={action.confidence_status ? statusLabel(action.confidence_status) : null} />
       <Fact label="Expected impact" value={actionImpactLabel(action)} />
+      <OptionalFact label="Projected range" value={actionImpactRangeLabel(action)} />
       <OptionalFact label="Monitoring" value={action.monitoring_plan} />
     </div>
     {action.recommendation && <div className="action-recommendation"><strong>Recommendation</strong><p>{action.recommendation}</p></div>}

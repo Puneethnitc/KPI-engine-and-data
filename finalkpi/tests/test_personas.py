@@ -77,6 +77,16 @@ class PersonaTests(unittest.TestCase):
                 passed, _ = engine.validate(payload, tuple(claims))
                 self.assertFalse(passed)
 
+    def test_verified_cause_renders_grounded_narrative(self):
+        payload = self._payload("cfo")
+        payload["causal_verdict"] = "SUPPORTED_CONDITIONAL"
+        payload["causal_verification"] = {
+            "verdict": "SUPPORTED_CONDITIONAL", "driver_id": "checkout_latency",
+        }
+        rendered = NarrativeEngine().render(payload)
+        self.assertTrue(rendered["grounding_passed"], rendered["rejected_claims"])
+        self.assertIn("likely caused", rendered["text"])
+
     def test_impact_projection_and_validation_label(self):
         result = {"contract_snapshot": {"materiality": {"business_thresholds": {"unit": "orders/day"}}}}
         driver = {"contribution": -3.0, "contribution_interval": [-4.0, -2.0]}
@@ -108,6 +118,14 @@ class PersonaTests(unittest.TestCase):
         self.assertEqual(card(0.42, "INCONCLUSIVE")["kind"], "NEXT_CHECK")
         self.assertEqual(card(0.72, "INCONCLUSIVE")["kind"], "VERIFY_THEN_ACT")
         self.assertEqual(card(0.72, "SUPPORTED_CONDITIONAL")["kind"], "ACTION_PROPOSAL")
+
+    def test_action_proposal_carries_projected_impact_range(self):
+        payload = self._payload("cfo")
+        payload["confidence_profile"] = {"overall": {"status": "MODERATE"}, "source": {"status": "HIGH"}}
+        payload["causal_verification"] = {"verdict": "SUPPORTED_CONDITIONAL", "driver_id": "checkout_latency"}
+        card = ActionRecommendationEngine.recommend(payload)[0]
+        self.assertEqual(card["kind"], "ACTION_PROPOSAL")
+        self.assertEqual((card["expected_impact_low"], card["expected_impact_high"]), (14.0, 28.0))
 
 
 if __name__ == "__main__":

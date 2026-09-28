@@ -558,7 +558,10 @@ class NarrativeEngine:
             if not path.endswith("driver_id"):
                 continue
             try:
-                driver = NarrativeEngine._resolve(payload, path)
+                # The cited path ends in the scalar id. Check its parent
+                # record, which carries Attribution Confidence and the
+                # driver-specific causal gate.
+                driver = NarrativeEngine._resolve(payload, path.rsplit(".", 1)[0])
             except (KeyError, IndexError, TypeError, ValueError):
                 return False
             if isinstance(driver, dict) and _causal_wording_allowed(driver, payload):

@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react'
 import {
-  Activity, ArrowDownRight, ArrowRight, BarChart3, Bot, CheckCircle2, ChevronDown, CircleHelp,
+  Activity, ArrowDownRight, ArrowRight, BarChart3, Bot, CheckCircle2, ChevronDown,
   Database, GripVertical, LayoutDashboard, Maximize2, Minimize2, RefreshCw, Send,
   ShieldAlert, Sparkles, TrendingDown, X,
 } from 'lucide-react'
@@ -17,6 +17,7 @@ import { contractViewerHref } from '../lib/semantic-contract'
 import { CustomSelect } from '../components/ui/custom-select'
 import { movementScopeOptions, movementSelection } from '../lib/movement-navigation'
 import { KpiTrendChart } from '../components/kpi-trend-chart'
+import DriverAnalysisOverview, { type CausalTest } from '../components/driver-analysis-overview'
 import { deviationView } from '../lib/deviation-view'
 import { sourceStatus, reconciliationStatus, reconciliationMode } from '../lib/data-foundation'
 import { buildDiagnosisRequest, parseScenarioExecution, mergeScopeOption, isTrendChartAllowed, isAssistantAllowed, validateGovernedAccessDenied, buildScenarioMetadata } from '../lib/demo-scenarios'
@@ -94,7 +95,7 @@ type Result = {
   driver_analysis?: DriverAnalysis | null
   driver_exclusions?: { driver_id: string; reason: string }[]
   causal_verdict?: string | null
-  causal_verification?: { reason?: string } | null
+  causal_verification?: CausalTest | null
   confidence?: { status: string; claim_type: string; reasons?: string[]; calibrated_probability?: number | null } | null
   confidence_profile?: ConfidenceProfile | null
   processing_transparency?: ProcessingTransparency | null
@@ -272,8 +273,11 @@ export default function Page() {
   const kpi = registeredKpis.find(item => item.kpi_id === selected) ?? registeredKpis[0] ?? { kpi_id: selected, unit: 'count', version: 1, definition: '', dimensions: [] }
   const selectedKpiLabel = kpiLabel(kpi.kpi_id)
   const movement = result?.movement_assessment
+  const overviewDriverNames = Object.fromEntries([
+    ...(result?.driver_analysis?.ranked_drivers ?? []),
+    ...(result?.driver_analysis?.excluded_drivers ?? []),
+  ].map(candidate => [candidate.driver_id, driverLabel(candidate.driver_id)]))
   const deviation = deviationView(movement?.actual_value, movement?.expected_value, movement?.baseline_scale, movement?.robust_score, result?.contract_snapshot?.materiality?.statistical_thresholds?.z_threshold)
-  const decomposition = result?.decomposition
   const isAssistantOpen = assistantMode === 'opening' || assistantMode === 'open'
 
   useEffect(() => { conversationEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, asking])
@@ -511,19 +515,6 @@ export default function Page() {
     window.addEventListener('pointerup', stop)
   }
 
-  const contributionRows = useMemo(() => {
-    if (!decomposition?.is_identity_held) return []
-    const rows = [
-      { label: selected === 'orders' ? 'Traffic effect' : 'Volume effect', value: decomposition.volume_effect },
-      { label: selected === 'orders' ? 'Conversion effect' : 'Rate / price effect', value: decomposition.price_effect },
-      ...(decomposition.mix_effect ? [{ label: 'Mix effect', value: decomposition.mix_effect }] : []),
-    ]
-    if (decomposition.residual && Math.abs(decomposition.residual) > 1e-4) {
-      rows.push({ label: 'Residual / Unexplained effect', value: decomposition.residual })
-    }
-    return rows
-  }, [decomposition, selected])
-  const contributionTotal = contributionRows.reduce((total, item) => total + Math.abs(item.value), 0) || 1
   const materialCount = Object.values(results).filter(item => item.movement_assessment?.is_material).length
   const briefStories = marketingBrief ? (marketingBrief.stories ?? marketingBrief.ranked_insights.map(insight => ({
     id: `KPI_${insight.kpi_id}`,
@@ -761,6 +752,36 @@ export default function Page() {
         </section>
         )}
 
+        {result && result.verdict !== 'ACCESS_DENIED' && (
+          <>
+        {result?.verdict === 'INSUFFICIENT_HISTORY' && (
+          <div className="alert info">
+            <Activity size={18} />
+            <div>
+              <strong>Sparse history / new launch</strong>
+              <p>Normal driver ranking and attribution were skipped. Baseline observation count: {scenarioHistory?.baseline_count ?? 'unknown'} / Required: {scenarioHistory?.required_observation_count ?? 'unknown'}</p>
+            </div>
+          </div>
+        )}
+
+        {result?.verdict === 'CONTRADICTED' && (
+          <div className="alert warning">
+            <ShieldAlert size={18} />
+            <div>
+              <strong>Contradictory sources</strong>
+              <p>Contradictory reconciliation status: {result.reconciliation_verdict?.status}. Attribution and downstream action were blocked.</p>
+            </div>
+          </div>
+        )}
+
+            <DriverAnalysisOverview analysis={result?.driver_analysis} profile={result?.confidence_profile} causalTest={result?.causal_verification} expected={movement?.expected_value} actual={movement?.actual_value} unit={kpi.unit} displayNames={overviewDriverNames} />
+            {result?.funnel_bridge && <FunnelBridgeCard bridge={result.funnel_bridge} status={result.funnel_bridge_status} expected={movement?.expected_value} actual={movement?.actual_value} unit={kpi.unit} />}
+
+        <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Executive conclusion</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{result?.narrative || 'Narrative is not available for this run.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article>
+        </section>
+
+        <ActionWorkspace actions={result?.decision_cards} persona={persona} verdict={result?.verdict} onAsk={recommendation => void askQuestion(`What evidence supports this recommendation: ${recommendation}`)} />
+
         {result?.verdict !== 'ACCESS_DENIED' && evidenceData?.source_readiness && (
           <section className="card source-summary-card">
             <div className="card-heading">
@@ -803,42 +824,6 @@ export default function Page() {
         )}
 
         {result && <ProcessingTransparencyView transparency={result.processing_transparency} compact />}
-
-        {result?.verdict === 'INSUFFICIENT_HISTORY' && (
-          <div className="alert info">
-            <Activity size={18} />
-            <div>
-              <strong>Sparse history / new launch</strong>
-              <p>Normal driver ranking and attribution were skipped. Baseline observation count: {scenarioHistory?.baseline_count ?? 'unknown'} / Required: {scenarioHistory?.required_observation_count ?? 'unknown'}</p>
-            </div>
-          </div>
-        )}
-
-        {result?.verdict === 'CONTRADICTED' && (
-          <div className="alert warning">
-            <ShieldAlert size={18} />
-            <div>
-              <strong>Contradictory sources</strong>
-              <p>Contradictory reconciliation status: {result.reconciliation_verdict?.status}. Attribution and downstream action were blocked.</p>
-            </div>
-          </div>
-        )}
-
-        {result?.verdict !== 'ACCESS_DENIED' && (
-          <>
-            <div className="section-heading"><div><h2>What explains the movement?</h2><p>Accounting contributions and diagnostic indicators are deliberately separated.</p></div><button onClick={() => void askQuestion('Explain the difference between contributions and diagnostic drivers.')}><CircleHelp size={15} /> Ask AI</button></div>
-
-        <section className="explanation-grid">
-          <article className="card contribution-card"><div className="card-heading"><div><span className="eyebrow">Quantified contribution</span><h3>Accounting bridge</h3></div><span className={`evidence-pill ${decomposition?.is_identity_held ? 'good' : 'limited'}`}>{decomposition?.is_identity_held ? 'Identity reconciled' : titleCase(result?.decomposition_status)}</span></div>{contributionRows.length ? <><div className="donut-wrap"><div className="donut" style={{ '--slice': `${Math.round((Math.abs(contributionRows[0]?.value ?? 0) / contributionTotal) * 100)}%` } as React.CSSProperties}><span><strong>{formatDelta(decomposition?.total_delta, kpi.unit)}</strong><small>total change</small></span></div><div className="contribution-list">{contributionRows.map((item, index) => <div key={item.label}><i className={`swatch swatch-${index}`} /><span>{item.label}<small>{Math.round((Math.abs(item.value) / contributionTotal) * 100)}% of quantified movement</small></span><strong>{formatDelta(item.value, kpi.unit)}</strong></div>)}</div></div><p className="method-note">These values add to the observed movement. They are an accounting explanation, not proof of operational cause.</p></> : <div className="empty-state">No exact contribution bridge is available for this KPI.</div>}</article>
-
-          <article className="card driver-card"><div className="card-heading"><div><span className="eyebrow">Diagnostic drivers</span><h3>What explains the change</h3></div><span className="evidence-pill limited">Statistical, not causal</span></div>{result?.correlational_candidates?.length ? <div className="driver-list">{result.correlational_candidates.slice(0, 4).map(candidate => <div key={candidate.driver_id} className="driver-row"><div><strong>{driverLabel(candidate.driver_id)}</strong><span>{formatDelta(candidate.contribution, '')} contribution · {candidate.explained_share == null ? 'share n/a' : `${Math.round(candidate.explained_share * 100)}% share`} · lag {candidate.lag_days}d · n={candidate.sample_size}</span></div><div className="association"><i style={{ width: `${Math.min(100, Math.abs(candidate.explained_share ?? 0) * 100)}%` }} /></div><small>{candidate.offsetting ? 'Offsetting' : titleCase(candidate.claim_type)}</small></div>)}</div> : <div className="empty-state">No driver explained this run's movement.</div>}<p className="method-note">Contribution is a statistical estimate of what moved, in the KPI's unit. It is not a monetary or causal claim.</p></article>
-          <FunnelBridgeCard bridge={result?.funnel_bridge} status={result?.funnel_bridge_status} unit={kpi.unit} />
-        </section>
-
-        <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Executive conclusion</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{marketingBrief?.summary ?? 'Run the engine to generate a traceable explanation.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><p>{result?.narrative ?? 'Narrative unavailable.'}</p><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article>
-        </section>
-
-        <ActionWorkspace actions={result?.decision_cards} persona={persona} verdict={result?.verdict} onAsk={recommendation => void askQuestion(`What evidence supports this recommendation: ${recommendation}`)} />
 
         <footer className="source-footer"><span>Run {result?.run_id ?? '—'}</span><span>Source status: {titleCase(result?.reconciliation_verdict?.status)}</span><span>Persona: {persona === 'CFO' ? 'CFO' : persona === 'regional_manager_north' ? 'Regional manager (North)' : 'Marketing manager'}</span></footer>
           </>
