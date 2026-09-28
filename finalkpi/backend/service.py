@@ -61,7 +61,7 @@ DEMO_IDENTITIES = {
     # has can_view_categories = ALL).
     "demo-category-manager-north-electronics": "category_manager_north_electronics",
 }
-ENGINE_VERSION = "kpi-engine-summary-structure-v1"
+ENGINE_VERSION = "kpi-engine-summary-caps-v1"
 from kpi_engine.verification.registry import resolve_governed_design
 
 

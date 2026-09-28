@@ -117,6 +117,12 @@ class NarrativeResult:
     llm_status: str = "NOT_REQUESTED"
 
 
+def format_attribution_percent(value: float) -> str:
+    """Attribution Confidence as a percent string, capped at 99.9 (one decimal from 0.995), never 100."""
+    percent = min(value * 100, 99.9)
+    return f"{percent:.1f}" if value >= 0.995 else f"{percent:.0f}"
+
+
 class NarrativeEngine:
     """Render only approved templates from the current diagnosis payload."""
 
@@ -231,9 +237,7 @@ class NarrativeEngine:
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
             return "Attribution Confidence was not computed for this driver"
         label = candidate.get("label") or candidate.get("band") or "unbanded"
-        percent = min(value * 100, 99.9)
-        formatted = f"{percent:.1f}" if value >= 0.995 else f"{percent:.0f}"
-        return f"confidence {formatted}% ({label})"
+        return f"confidence {format_attribution_percent(value)}% ({label})"
 
     @classmethod
     def _attributed_driver_claim(cls, payload: dict[str, Any], candidate: dict[str, Any]) -> str:

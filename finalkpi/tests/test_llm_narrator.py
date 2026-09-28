@@ -137,6 +137,31 @@ class SummaryStructureTests(unittest.TestCase):
         self.assertIn("Revenue rose", texts)
 
 
+class ConfidenceAndOffsetTests(unittest.TestCase):
+    def test_attribution_confidence_is_capped_never_100(self):
+        for ac, expected in ((0.998, "99.8%"), (1.0, "99.9%"), (0.72, "72%")):
+            sheet = build_fact_sheet(STORY, results(ac=ac), "cfo")
+            text = " ".join(f["text"] for f in sheet["facts"] if f["kind"] in ("driver", "gate"))
+            self.assertIn(f"{expected} attribution confidence", text)
+            self.assertNotIn("100%", text)
+
+    def test_share_over_100_names_the_offsetting_stage(self):
+        story = {**STORY, "revenue_delta": -100.0, "headline_facts": [{"kind": "revenue", "delta": -100.0, "percent_change": -20.0}],
+                 "edges": [{"stage": "conversion", "from": "conversion_rate", "to": "net_sales_revenue", "contribution_inr": -103.0, "contribution_pct": 103.0, "factor_percent_change": -9.0},
+                           {"stage": "basket", "from": "net_sales_revenue", "to": "net_sales_revenue", "contribution_inr": 3.0, "contribution_pct": -3.0, "factor_percent_change": 1.0}]}
+        sheet = build_fact_sheet(story, results(), "cfo")
+        text = next(f["text"] for f in sheet["facts"] if f["kind"] == "bridge" and f["text"].startswith("Conversion"))
+        self.assertIn("more than the whole fall (103%), partly offset by price per unit", text)
+        summary = executive_summary(story, results(), "cfo")
+        self.assertIn("More than the whole fall came from conversion (103%), partly offset by price per unit", summary["sentences"][1]["text"])
+
+    def test_fallback_caveat_is_its_own_sentence(self):
+        summary = executive_summary(material_story(), action_results(), "cfo")
+        caveat = [s for s in summary["sentences"] if "accounting split" in s["text"]]
+        self.assertEqual(len(caveat), 1)
+        self.assertEqual(caveat[0]["text"], "This is an accounting split, not a cause.")
+
+
 class Client:
     def __init__(self, payload=None, error=None):
         self.payload, self.error, self.calls = payload, error, 0

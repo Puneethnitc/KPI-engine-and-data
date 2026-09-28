@@ -23,12 +23,12 @@ from urllib.request import Request, urlopen
 
 import yaml
 
-from kpi_engine.narrative import CAUSAL_SUPPORTED_VERDICTS, CAUSAL_WORDING_MIN_AC, GROQ_USER_AGENT
+from kpi_engine.narrative import CAUSAL_SUPPORTED_VERDICTS, CAUSAL_WORDING_MIN_AC, GROQ_USER_AGENT, format_attribution_percent
 from kpi_engine.personas import load_persona
 
 REGISTRY_DIR = Path(__file__).resolve().parent / "registry"
 MIN_SENTENCES, MAX_SENTENCES = 2, 4
-PROMPT_VERSION = "2"
+PROMPT_VERSION = "3"
 DRIVER_THRESHOLD = 0.35
 NO_ACTION_TEXT = "No action needed; keep monitoring"
 CAVEAT_PHRASE = "accounting split"
@@ -104,9 +104,17 @@ def build_fact_sheet(story: Mapping[str, Any], results: Mapping[str, Mapping[str
     material = bool(revenue_node and revenue_node.get("material"))
     if revenue_node is not None:
         add(f"The revenue movement is {'a material change' if material else 'within the normal range'}.", "materiality", material=material)
+    total_delta = revenue.get("delta") or 0
     for edge in story.get("edges", []):
         share = edge.get("contribution_pct")
-        add(f"{STAGE_NAMES.get(edge['stage'], edge['stage'])} accounts for {_money(edge['contribution_inr'])}{'' if share is None else f' ({abs(share):.0f}% of the revenue change)'}.", "bridge")
+        label = STAGE_NAMES.get(edge["stage"], edge["stage"])
+        if share is not None and abs(share) > 100:
+            offsetting = [STAGE_NAMES.get(other["stage"], other["stage"]).lower() for other in story["edges"]
+                          if other is not edge and abs(other["contribution_inr"]) >= 0.5 and other["contribution_inr"] * total_delta < 0]
+            partly = f", partly offset by {' and '.join(offsetting)}" if offsetting else ""
+            add(f"{label} accounts for {_money(edge['contribution_inr'])}, more than the whole {'rise' if total_delta > 0 else 'fall'} ({abs(share):.0f}%){partly}.", "bridge")
+        else:
+            add(f"{label} accounts for {_money(edge['contribution_inr'])}{'' if share is None else f' ({abs(share):.0f}% of the revenue change)'}.", "bridge")
     if story.get("edges"):
         add("The funnel split is an accounting split, not a cause.", "caveat")
     if story.get("root_stage"):
@@ -139,14 +147,14 @@ def build_fact_sheet(story: Mapping[str, Any], results: Mapping[str, Mapping[str
             entry["verdict"] = chain["causal_verdict"]
     qualified = sorted((e for e in best.values() if e["ac"] >= DRIVER_THRESHOLD), key=lambda item: -item["ac"])
     if qualified:
-        add(f"A driver reached the {DRIVER_THRESHOLD * 100:.0f}% confidence threshold: {qualified[0]['name']} at {qualified[0]['ac'] * 100:.0f}% attribution confidence.", "gate")
+        add(f"A driver reached the {DRIVER_THRESHOLD * 100:.0f}% confidence threshold: {qualified[0]['name']} at {format_attribution_percent(qualified[0]['ac'])}% attribution confidence.", "gate")
     else:
         add(f"No driver reached the {DRIVER_THRESHOLD * 100:.0f}% attribution-confidence threshold.", "gate")
     for entry in sorted(best.values(), key=lambda item: -item["ac"])[:4]:
         chain = chains.get(entry["id"])
         causal_ok = entry["verdict"] in CAUSAL_SUPPORTED_VERDICTS and entry["ac"] >= CAUSAL_WORDING_MIN_AC
         impact = f" Estimated revenue effect {_money(chain['revenue_impact'])}." if chain else ""
-        add(f"Driver {entry['name']}: attribution confidence {entry['ac'] * 100:.0f}% ({_humanize(str(entry['band'] or 'unrated')).lower()}); causal test {_humanize(str(entry['verdict'])).lower()}.{impact}"
+        add(f"Driver {entry['name']}: attribution confidence {format_attribution_percent(entry['ac'])}% ({_humanize(str(entry['band'] or 'unrated')).lower()}); causal test {_humanize(str(entry['verdict'])).lower()}.{impact}"
             f" Causal wording is {'allowed' if causal_ok else 'NOT allowed: say linked to or associated with'}.", "driver",
             driver_id=entry["id"], driver_name=entry["name"], causal_ok=causal_ok)
         names.add(entry["name"].lower())
@@ -278,15 +286,18 @@ def fallback_summary(story: Mapping[str, Any], sheet: Mapping[str, Any]) -> dict
                 continue
             cited.append(fact["id"])
             same_direction = (edge["contribution_inr"] >= 0) == rising
-            if rank == 0:
+            if rank == 0 and abs(edge["contribution_pct"]) > 100:
+                offsetting = [STAGE_NAMES.get(o["stage"], o["stage"]).lower() for o in edges[1:] if abs(o["contribution_inr"]) >= 0.5 and (o["contribution_inr"] >= 0) != rising]
+                parts.append(f"More than the whole {'rise' if rising else 'fall'} came from {label.lower()} ({abs(edge['contribution_pct']):.0f}%)" + (f", partly offset by {' and '.join(offsetting)}" if offsetting else ""))
+            elif rank == 0:
                 parts.append(f"Most of the {'rise' if rising else 'fall'} came from {label.lower()} ({abs(edge['contribution_pct']):.0f}%)")
             else:
                 parts.append(f"{label.lower()} {'adding' if same_direction else 'offsetting'} {abs(edge['contribution_pct']):.0f}%")
         caveat = (by_kind.get("caveat") or [None])[0]
-        if parts and caveat:
-            sentences.append({"text": ", with ".join(parts) + "; this is an accounting split, not a cause.", "facts": [*cited, caveat["id"]]})
-        elif parts:
+        if parts:
             sentences.append({"text": ", with ".join(parts) + ".", "facts": cited})
+            if caveat:
+                sentences.append({"text": "This is an accounting split, not a cause.", "facts": [caveat["id"]]})
     gate = (by_kind.get("gate") or [None])[0]
     if gate:
         sentences.append({"text": gate["text"], "facts": [gate["id"]]})
@@ -327,7 +338,9 @@ def build_messages(sheet: Mapping[str, Any]) -> list[dict[str, str]]:
         "such as 'Most of the rise came from traffic (61%), with price per unit adding 30%'; (3) how sure we are (materiality and driver confidence). "
         "Then give a separate 'do first' line. "
         "Say 'rose' or 'fell', never 'changed +' or 'changed -'. "
-        "State the 'accounting split, not a cause' caveat at most once, and only if you talk about the funnel split. "
+        "State the 'accounting split, not a cause' caveat at most once, only if you talk about the funnel split, and as its own short sentence "
+        "(for example 'This is an accounting split, not a cause.'), never appended to another sentence. "
+        "If a stage's fact says it is more than the whole rise or fall, say so and name what partly offset it, using the fact's wording. "
         f"The 'do first' line must be the action from the action facts, or exactly '{NO_ACTION_TEXT}' when the movement is not material, "
         "no driver reached the confidence threshold, or there is no action fact; it must never restate the revenue change. "
         "Every sentence lists the fact IDs it uses. Copy numbers exactly as written in the facts; never compute, round or invent numbers. "
