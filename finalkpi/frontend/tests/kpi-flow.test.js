@@ -68,3 +68,30 @@ test('older runs without a story render a neutral message', () => {
   const html = renderToStaticMarkup(React.createElement(KpiFlow, { story: null, onSelect: () => {} }))
   assert.match(html, /Not available for this older run/)
 })
+
+test('arrows carry no text and no rupee amounts; the Traffic box shows its revenue effect', () => {
+  const html = renderToStaticMarkup(React.createElement(KpiFlow, { story: quietStory, onSelect: () => {} }))
+  const arrows = html.match(/<div class="kpi-flow-arrow"[^>]*>[\s\S]*?<\/div>/g) ?? []
+  assert.equal(arrows.length, 5)
+  for (const arrow of arrows) assert.equal(arrow.replace(/<[^>]*>/g, '').trim(), '')
+  assert.doesNotMatch(arrows.join(''), /₹/)
+  assert.doesNotMatch(html, /--edge-width/)
+  const trafficBox = html.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*?<small>Traffic<\/small>[\s\S]*?<\/button>/)[0]
+  assert.match(trafficBox, /Adds \+₹232 to revenue \(61%\)/)
+  assert.match(html, /Units per order: no effect/)
+})
+
+test('revenue stacked bar percentages sum to 100 and the caption states the total', () => {
+  const story = { ...quietStory, edges: [
+    { stage: 'traffic', from: 'traffic_total', to: 'net_sales_revenue', contribution_inr: 232, contribution_pct: 61.4, factor_percent_change: 8.6 },
+    { stage: 'conversion', from: 'conversion_rate', to: 'net_sales_revenue', contribution_inr: 33, contribution_pct: 8.8, factor_percent_change: 2.2 },
+    { stage: 'units', from: 'units_sold', to: 'net_sales_revenue', contribution_inr: 0.2, contribution_pct: 0, factor_percent_change: 0 },
+    { stage: 'basket', from: 'net_sales_revenue', to: 'net_sales_revenue', contribution_inr: 112, contribution_pct: 29.7, factor_percent_change: 3 },
+  ] }
+  const segments = flow.revenueBarSegments(story)
+  assert.deepEqual(segments.map(item => item.label), ['Traffic', 'Conversion', 'Units per order', 'Price per unit'])
+  assert.equal(segments.reduce((sum, item) => sum + item.percent, 0), 100)
+  const html = renderToStaticMarkup(React.createElement(KpiFlow, { story, onSelect: () => {} }))
+  assert.match(html, /Traffic 61%/)
+  assert.match(html, /Segments add up to the total revenue change of \+₹377\./)
+})

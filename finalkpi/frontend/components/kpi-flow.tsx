@@ -1,6 +1,5 @@
 'use client'
 
-import type { CSSProperties } from 'react'
 import './kpi-flow.css'
 
 export type KpiStory = {
@@ -62,16 +61,44 @@ function nodeLabel(id: string, story: KpiStory, node: KpiStory['nodes'][number] 
   return node.material ? 'Material change' : 'Normal range'
 }
 
-function arrowLabel(edge: KpiStory['edges'][number] | undefined): string {
-  if (!edge) return ''
-  if (Math.abs(edge.contribution_inr) < 0.5) return 'no effect'
-  return `${signedMoney(edge.contribution_inr)}${edge.contribution_pct == null ? '' : ` · ${Math.abs(edge.contribution_pct).toFixed(0)}%`}`
+type Edge = KpiStory['edges'][number]
+const NO_EFFECT = 0.5
+
+// Revenue effect shown inside a stage's box; null for result boxes (orders, revenue).
+function effectLine(id: string, edge: Edge | undefined): { text: string; tone: 'up' | 'down' | 'none' } | null {
+  if (id === 'orders' || id === 'net_sales_revenue' || !edge) return null
+  const share = edge.contribution_pct == null ? '' : ` (${Math.abs(edge.contribution_pct).toFixed(0)}%)`
+  if (Math.abs(edge.contribution_inr) < NO_EFFECT) return { text: id === 'units_sold' ? 'Units per order: no effect' : 'No effect on revenue', tone: 'none' }
+  const verb = edge.contribution_inr < 0 ? 'Removes' : 'Adds'
+  return { text: `${verb} ${signedMoney(edge.contribution_inr)}${id === 'traffic_total' ? ` ${edge.contribution_inr < 0 ? 'from' : 'to'} revenue` : ''}${share}`, tone: edge.contribution_inr < 0 ? 'down' : 'up' }
+}
+
+const barStages: { stage: string; label: string }[] = [
+  { stage: 'traffic', label: 'Traffic' }, { stage: 'conversion', label: 'Conversion' },
+  { stage: 'units', label: 'Units per order' }, { stage: 'basket', label: 'Price per unit' },
+]
+
+// Segment widths from absolute ₹ effect. Percentages are whole numbers that sum to exactly 100
+// (largest-remainder rounding), so the labels never disagree with the caption.
+export function revenueBarSegments(story: KpiStory) {
+  const found = barStages.flatMap(item => {
+    const edge = story.edges.find(candidate => candidate.stage === item.stage)
+    return edge ? [{ ...item, inr: edge.contribution_inr }] : []
+  })
+  const total = found.reduce((sum, item) => sum + Math.abs(item.inr), 0)
+  if (!found.length || total <= 0) return []
+  const raw = found.map(item => Math.abs(item.inr) / total * 100)
+  const floors = raw.map(Math.floor)
+  let remainder = 100 - floors.reduce((sum, value) => sum + value, 0)
+  raw.map((value, index) => ({ index, frac: value - floors[index] })).sort((a, b) => b.frac - a.frac).forEach(item => { if (remainder-- > 0) floors[item.index] += 1 })
+  return found.map((item, index) => ({ ...item, percent: floors[index], tone: Math.abs(item.inr) < NO_EFFECT ? 'none' : item.inr < 0 ? 'down' : 'up' }))
 }
 
 export default function KpiFlow({ story, onSelect }: { story: KpiStory | null; onSelect: (kpiId: string) => void }) {
   if (!story) return <section className="kpi-connect card"><h2>How the KPIs connect</h2><p>Not available for this older run.</p></section>
   const nodes = new Map(story.nodes.map(node => [node.kpi_id, node]))
-  const maxEffect = Math.max(1, ...story.edges.map(edge => Math.abs(edge.contribution_inr)))
+  const segments = revenueBarSegments(story)
+  const totalChange = story.revenue_delta ?? segments.reduce((sum, item) => sum + item.inr, 0)
   const drivers = story.cause_chains.slice(0, 3)
   return <section className="kpi-connect card" aria-labelledby="kpi-connect-heading">
     <div className="kpi-connect-heading"><div><span className="eyebrow">One connected story</span><h2 id="kpi-connect-heading">How the KPIs connect</h2></div></div>
@@ -85,16 +112,27 @@ export default function KpiFlow({ story, onSelect }: { story: KpiStory | null; o
         const node = nodes.get(id)
         const edge = id === 'basket' ? story.edges.find(item => item.stage === 'basket') : id === 'orders' ? undefined : story.edges.find(item => item.from === id && item.stage !== 'basket')
         const basketChange = story.edges.find(item => item.stage === 'basket')?.factor_percent_change
-        const width = edge ? 2 + Math.round(6 * Math.abs(edge.contribution_inr) / maxEffect) : 2
+        const effect = effectLine(id, edge)
         const tone = id === 'basket' ? basketChange == null || Math.abs(basketChange) < 5 ? 'normal' : basketChange < 0 ? 'down' : 'up' : node?.status ?? 'normal'
         return <div className="kpi-flow-step" key={id}>
           <button type="button" className={`kpi-flow-node ${tone}`} onClick={() => onSelect(id === 'basket' ? 'net_sales_revenue' : id)} disabled={id !== 'basket' && (!node || node.missing)} aria-label={`Select ${name(id)} detail`}>
             <small>{name(id)}</small><strong>{id === 'basket' ? basketChange == null ? '—' : signedPercent(basketChange) : node?.percent_change == null ? '—' : signedPercent(node.percent_change)}</strong>
             <span>{nodeLabel(id, story, node)}</span>
+            {effect && <span className={`kpi-flow-effect ${effect.tone}`}>{effect.text}</span>}
           </button>
-          {index < sequence.length - 1 && <div className="kpi-flow-arrow" style={{ '--edge-width': `${width}px` } as CSSProperties}><span>{arrowLabel(edge)}</span><i /></div>}
+          {index < sequence.length - 1 && <div className="kpi-flow-arrow" aria-hidden="true"><i /></div>}
         </div>
       })}
+    </div>
+    <div className="kpi-revenue-bar">
+      <h3>Where the revenue change came from</h3>
+      {segments.length ? <>
+        <div className="kpi-bar-track" role="img" aria-label={`Where the revenue change came from: ${segments.map(item => `${item.label} ${item.percent}%`).join(', ')}`}>
+          {segments.filter(item => item.percent > 0).map(item => <div key={item.stage} className={`kpi-bar-segment ${item.tone}`} style={{ width: `${item.percent}%` }}>{item.percent >= 8 ? `${item.label} ${item.percent}%` : ''}</div>)}
+        </div>
+        <ul className="kpi-bar-legend">{segments.map(item => <li key={item.stage}><i className={item.tone} />{item.label} {item.percent}%</li>)}</ul>
+        <p className="kpi-bar-caption">Segments add up to the total revenue change of {signedMoney(totalChange)}.</p>
+      </> : <p className="kpi-bar-caption">The revenue split is not available for this run.</p>}
     </div>
     <div className="kpi-connect-actions"><h3>Act first</h3>{story.act_first.length ? <ol>{story.act_first.map(chain => <li key={chain.driver_id}><strong>{name(chain.driver_id)}</strong><span>via {chain.stages.map(name).join(' + ')} · potential {money(chain.recoverable_impact_inr)} · {(chain.attribution_confidence * 100).toFixed(0)}% confidence · {verdictLabel(chain.causal_verdict)} · Owner: {name(chain.owner)}{chain.stage_impacts.some(item => item.attribution_source_kpi !== chain.via_kpi) ? ' · downstream attribution proxy' : ''}</span></li>)}</ol> : <p>No driver reached the 35% confidence needed to recommend an action.</p>}</div>
   </section>
