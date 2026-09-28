@@ -50,6 +50,16 @@ test('verified banner uses saved confidence, test result and document IDs', () =
   assert.match(html, /TCK-3001/)
 })
 
+test('driver analysis caps displayed attribution confidence at 99.9%', () => {
+  const html = renderToStaticMarkup(React.createElement(DriverAnalysisOverview, {
+    analysis: { ranked_drivers: [{ driver_id: 'stock', contribution: 1 }], excluded_drivers: [] },
+    profile: { attribution_confidence: [{ driver_id: 'stock', attribution_confidence: 1, label: 'Very likely a cause' }] },
+    expected: 10, actual: 11, unit: 'orders',
+  }))
+  assert.match(html, /99.9% Very likely a cause/)
+  assert.doesNotMatch(html, /100% Very likely a cause/)
+})
+
 test('old and ambiguous runs render neutral states without throwing', () => {
   const old = renderToStaticMarkup(React.createElement(DriverAnalysisOverview, { unit: 'orders' }))
   assert.match(old, /older run/)

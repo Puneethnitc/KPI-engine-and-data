@@ -25,6 +25,7 @@ anything outside that set.
 
 from dataclasses import asdict, dataclass, replace
 import json
+import math
 import os
 import time
 from typing import Any, Callable, Iterable, Sequence
@@ -226,10 +227,12 @@ class NarrativeEngine:
     def _confidence_phrase(candidate: dict[str, Any]) -> str:
         """`confidence 78% (Likely a contributing cause)`, or an explicit refusal."""
         value = candidate.get("attribution_confidence")
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
             return "Attribution Confidence was not computed for this driver"
         label = candidate.get("label") or candidate.get("band") or "unbanded"
-        return f"confidence {value * 100:.0f}% ({label})"
+        percent = min(value * 100, 99.9)
+        formatted = f"{percent:.1f}" if value >= 0.995 else f"{percent:.0f}"
+        return f"confidence {formatted}% ({label})"
 
     @classmethod
     def _attributed_driver_claim(cls, payload: dict[str, Any], candidate: dict[str, Any]) -> str:

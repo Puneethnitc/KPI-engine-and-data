@@ -87,7 +87,9 @@ export function actionImpactLabel(action?: ActionContract | null): string {
 export function actionImpactRangeLabel(action?: ActionContract | null): string | null {
   if (action?.expected_impact_low == null || action.expected_impact_high == null) return null
   const unit = action.expected_impact_unit ? ` ${action.expected_impact_unit}` : ''
-  return `${action.expected_impact_low.toLocaleString('en-IN')} to ${action.expected_impact_high.toLocaleString('en-IN')}${unit}`
+  const low = action.expected_impact_low === 0 ? 0 : action.expected_impact_low
+  const high = action.expected_impact_high === 0 ? 0 : action.expected_impact_high
+  return `${low.toLocaleString('en-IN')} to ${high.toLocaleString('en-IN')}${unit}`
 }
 
 export function safeEvidencePath(path?: string | null): string {

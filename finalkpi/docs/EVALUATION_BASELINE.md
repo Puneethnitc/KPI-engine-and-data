@@ -1095,3 +1095,16 @@ The 538-case `--split all` evaluation remains stable after the verified-cause na
 | Brier score | 0.0977 | 0.0977 |
 
 On the supported South/Apparel orders stockout case, the narrative now passes grounding and names stock availability; its action proposal carries a block-bootstrap projected range. The UI displays the saved contributions and evidence without changing the driver ranking or causal verdict.
+
+## Stage UI driver analysis display fixes: before → after
+
+The 538-case `--split all` evaluation is unchanged by the confidence and signed-zero display fixes.
+
+| Measure | Before | After |
+|---|---:|---:|
+| Top-1 driver accuracy | 0.734 | 0.734 |
+| Direction-aware top-1 accuracy | 0.719 | 0.719 |
+| Top-3 driver accuracy | 0.766 | 0.766 |
+| Quiet-negative false-alarm rate | 0.048 | 0.048 |
+| Attribution Confidence gap | 0.5126 | 0.5126 |
+| Brier score | 0.0977 | 0.0977 |

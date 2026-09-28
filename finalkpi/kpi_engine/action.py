@@ -209,6 +209,10 @@ class ActionRecommendationEngine:
         ]
         low = round(-bounds[1] * IMPACT_HORIZON_DAYS, 2) if len(bounds) == 2 else None
         high = round(-bounds[0] * IMPACT_HORIZON_DAYS, 2) if len(bounds) == 2 else None
+        if low == 0:
+            low = 0
+        if high == 0:
+            high = 0
         if low is not None and high is not None and low > high:
             low, high = high, low
         unit = cls._kpi_unit(result)

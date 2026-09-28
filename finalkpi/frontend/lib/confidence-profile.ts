@@ -137,6 +137,12 @@ const attributionBandTone: Record<string, AttributionConfidenceBar['tone']> = {
   EXPLORATORY: 'neutral',
 }
 
+export function attributionPercent(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null
+  const percent = Math.max(0, Math.min(value * 100, 99.9))
+  return value >= 0.995 ? Math.round(percent * 10) / 10 : Math.round(percent)
+}
+
 export function attributionConfidenceBars(
   profile: ConfidenceProfile | null | undefined,
 ): AttributionConfidenceBar[] {
@@ -144,7 +150,7 @@ export function attributionConfidenceBars(
   return (profile.attribution_confidence ?? []).map(driver => ({
     driverId: driver.driver_id,
     displayName: driver.driver_id === 'unexplained' ? 'Unexplained' : driver.display_name,
-    percent: driver.attribution_confidence == null ? null : Math.round(driver.attribution_confidence * 100),
+    percent: attributionPercent(driver.attribution_confidence),
     band: driver.band,
     bandLabel: driver.label,
     tone: driver.band ? (attributionBandTone[driver.band] ?? 'neutral') : 'neutral',

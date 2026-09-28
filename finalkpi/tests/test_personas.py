@@ -1,6 +1,7 @@
 """Regression coverage for persona-specific grounded claims and action cards."""
 
 import unittest
+import math
 from dataclasses import replace
 
 from kpi_engine.action import ActionRecommendationEngine
@@ -87,6 +88,13 @@ class PersonaTests(unittest.TestCase):
         self.assertTrue(rendered["grounding_passed"], rendered["rejected_claims"])
         self.assertIn("likely caused", rendered["text"])
 
+    def test_attribution_confidence_display_never_rounds_to_100_percent(self):
+        phrase = NarrativeEngine._confidence_phrase
+        self.assertIn("99.5%", phrase({"attribution_confidence": 0.995}))
+        self.assertIn("99.8%", phrase({"attribution_confidence": 0.998}))
+        self.assertIn("99.9%", phrase({"attribution_confidence": 1.0}))
+        self.assertNotIn("100%", phrase({"attribution_confidence": 1.0}))
+
     def test_impact_projection_and_validation_label(self):
         result = {"contract_snapshot": {"materiality": {"business_thresholds": {"unit": "orders/day"}}}}
         driver = {"contribution": -3.0, "contribution_interval": [-4.0, -2.0]}
@@ -106,6 +114,14 @@ class PersonaTests(unittest.TestCase):
         card = ActionRecommendationEngine.recommend(action_payload)[0]
         self.assertIsNotNone(card["expected_impact"])
         self.assertIn("not validated", card["impact_explanation"].lower())
+
+    def test_impact_bounds_normalize_negative_zero(self):
+        impact = ActionRecommendationEngine._impact_estimate({}, {
+            "contribution": 0.0, "contribution_interval": [0.0, 0.0],
+        })
+        for key in ("expected_impact_low", "expected_impact_high"):
+            self.assertEqual(math.copysign(1, impact[key]), 1)
+            self.assertEqual(str(impact[key]), "0")
 
     def test_card_kind_tracks_attribution_confidence_and_causal_support(self):
         def card(ac, verdict):

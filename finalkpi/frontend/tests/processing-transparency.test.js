@@ -281,7 +281,7 @@ test('overview and investigation detail both use the shared view in the expected
   const overview = fs.readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
   const detail = fs.readFileSync(new URL('../app/performance/[runId]/page.tsx', import.meta.url), 'utf8')
   assert.match(overview, /<ProcessingTransparencyView transparency=\{result\.processing_transparency\} compact \/>/)
-  assert.ok(overview.indexOf('<ProcessingTransparencyView') < overview.indexOf('<ActionWorkspace'))
+  assert.ok(overview.indexOf('<ProcessingTransparencyView') > overview.indexOf('<ActionWorkspace'))
   assert.match(detail, /<ProcessingTransparencyView[\s\S]*?transparency=\{run\.processing_transparency\}[\s\S]*?telemetry=\{run\.telemetry\}[\s\S]*?suppressRuntimeTelemetry=\{run\.verdict === 'ACCESS_DENIED'\}/)
   assert.ok(detail.indexOf('<ConfidenceWorkspace') < detail.indexOf('<ProcessingTransparencyView'))
   assert.ok(detail.indexOf('<ProcessingTransparencyView') < detail.indexOf('Evidence-bound narrative'))

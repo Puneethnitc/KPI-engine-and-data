@@ -178,6 +178,15 @@ test('attribution confidence bars render a percent, band and evidence for each d
   assert.equal(bars[0].isUnexplained, false)
 })
 
+test('attribution confidence near one keeps a decimal and never displays 100%', () => {
+  const profile = makeProfile({ attribution_confidence: [
+    makeAttributionDriver({ driver_id: 'threshold', attribution_confidence: 0.995 }),
+    makeAttributionDriver({ attribution_confidence: 0.998 }),
+    makeAttributionDriver({ driver_id: 'stock_availability', attribution_confidence: 1 }),
+  ] })
+  assert.deepEqual(attributionConfidenceBars(profile).map(bar => bar.percent), [99.5, 99.8, 99.9])
+})
+
 test('the unexplained row and capped drivers are visible in the bars', () => {
   const profile = makeProfile({
     attribution_confidence: [
