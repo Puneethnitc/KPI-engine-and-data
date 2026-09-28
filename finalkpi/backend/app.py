@@ -331,10 +331,25 @@ async def startup_event() -> None:
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
+    collection = getattr(context_builder, "collection", None)
+    if collection is None:
+        return {
+            "status": "ok", "retrieval_ready": False, "document_count": 0,
+            "collection": "kpi_knowledge_base", "message": "Chroma retrieval is unavailable.",
+        }
+    try:
+        document_count = int(collection.count())
+    except Exception:
+        return {
+            "status": "ok", "retrieval_ready": False, "document_count": None,
+            "collection": "kpi_knowledge_base", "message": "Chroma collection count could not be read.",
+        }
     return {
         "status": "ok",
-        "retrieval_ready": False,
-        "message": "Diagnosis backend ready; retrieval and chat use staged prototype fallback.",
+        "retrieval_ready": document_count > 0,
+        "document_count": document_count,
+        "collection": "kpi_knowledge_base",
+        "message": ("Chroma retrieval is ready." if document_count else "Chroma collection is empty."),
     }
 
 

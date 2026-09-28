@@ -259,7 +259,7 @@ class ConfidenceProfileTests(unittest.TestCase):
         profile = self.engine.build_profile(result)
         top = profile["attribution_confidence"][0]
         self.assertLessEqual(top["attribution_confidence"], 0.75)
-        self.assertIn("no_causal_test", [cap["name"] for cap in top["caps_applied"]])
+        self.assertIn("no_supported_causal_test", [cap["name"] for cap in top["caps_applied"]])
         self.assertNotEqual(profile["attribution"]["status"], "HIGH")
 
     def test_causal_rejected_caps_attribution_at_0_20(self):

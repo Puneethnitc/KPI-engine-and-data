@@ -20,10 +20,11 @@ manager needs more than an alarming chart. Our engine asks, in order:
 3. **What part of the arithmetic moved?** For revenue, separate units sold
    from revenue per unit. For orders, separate traffic from orders per visit.
 4. **What might explain it?** Look for signals that moved earlier or at the
-   same time, but label them as correlations.
-5. **Does a proposed explanation survive a comparison?** Compare the affected
-   group with an unaffected group before and after a predeclared event, and
-   check that similar “effects” do not appear in quiet periods.
+   same time, and estimate how much of the observed movement each driver
+   accounts for. This remains an observational estimate.
+5. **Does a proposed explanation survive a comparison?** The engine can
+   design a before-and-after comparison, screen possible control groups, and
+   check whether similar “effects” appear in quiet periods.
 6. **What can a person do next?** Show the evidence, state uncertainty, and
    offer a review task or an approval-only proposal. The engine executes
    nothing.
@@ -35,10 +36,9 @@ when the evidence is insufficient.
 ## What we have built so far
 
 We have five configured KPIs, three source roles, a tested local pipeline,
-readable grounded explanations, review-only recommendations, a read-only jury
-HTML report, and a provisional case-review script. The Python test suite had
-**86 passing tests** at the time of this guide; tests prove specified software
-behavior, **not** real-world detection accuracy.
+grounded explanations, per-driver confidence, review-only action cards, and a
+read-only jury report. Tests check software behavior; they do **not** prove
+real-world accuracy.
 
 | KPI shown to the jury | Where its value comes from | Simple meaning |
 | --- | --- | --- |
@@ -57,6 +57,19 @@ The files contain 8,880 daily sales rows from 2023-01-01 to 2024-12-30,
 only near the end of the sales history to test a new/sparse segment. The data
 are synthetic, so a passing demo is not evidence of performance on a real
 company's data.
+
+### Round 2 minimum expectations → where to see it
+
+| Requirement | Demo scenario or screen | What to look for |
+|---|---|---|
+| Weekday-aware log-residual detection | Standard diagnosis screen, North/Electronics | Movement, same-weekday comparison, and robust/seasonal detector status |
+| Funnel bridge | `material-multi-driver`, Revenue workspace | Traffic, orders, and revenue steps showing where the change sits |
+| Explained-movement driver attribution | `material-multi-driver`, Driver Analysis | Driver contribution and explained share, separate from the accounting bridge |
+| MTD reconciliation with `PENDING_CLOSE` | `material-multi-driver`, West/Home, 2023-11-01, Source Evidence | Finance snapshot comparison and open-month status |
+| Automatic log DiD and control screening | North/Electronics, 2023-07-31, Causal Verification | Log-outcome comparison, eligible/rejected controls, and verdict |
+| Unstructured evidence corroboration | North/Electronics, 2023-07-24, Driver Evidence | Document IDs and whether they support or contradict a driver |
+| Per-driver Attribution Confidence | Confidence workspace | Each driver's score, band, evidence, and any cap |
+| Persona narratives and action cards | Persona selector: CFO, marketing manager, regional manager (North) | Claim order and allowed levers change by role; cards remain review-only |
 
 ## Layer by layer: what happens and why
 
@@ -114,7 +127,8 @@ For `net_sales_revenue`, the engine compares the *same month and region/category
 
 Canonical statuses:
 - **`NOT_APPLICABLE`**: No comparable second-source measure declared.
-- **`NOT_AVAILABLE_FOR_PERIOD`**: Comparator declared, but matching period/as-of snapshot unavailable (e.g. mid-month diagnosis).
+- **`PENDING_CLOSE`**: The period is open and the next finance close is not due; an available MTD snapshot is compared through its own coverage date.
+- **`NOT_AVAILABLE_FOR_PERIOD`**: No usable comparator snapshot is available for the requested period.
 - **`AGREED`**: Values agree within tolerance (default 3.5%).
 - **`DRIFT`**: Values differ beyond tolerance up to contradiction boundary (8.75%). Non-blocking warning.
 - **`CONTRADICTED`**: Evidence conflicts beyond contradiction boundary (>8.75%). Hard gate stopping downstream driver attribution.
@@ -123,8 +137,14 @@ Canonical statuses:
 
 ### 4. Detection: is the movement unusual and meaningful?
 
-The primary detector looks at preceding days. It uses a **median** for a
-typical level and median absolute deviation (MAD) for a robust noise scale:
+The current primary detector compares a day with the same weekday in earlier
+weeks and uses log residuals, so a 10% change is treated similarly on
+high-volume and low-volume weekdays. It scores those residuals with a robust
+MAD scale. The seasonal MSTL forecast provides a second view from earlier
+days.
+
+The earlier pooled-level approach used a **median** for a typical level and
+median absolute deviation (MAD) for a robust noise scale:
 
 `robust scale = 1.4826 × median(|past value − past median|)`  
 `point score = (today − past median) / robust scale`.
@@ -150,12 +170,9 @@ BSTS/BOCPD/CUSUM ensembles were deferred because we lack reviewed labels
 with which to tune or compare them. MSTL is used for a seven-day rhythm here;
 annual holidays have **not** been validated.
 
-**Current data result:** In a provisional review of six documented event
-dates across five KPIs, 14 KPI–date checks were material and one was
-seasonal-review. Ten KPI–date checks on two reference dates were all
-non-material. This is encouraging case behavior, **not a detection-accuracy
-score**: the event notes are not independent labels, the sample is tiny, and
-not every KPI should react to every event.
+The final holdout false-alarm rate is 5.6%. This is measured on six synthetic
+events, not production data; it is a limitation to report, not a number tuned
+away.
 
 ### 5. Exact decomposition: what changed inside a KPI?
 
@@ -190,56 +207,51 @@ reports `NOT_APPLICABLE` instead of a made-up breakdown.
 change **−1364.15 INR**: units effect **−1493.60**, mix **0**, rate effect
 **+129.45**. Those parts add to −1364.15.
 
+For revenue, a separate funnel bridge shows how traffic, orders per visit,
+and revenue per order sit along the path to revenue. It is an arithmetic
+breakdown of where the change appears, not a claim that one step caused it.
+
 ### 6. Correlational ranking: what is worth investigating?
 
-For an allowed candidate such as checkout latency, stockouts, or ad spend,
-the engine compares **changes** rather than raw levels:
+For eligible drivers such as checkout latency, stock availability, or marketing
+spend, the primary method fits deseasonalised driver changes jointly with the
+KPI change and estimates each moved driver's contribution:
 
-`r(lag) = correlation(change in KPI today, earlier change in driver)`.
+`driver contribution = fitted effect × driver change`.
 
-It checks short nonnegative lags, retains independent daily/weekly sample
-sizes, and labels every returned candidate `CORRELATIONAL`. A rejected or
-unavailable candidate carries a reason.
+The output includes `explained_share`, the contribution divided by the observed
+KPI movement. This is an observational estimate, not proof that the driver
+caused the movement. Weekly signals retain their weekly sample size; excluded
+signals carry a reason.
 
 **Why:** This is a simple, understandable way to find leads without claiming
 they are causes. Differencing reduces some misleading shared trends.
 
-**Other option:** WhyChain uses standardized ridge regression, which can
-handle several correlated signals at once. We kept a simpler ranking because
-our data and validation do not yet justify interpreting a larger model's
-coefficients. Neither a correlation nor a ridge coefficient proves causation.
-
-**Known issue:** For the conversion-rate KPI, the *weekly marketing-ranking*
-path currently averages seven daily rates. It should use weekly
-`sum(orders) / sum(traffic)` instead. The daily KPI definition is correct;
-this weekly ranking path needs a fix before its conversion-rate result is
-trusted. On one North/Electronics week the two calculations were 0.019372
-and 0.019248, respectively.
+Correlation remains a separate diagnostic view. Neither correlation nor
+regression contribution alone proves causation.
 
 ### 7. Observational verification: does a proposed cause survive checks?
 
-This does **not** run automatically from a correlation. A person must provide
-the proposed event date, named driver, affected group, unaffected comparison
-group, expected direction, and earlier quiet periods.
+For material movements and sustained patterns, the engine can design a test
+from leading drivers. It searches for onset and eligible control groups;
+controls with contaminated driver movement, incomplete data, or poor
+pre-period fit are rejected with a reason.
 
 The main difference-in-differences (DiD) formula is:
 
-`effect = (affected after − unaffected after) − (affected before − unaffected before)`.
+`effect = (log(affected after) − log(unaffected after)) − (log(affected before) − log(unaffected before))`.
 
-The engine estimates the change in the affected-minus-unaffected daily gap,
-with a HAC 95% confidence interval. It also asks: Did the driver really
-change at the proposed start? Was the KPI already diverging before it? Does
-the same method find a suspicious “effect” during quiet placebo windows?
+The engine fits the comparison on log outcomes and calculates a HAC 95%
+confidence interval. It checks driver exposure at onset, pre-event movement,
+and quiet-period placebo windows.
 
 **Why:** A company-wide holiday can lower both groups. Comparing with a
 control can remove some shared background movement. Pretrend and placebo
 checks challenge convenient but weak stories.
 
-**Other options:** Automatic causal graphs, Granger tests, or synthetic
-controls require additional assumptions and data. We chose an explicit,
-auditable one-control test first. This is still observational: a good result
-is `SUPPORTED_CONDITIONAL`, **never proof**. No valid control or insufficient
-history means we abstain.
+This is still observational: a good result is `SUPPORTED_CONDITIONAL`,
+**never proof**. No valid control or insufficient history means the engine
+abstains.
 
 **Actual data example:** For North/Electronics versus South/Electronics,
 ending 2023-08-06, the estimated revenue effect was **−376.06 INR** and the
@@ -266,28 +278,30 @@ caused a particular INR amount. This is an honest limit, not a missing sum.
 
 ### 9. Evidence quality: how much of the test could we actually trust?
 
-The engine reports three separate diagnostics: enough pre/post observations,
-whether the event timing passed the pre-event checks, and how narrow the DiD
-interval is relative to its estimated effect. It **does not average them into
-a “70% chance this cause is true.”** An inconclusive causal test stays
-inconclusive even if data coverage is excellent.
+Each ranked driver receives an Attribution Confidence score and band from its
+movement, direction, timing, stability, statistical fit, source quality,
+causal verdict, and document corroboration. Hard caps appear beside the score:
+an unsupported causal test caps it at 75%, a rejected test at 20%, undeclared
+direction at 60%, and a non-material movement at 50% with an exploratory band.
+This is not a calibrated “chance the cause is true.” An inconclusive test stays
+inconclusive even when other evidence is strong.
 
 **Why:** A single confidence number would suggest calibration that we have
 not earned. True probability calibration needs held-out labeled cases.
 
 ### 10. Explanation, recommendations, and feedback
 
-The engine turns results into approved sentences with evidence paths. Its
-validator blocks changed numbers, names, and stronger causal wording. With
-an optional Groq key, an LLM may choose among **preapproved sentence
-versions**, but cannot add unrestricted new claims. If the provider fails or
-returns an invalid choice, deterministic text is used. A live provider call
-has not been validated here.
+The engine turns results into approved sentences with evidence paths. Persona
+settings change which grounded claims appear first. Validation blocks changed
+numbers, names, and stronger causal wording. With an optional Groq key, an LLM
+may choose among **preapproved sentence versions**, but cannot add unrestricted
+new claims. Provider failure or invalid choices fall back to deterministic
+text.
 
-Recommendations come from a closed library: weak evidence leads to a
-`NEXT_CHECK`; conditional support can lead to an `AWAITING_APPROVAL` proposal.
-No recommendation executes, and none invents a recovery estimate. User
-feedback can be logged but does not yet change the model automatically.
+Action cards are filtered by each persona's allowed levers. Eligible cards can
+show a low/high seven-day projection from fitted contribution; the card labels
+it not validated unless confidence and causal checks pass. Cards are review
+tasks or approval requests; none executes a change or promises recovery.
 
 ## Where do the numbers and constants come from?
 
@@ -322,22 +336,14 @@ prototype choices and must be evaluated and approved before deployment.
 
 ## How well does it work on this dataset?
 
-The case-review script selected one date in each of six event windows
-documented by the dataset generator, plus two reference dates. It ran all
-five KPIs on each date: **40 KPI–date results**.
+The final ground-truth evaluation covers 538 cases and six synthetic event
+windows, with 267 cases in the held-out split. Current scores are summarized
+at the top of `docs/EVALUATION_BASELINE.md`.
 
-| Context | Material alert | Seasonal-only review | Not material |
-| --- | ---: | ---: | ---: |
-| Six documented event dates × five KPIs | 14 | 1 | 15 |
-| Two reference dates × five KPIs | 0 | 0 | 10 |
-
-At least one KPI alerted on each of the six sampled event dates, and all 40
-generated narratives passed their deterministic grounding check. This shows
-the pipeline can produce useful, internally consistent outputs on supplied
-examples. It does **not** establish precision, recall, false-alarm rate, or
-causal accuracy. We lack the referenced `ground_truth_events.csv`, the two
-reference dates are too few, and these cases come from the same synthetic
-scenario documentation rather than an independent holdout.
+The holdout false-alarm rate is 5.6%. EVT06's cold snap/weather driver is not
+recovered at top rank. EVT01's short post-period produces an `INCONCLUSIVE`
+causal test, so its AC is capped at 75%. These results cover six synthetic
+events, not production data, and do not establish production accuracy.
 
 ## How are we different from WhyChain, the competing team?
 
@@ -367,23 +373,19 @@ links, and broader verification; we should acknowledge those strengths.
 
 ## What should happen next?
 
-1. **Weekly conversion-rate ranking formula — fixed.** It now uses a weekly
-   ratio of summed orders and traffic, with a regression test designed to
-   distinguish that from averaging daily rates.
-2. **Get reviewed event labels.** Recover `ground_truth_events.csv` or create
-   an independently reviewed holdout with genuine events, quiet periods,
-   decoys, expected affected KPIs, and onset dates. Then measure false
-   alerts, misses, timing, and abstention. Tune thresholds *only on training
-   cases*, then report held-out results.
-3. **Stress-test causal designs.** A separate helper now reports all
+1. **Validate on real reviewed data.** The current labels cover six synthetic
+   events. Add independently reviewed production events, quiet periods,
+   decoys, affected KPIs, and onset dates before claiming real-world accuracy.
+   Tune thresholds *only on development cases*, then report held-out results.
+2. **Stress-test causal designs.** A separate helper now reports all
    predeclared control/window results without selecting a winner. Multiple
    eligible controls, exposure consistency across affected slices, and
    dataset-specific sensitivity review remain to be completed.
-4. **Validate the real LLM path and usability.** Test provider failure,
+3. **Validate the real LLM path and usability.** Test provider failure,
    malicious suggestions, persona access, and whether reviewers can follow
    evidence. The current HTML file is a read-only local report, not an
    authenticated application.
-5. **Plan production data access only if deployment is required.** Replace
+4. **Plan production data access only if deployment is required.** Replace
    CSV reads and caller-supplied roles with authenticated database queries,
    row-level policy, logging, and controlled release.
 
@@ -395,12 +397,10 @@ business decisions.
 
 > “Our engine does not jump from a falling number to a confident story. It
 > first checks whether the data were available and whether sources agree.
-> It then asks whether the change is unusual and large enough to matter.
-> For revenue and orders it gives an exact accounting breakdown, but labels
-> that as arithmetic, not cause. It separately offers correlated signals
-> as investigation leads. A proposed cause must survive a before-and-after
-> comparison against a control and quiet-period checks; otherwise the engine
-> says it cannot verify it. Every sentence and next step stays tied to the
-> evidence. We can demonstrate this across five synthetic KPIs today; the
-> missing independently reviewed event labels are what we need next to
-> measure real accuracy.”
+> It then checks weekday-aware movement, breaks down the funnel, and estimates
+> driver contributions. Some explanations receive an automatically designed
+> comparison with screened controls. The results show document evidence,
+> confidence caps, and role-specific review cards. Our evaluation covers six
+> synthetic events: the cold-snap driver is missed at top rank, the holdout
+> false-alarm rate is 5.6%, and EVT01 remains inconclusive. We have not
+> validated the engine on production data.”

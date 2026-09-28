@@ -359,9 +359,6 @@ class AttributionConfidenceEngine:
             caps_applied.append({"name": "causal_rejected", "max": model.caps["causal_rejected_max"], "reason": "Causal test rejected this driver"})
         elif causal_verdict != "SUPPORTED_CONDITIONAL":
             cap_values.append(model.caps["no_causal_test_max"])
-            # Keep the historical label for consumers that key off the old
-            # name while exposing the more precise cap name to new clients.
-            caps_applied.append({"name": "no_causal_test", "max": model.caps["no_causal_test_max"], "reason": "Compatibility alias for the unsupported-causal-test cap"})
             caps_applied.append({"name": "no_supported_causal_test", "max": model.caps["no_causal_test_max"], "reason": "No supported causal test result for this driver"})
         if expected_direction is None:
             cap_values.append(model.caps["direction_undeclared_max"])

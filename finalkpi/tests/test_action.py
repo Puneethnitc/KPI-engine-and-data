@@ -1,8 +1,10 @@
 """Recommendations are evidence-limited, non-executing review artifacts."""
 
 import unittest
+from pathlib import Path
 
 from kpi_engine.action import ActionRecommendationEngine
+from kpi_engine.pipeline import KPIEnginePipeline
 
 
 class ActionTests(unittest.TestCase):
@@ -144,6 +146,28 @@ class ActionTests(unittest.TestCase):
         })
         self.assertIsNone(cards[0]["driver_id"])
         self.assertEqual(cards[0]["lever"], "Evidence collection")
+
+
+class PersonaFallbackActionTests(unittest.TestCase):
+    def test_regional_north_unsupported_levers_fall_back_to_analyst(self):
+        root = Path(__file__).resolve().parents[1]
+        pipeline = KPIEnginePipeline(
+            registry_dir=str(root / "kpi_engine" / "registry"),
+            evidence_csv=str(root / "data" / "unstructured_evidence.csv"),
+            access_csv=str(root / "data" / "access_control.csv"),
+        )
+        result = pipeline.run_diagnosis(
+            kpi_id="net_sales_revenue", target_date="2023-07-31",
+            persona="regional_manager_north",
+            dimension_slice={"region": "North", "category": "Electronics"},
+            sales_csv=str(root / "data" / "sales_daily.csv"),
+            marketing_csv=str(root / "data" / "marketing_weekly.csv"),
+            finance_csv=str(root / "data" / "finance_monthly.csv"),
+        )
+        card = result["decision_cards"][0]
+        self.assertEqual(card["driver_id"], None)
+        self.assertEqual(card["lever"], "Evidence collection")
+        self.assertEqual(card["owner"], "analyst")
 
 
 if __name__ == "__main__":

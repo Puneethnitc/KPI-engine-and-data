@@ -103,7 +103,7 @@ class CapTests(unittest.TestCase):
             make_driver(), prior=0.5, is_material=True, source_status="HIGH",
         )
         self.assertLessEqual(record["attribution_confidence"], 0.75)
-        self.assertEqual(record["caps_applied"][0]["name"], "no_causal_test")
+        self.assertEqual(record["caps_applied"][0]["name"], "no_supported_causal_test")
 
     def test_causal_rejected_caps_at_0_20(self):
         record = AttributionConfidenceEngine.compute_driver(

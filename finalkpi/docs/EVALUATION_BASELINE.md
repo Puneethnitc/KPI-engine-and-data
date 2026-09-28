@@ -1,5 +1,28 @@
 # Evaluation baseline: Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4
 
+## Stage 0 → Final summary
+
+The final columns use the complete current engine on `fix/stage-final`.
+Holdout is reported separately and was not used to tune thresholds.
+
+| metric | Stage 0 (`all`) | Final (`all`) | Final (`holdout`) |
+|---|---:|---:|---:|
+| Cases | 538 | 538 | 267 |
+| Driver top-1 accuracy, any sign | 15.6% (10/64) | 73.4% (47/64) | 54.2% (13/24) |
+| Driver top-1 accuracy, direction-aware | 6.2% (4/64) | 71.9% (46/64) | 50.0% (12/24) |
+| Driver top-3 accuracy | 25.0% | 76.6% | 62.5% |
+| Quiet-negative false-alarm rate | 4.1% | 4.8% | 5.6% |
+| EVT05 decoy confident-driver rate | 100% (12/12) | 25.0% (3/12) | 25.0% (3/12) |
+| Mean true-driver AC | n/a | 0.6727 | 0.6313 |
+| Mean false-driver AC | n/a | 0.1601 | 0.2124 |
+| Attribution Confidence gap | n/a | 0.5126 | 0.4189 |
+| Maximum decoy AC | n/a | 0.2142 | 0.2142 |
+| Brier score (driver AC) | n/a | 0.0977 | 0.1488 |
+
+EVT06's cold-snap/weather driver still does not win the top rank. EVT01's
+short post-period yields an `INCONCLUSIVE` causal test and its AC is capped at
+0.75. All results are from six synthetic events, not production data.
+
 Recorded by `tests/run_ground_truth_eval.py --split all|dev|holdout`, against
 `data/labels/eval_cases.csv` (538 cases: 76 positive across the 6 events in
 `data/ground_truth_events.csv`, 462 quiet negatives). Stage 0 numbers were

@@ -288,8 +288,11 @@ class ActionRecommendationEngine:
         family = lever_family(driver_id)
         persona = persona or load_persona(result.get("persona"))
         persona_owner = persona.owner_for(family)
-        owner = spec.get("owner") or persona_owner or fallback_owner
-        if spec.get("owner"):
+        evidence_collection = driver is None and lever == "Evidence collection"
+        owner = "analyst" if evidence_collection else (spec.get("owner") or persona_owner or fallback_owner)
+        if evidence_collection:
+            resolved_owner_source = owner_source
+        elif spec.get("owner"):
             resolved_owner_source = "contract.candidate_drivers.owner"
         elif persona_owner and persona_owner != fallback_owner:
             resolved_owner_source = "persona.lever_owners"
@@ -445,7 +448,7 @@ class ActionRecommendationEngine:
     ) -> dict[str, Any]:
         return cls._build_card(result, kind="NEXT_CHECK", driver=None, lever="Evidence collection",
             recommendation="Review the event timeline and identify a valid comparison group before proposing action.",
-            fallback_owner=persona.default_owner, owner_source="validated_evidence_collection_rule",
+            fallback_owner="analyst", owner_source="validated_evidence_collection_rule",
             decision_right=persona.decision_right, approval_required=False,
             evidence_paths=("causal_verification",), persona=persona)
 
