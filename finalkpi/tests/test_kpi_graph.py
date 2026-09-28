@@ -121,6 +121,14 @@ class KpiGraphTests(unittest.TestCase):
         story = build_kpi_story(self.results)
         self.assertEqual(story["cause_chains"][0]["causal_verdict"], "NOT_TESTED")
 
+    def test_borrowed_driver_uses_highest_ac_downstream_result(self):
+        results = diagnose_scope(region="North", category="Electronics", target_date="2023-07-31", persona="CFO")["results"]
+        story = build_kpi_story(results)
+        chain = next(item for item in story["cause_chains"] if item["driver_id"] == "marketing_spend")
+        revenue_ac = next(d["attribution_confidence"] for d in results["net_sales_revenue"]["driver_analysis"]["ranked_drivers"] if d["driver_id"] == "marketing_spend")
+        self.assertAlmostEqual(revenue_ac, 0.75, places=2)
+        self.assertAlmostEqual(chain["attribution_confidence"], revenue_ac)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -184,8 +184,17 @@ def build_kpi_story(results_by_kpi: Mapping[str, dict[str, Any]], graph: dict[st
         ranked = [] if stage_id == graph["stages"][-1]["id"] and root_stage != stage_id else [
             (driver, kpi_id) for driver in (((results_by_kpi.get(kpi_id) or {}).get("driver_analysis") or {}).get("ranked_drivers") or [])]
         if stage_id == root_stage and not any((_number(d.get("attribution_confidence")) or 0) >= 0.35 for d, _ in ranked):
-            ranked = [(driver, downstream) for downstream in (order_id, units_id, revenue_id)
-                      for driver in (((results_by_kpi.get(downstream) or {}).get("driver_analysis") or {}).get("ranked_drivers") or [])]
+            # Borrowed drivers: per driver, use the downstream KPI whose attribution
+            # has the highest AC (ties keep the earlier KPI), not the first found.
+            borrowed: dict[str, tuple[dict[str, Any], str]] = {}
+            for downstream in (order_id, units_id, revenue_id):
+                for driver in (((results_by_kpi.get(downstream) or {}).get("driver_analysis") or {}).get("ranked_drivers") or []):
+                    key = driver.get("driver_id")
+                    ac = _number(driver.get("attribution_confidence")) or 0.0
+                    current = borrowed.get(key)
+                    if current is None or ac > (_number(current[0].get("attribution_confidence")) or 0.0):
+                        borrowed[key] = (driver, downstream)
+            ranked = list(borrowed.values())
         for driver, evidence_kpi in ranked:
             driver_id = driver.get("driver_id")
             ac = _number(driver.get("attribution_confidence"))
