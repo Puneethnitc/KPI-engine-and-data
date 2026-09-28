@@ -25,7 +25,7 @@ export function formatKpiValue(value: number | null | undefined, unit: string, s
 
 export function waterfallScale(expected: number | null | undefined, actual: number | null | undefined, drivers: WaterfallInput[] | null | undefined, residual: number | null | undefined) {
   if (expected == null || actual == null || !Number.isFinite(expected) || !Number.isFinite(actual)) return null
-  const bars: WaterfallBar[] = [{ label: 'Expected', value: expected, start: expected, end: expected, kind: 'total' }]
+  const bars: WaterfallBar[] = [{ label: 'Expected', value: expected, start: 0, end: expected, kind: 'total' }]
   let cursor = expected
   for (const driver of drivers ?? []) {
     if (!Number.isFinite(driver.value)) continue
@@ -35,14 +35,14 @@ export function waterfallScale(expected: number | null | undefined, actual: numb
   }
   const remainder = residual != null && Number.isFinite(residual) ? residual : actual - cursor
   bars.push({ label: 'Unexplained', value: remainder, start: cursor, end: cursor + remainder, kind: 'residual' })
-  bars.push({ label: 'Actual', value: actual, start: actual, end: actual, kind: 'total' })
-  const values = [expected, actual, ...bars.flatMap(bar => [bar.start, bar.end])]
+  bars.push({ label: 'Actual', value: actual, start: 0, end: actual, kind: 'total' })
+  const values = [0, ...bars.flatMap(bar => [bar.start, bar.end])]
   const lowest = Math.min(...values)
   const highest = Math.max(...values)
-  const spread = highest - lowest || Math.max(Math.abs(expected), 1) * 0.1
-  const margin = spread * 0.18
-  const min = lowest - margin
-  const max = highest + margin
+  const spread = highest - lowest || Math.max(Math.abs(expected), 1)
+  const margin = spread * 0.08
+  const min = lowest < 0 ? lowest - margin : 0
+  const max = highest > 0 ? highest + margin : lowest === 0 ? 1 : 0
   const ticks = Array.from({ length: 5 }, (_, index) => min + (max - min) * index / 4)
   return { bars, min, max, ticks, reconciliationGap: actual - (cursor + remainder) }
 }

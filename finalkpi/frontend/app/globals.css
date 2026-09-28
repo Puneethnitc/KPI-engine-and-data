@@ -303,6 +303,11 @@ td strong, td:nth-child(2) { color: var(--text); }
 .driver-waterfall { padding: 8px 4px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
 .driver-waterfall-scroll { width: 100%; overflow-x: auto; }
 .driver-waterfall svg { display: block; max-width: none; }
+.waterfall-step-detail { border-top: 1px solid var(--line); padding-top: 8px; }
+.waterfall-step-detail strong { display: block; margin-left: 8px; color: var(--muted); font-size: 11px; }
+.waterfall-step-insets { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; }
+.waterfall-step-inset { border: 1px solid var(--line); border-radius: 6px; padding: 5px; }
+.waterfall-step-inset small { display: block; color: var(--muted); font-size: 11px; }
 .waterfall-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
 .waterfall-connector { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .waterfall-axis-label { fill: var(--muted); font-size: 10px; }
@@ -332,7 +337,6 @@ td strong, td:nth-child(2) { color: var(--text); }
 .driver-role.main-cause { color: var(--green); background: color-mix(in srgb, var(--green) 14%, var(--panel)); }
 .driver-role.offsetting { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, var(--panel)); }
 .funnel-bridge-card { margin-top: 16px; padding: 21px; }
-.funnel-bridge-card .driver-waterfall svg { width: min(100%, 740px); }
 @media (max-width: 420px) { .driver-overview { padding: 15px; } .driver-overview-heading { align-items: flex-start; } .driver-overview-actions { flex-wrap: wrap; justify-content: flex-end; } .driver-main-banner strong { font-size: 15px; } }
 
 .section-heading { justify-content: space-between; gap: 18px; margin: 32px 0 13px; }

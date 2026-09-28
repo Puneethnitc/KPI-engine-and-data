@@ -774,7 +774,7 @@ export default function Page() {
           </div>
         )}
 
-            <DriverAnalysisOverview analysis={result?.driver_analysis} profile={result?.confidence_profile} causalTest={result?.causal_verification} expected={movement?.expected_value} actual={movement?.actual_value} unit={kpi.unit} displayNames={overviewDriverNames} />
+            <DriverAnalysisOverview analysis={result?.driver_analysis} profile={result?.confidence_profile} causalTest={result?.causal_verification} expected={movement?.expected_value} actual={movement?.actual_value} isMaterial={movement?.is_material} unit={kpi.unit} displayNames={overviewDriverNames} />
             {result?.funnel_bridge && <FunnelBridgeCard bridge={result.funnel_bridge} status={result.funnel_bridge_status} expected={movement?.expected_value} actual={movement?.actual_value} unit={kpi.unit} />}
 
         <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Executive conclusion</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{result?.narrative || 'Narrative is not available for this run.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article>

@@ -25,7 +25,7 @@ export function driverRows(analysis: DriverAnalysis | null | undefined, profile:
   const main = [...ranked].sort((a, b) =>
     (b.confidence?.attribution_confidence ?? b.driver.attribution_confidence ?? -1) -
     (a.confidence?.attribution_confidence ?? a.driver.attribution_confidence ?? -1))[0]
-  const confidentMain = main && (main.confidence?.attribution_confidence ?? main.driver.attribution_confidence ?? 0) >= 0.6 ? main : null
+  const confidentMain = main && (main.confidence?.attribution_confidence ?? main.driver.attribution_confidence ?? 0) >= 0.35 ? main : null
   const ordered = [
     ...(confidentMain ? [confidentMain] : []),
     ...ranked.filter(item => item !== confidentMain && !item.driver.offsetting).sort((a, b) => a.driver.rank - b.driver.rank),
