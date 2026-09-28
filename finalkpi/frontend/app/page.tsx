@@ -498,7 +498,7 @@ export default function Page() {
     <main className="workspace" data-ai={isAssistantOpen ? 'open' : assistantMode}>
       <section className="dashboard-column">
         <div className="page-heading">
-          <div><span className="eyebrow"><LayoutDashboard size={14} /> {persona === 'CFO' ? 'Financial reviewer workspace' : 'Marketing manager workspace'}</span><h1>Performance overview</h1><p>What changed, what may explain it, and what to verify next.</p></div>
+          <div><span className="eyebrow"><LayoutDashboard size={14} /> {persona === 'CFO' ? 'Financial reviewer workspace' : persona === 'regional_manager_north' ? 'Regional manager (North) workspace' : 'Marketing manager workspace'}</span><h1>Performance overview</h1><p>What changed, what may explain it, and what to verify next.</p></div>
           <div className="filter-row" style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
             <div style={{ width: '200px' }}>
               <CustomSelect label="Demo scenario" ariaLabel="Demo scenario" value={scenarioId} onChange={selectScenario} options={scenarioOptions} />
@@ -601,7 +601,7 @@ export default function Page() {
         )}
 
         {marketingBrief && result?.verdict !== 'ACCESS_DENIED' && <section className="marketing-brief" aria-labelledby="briefing-title">
-          <div className="briefing-lead"><div><span className="eyebrow">{persona === 'CFO' ? 'Financial reviewer briefing' : 'Marketing manager briefing'}</span><h2 id="briefing-title">What you need to know today</h2><p>{marketingBrief.summary}</p><small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
+          <div className="briefing-lead"><div><span className="eyebrow">{persona === 'CFO' ? 'Financial reviewer briefing' : persona === 'regional_manager_north' ? 'Regional manager (North) briefing' : 'Marketing manager briefing'}</span><h2 id="briefing-title">What you need to know today</h2><p>{marketingBrief.summary}</p><small>{marketingBrief.first_weak_stage ? `First observed weak funnel stage: ${marketingBrief.first_weak_stage.label}${marketingBrief.first_weak_stage.material ? ' · material' : ''}` : 'No first weak stage established'}</small></div><span className="evidence-pill">{region} · {category} · {date}</span></div>
           <div className="funnel-strip" aria-label="Connected marketing funnel">{marketingBrief.funnel.map((stage, index) => {
             const unit = registeredKpis.find(item => item.kpi_id === stage.kpi_id)?.unit ?? 'count'
             return <article className={`funnel-stage ${stage.direction}`} key={stage.kpi_id}><small>{stage.stage}</small><strong>{formatValue(stage.actual, unit)}</strong><span>{formatDelta(stage.delta, unit)} · {stage.material ? 'material' : stage.status === 'OK' ? 'not material' : titleCase(stage.status)}</span><b>{stage.label}</b>{index < marketingBrief.funnel.length - 1 && <ArrowRight className="funnel-arrow" size={15} />}</article>
@@ -798,7 +798,7 @@ export default function Page() {
 
         <ActionWorkspace actions={result?.decision_cards} persona={persona} verdict={result?.verdict} onAsk={recommendation => void askQuestion(`What evidence supports this recommendation: ${recommendation}`)} />
 
-        <footer className="source-footer"><span>Run {result?.run_id ?? '—'}</span><span>Source status: {titleCase(result?.reconciliation_verdict?.status)}</span><span>Persona: {persona === 'CFO' ? 'CFO' : 'Marketing manager'}</span></footer>
+        <footer className="source-footer"><span>Run {result?.run_id ?? '—'}</span><span>Source status: {titleCase(result?.reconciliation_verdict?.status)}</span><span>Persona: {persona === 'CFO' ? 'CFO' : persona === 'regional_manager_north' ? 'Regional manager (North)' : 'Marketing manager'}</span></footer>
           </>
         )}
       </section>

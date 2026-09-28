@@ -1,14 +1,37 @@
-# Stage 3 (F-R2/F-R3): driver_analysis.ranked_drivers now carries a statistical
-# contribution/explained_share per driver (kpi_engine/attribution.py). This
-# module deliberately still does not read them into expected_impact: a
-# regression contribution is not a validated causal or monetary estimate, and
-# turning it into one here would be exactly the kind of overclaim this module
-# exists to prevent. expected_impact stays NOT_ESTIMATED until a validated
-# deterministic method is configured.
+# Stage 3 (F-R2/F-R3): driver_analysis.ranked_drivers carries a statistical
+# contribution/explained_share per driver (kpi_engine/attribution.py).
+# Stage 8-lite: that contribution is now read into expected_impact, but only
+# under ATTRIBUTION_CONTRIBUTION_PRO_RATA_7D -- a declared arithmetic projection
+# of the driver's own attributed contribution over a fixed 7-day horizon, with
+# the regression's beta interval carried through as a range. It is labelled as a
+# projection, never as a measured or promised outcome, and it is withheld
+# entirely unless the driver is strong enough to act on (AC >= 0.6) and the run
+# as a whole is not in a weak-confidence state. A contextual driver is advisory
+# and is never given a number, because the engine cannot change the weather.
 """Deterministic, evidence-limited action recommendations."""
 
 from dataclasses import asdict, dataclass
 from typing import Any
+
+from kpi_engine.narrative import lever_family
+from kpi_engine.personas import PersonaConfig, load_persona
+
+# Stage 8-lite: at most three cards, strongest Attribution Confidence first.
+MAX_CARDS = 3
+# A driver at or above AC_PROPOSE may be acted on (after a causal test in the
+# strongest case); between AC_CHECK and AC_PROPOSE it earns a next check only.
+AC_PROPOSE = 0.6
+AC_CHECK = 0.35
+# The impact projection horizon. Fixed and declared, not tuned per KPI.
+IMPACT_HORIZON_DAYS = 7
+IMPACT_METHOD = "ATTRIBUTION_CONTRIBUTION_PRO_RATA_7D"
+# Overall confidence states in which no driver may be turned into an action,
+# whatever its own Attribution Confidence says. A driver can be locally
+# confident inside a run the engine as a whole does not stand behind.
+WEAK_OVERALL_STATUSES = frozenset({"LOW", "INSUFFICIENT_EVIDENCE", "CONFLICTING_EVIDENCE"})
+# Card kinds that ask for a change, i.e. the ones that need someone's approval.
+ACTION_KINDS = frozenset({"ACTION_PROPOSAL", "VERIFY_THEN_ACT"})
+KIND_STRENGTH = {"ADVISORY": 0, "NEXT_CHECK": 1, "VERIFY_THEN_ACT": 2, "ACTION_PROPOSAL": 3}
 
 
 @dataclass(frozen=True)
@@ -40,6 +63,17 @@ class DecisionCard:
     stop_conditions: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     evidence_paths: tuple[str, ...] = ()
+    # Stage 8-lite: who is reading this card, how confident the engine is in
+    # the driver behind it, and the projected impact. The range is the beta
+    # confidence interval of the same projection; both bounds are None when the
+    # fit produced no interval (the ridge path does not).
+    persona: str = "default"
+    attribution_confidence: float | None = None
+    attribution_band: str | None = None
+    attribution_label: str | None = None
+    expected_impact_low: float | None = None
+    expected_impact_high: float | None = None
+    approval_threshold: float | None = None
 
 
 class ActionRecommendationEngine:
@@ -129,15 +163,135 @@ class ActionRecommendationEngine:
         analysis = result.get("driver_analysis")
         return list(analysis.get("ranked_drivers") or []) if isinstance(analysis, dict) else list(result.get("correlational_candidates") or [])
 
+    # ------------------------------------------------------------------
+    # Stage 8-lite helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _attribution_confidence(driver: dict[str, Any]) -> float | None:
+        """The driver's Stage 7 Attribution Confidence, or None if unassessed."""
+        value = driver.get("attribution_confidence")
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None
+        return float(value)
+
+    @staticmethod
+    def _kpi_unit(result: dict[str, Any]) -> str | None:
+        thresholds = ((result.get("contract_snapshot") or {}).get("materiality") or {}).get("business_thresholds") or {}
+        unit = thresholds.get("unit")
+        return unit if isinstance(unit, str) and unit.strip() else None
+
     @classmethod
-    def _build_card(cls, result: dict[str, Any], *, kind: str, driver: dict[str, Any] | None,
-                    lever: str, recommendation: str, fallback_owner: str, owner_source: str,
-                    decision_right: str, approval_required: bool, evidence_paths: tuple[str, ...],
-                    limitations: tuple[str, ...] = ()) -> dict[str, Any]:
+    def _impact_estimate(cls, result: dict[str, Any], driver: dict[str, Any]) -> dict[str, Any]:
+        """Project the driver's attributed contribution over the fixed horizon.
+
+        ``-contribution * 7`` in the KPI's declared unit: reversing a driver
+        that moved the KPI by `contribution` is taken to move it back by the
+        same amount for one horizon of days. The bounds are the regression's own
+        beta interval carried through the identical arithmetic, so the range can
+        only ever be as wide as the fit is uncertain. A driver with no numeric
+        contribution gets no estimate at all rather than a guessed one.
+        """
+        contribution = driver.get("contribution")
+        if not isinstance(contribution, (int, float)) or isinstance(contribution, bool):
+            return {
+                "expected_impact": None, "expected_impact_unit": None,
+                "impact_method": "NOT_ESTIMATED",
+                "impact_explanation": (
+                    "Impact is not estimated: this driver carries no regression contribution, "
+                    "and an association is never converted into business impact."
+                ),
+                "expected_impact_low": None, "expected_impact_high": None,
+            }
+        interval = driver.get("contribution_interval") or []
+        bounds = [
+            float(value) for value in interval[:2]
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        ]
+        low = round(-bounds[1] * IMPACT_HORIZON_DAYS, 2) if len(bounds) == 2 else None
+        high = round(-bounds[0] * IMPACT_HORIZON_DAYS, 2) if len(bounds) == 2 else None
+        if low is not None and high is not None and low > high:
+            low, high = high, low
+        unit = cls._kpi_unit(result)
+        explanation = (
+            f"Projected, not measured: the driver's attributed contribution for the target day "
+            f"({contribution}) reversed over {IMPACT_HORIZON_DAYS} days, in {unit or 'the KPI unit'}. "
+            f"Method {IMPACT_METHOD}: a fixed pro-rata extension of one day's statistical "
+            "attribution, not a measured outcome and not a guaranteed return."
+        )
+        if low is None or high is None:
+            explanation += " No range is shown because the regression produced no beta confidence interval for this driver."
+        return {
+            "expected_impact": round(-float(contribution) * IMPACT_HORIZON_DAYS, 2),
+            "expected_impact_unit": unit,
+            "impact_method": IMPACT_METHOD,
+            "impact_explanation": explanation,
+            "expected_impact_low": low,
+            "expected_impact_high": high,
+        }
+
+    @classmethod
+    def _card_kind(
+        cls, result: dict[str, Any], driver: dict[str, Any], confidence: float | None,
+    ) -> str:
+        """Pick the card kind from the driver's AC, its lever and the run's state.
+
+        ACTION_PROPOSAL needs both gates at once: the driver's own AC at or above
+        AC_PROPOSE and a causal test on *this* driver that came back
+        SUPPORTED_CONDITIONAL. A contextual driver is always ADVISORY, because
+        the engine cannot propose changing the weather. Finally, a run the engine
+        as a whole rates weak cannot produce an action however confident the
+        driver looks, so anything stronger than NEXT_CHECK is downgraded.
+        """
+        if lever_family(driver.get("driver_id")) == "contextual" or (
+            driver.get("controllability") or ""
+        ) == "not_controllable":
+            return "ADVISORY"
+        if confidence is None or confidence < AC_CHECK:
+            return "NEXT_CHECK"
+        if confidence < AC_PROPOSE:
+            return "NEXT_CHECK"
+        verification = result.get("causal_verification") or {}
+        kind = "ACTION_PROPOSAL" if (
+            verification.get("verdict") == "SUPPORTED_CONDITIONAL"
+            and verification.get("driver_id") == driver.get("driver_id")
+        ) else "VERIFY_THEN_ACT"
+        if cls._confidence_status(result) in WEAK_OVERALL_STATUSES:
+            return "NEXT_CHECK"
+        return kind
+
+    @classmethod
+    def _recommendation_text(cls, kind: str, lever_entry: tuple[str, ...]) -> str:
+        lever, _owner, check, proposal, _right = lever_entry
+        return proposal if kind in ACTION_KINDS else check
+
+    # ------------------------------------------------------------------
+    # Card construction
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _build_card(
+        cls, result: dict[str, Any], *, kind: str, driver: dict[str, Any] | None,
+        lever: str, recommendation: str, fallback_owner: str, owner_source: str,
+        decision_right: str, approval_required: bool, evidence_paths: tuple[str, ...],
+        limitations: tuple[str, ...] = (), persona: PersonaConfig | None = None,
+        confidence: float | None = None,
+    ) -> dict[str, Any]:
         driver_id = driver.get("driver_id") if driver else None
         spec = cls._driver_specs(result).get(driver_id, {})
-        owner = spec.get("owner") or fallback_owner
-        resolved_owner_source = "contract.candidate_drivers.owner" if spec.get("owner") else owner_source
+        # Owner precedence: the governed KPI contract first, then the persona's
+        # owner for this lever family, then the action catalog's fallback. The
+        # persona never overrides a governed owner; it only fills a gap.
+        family = lever_family(driver_id)
+        persona = persona or load_persona(result.get("persona"))
+        persona_owner = persona.owner_for(family)
+        owner = spec.get("owner") or persona_owner or fallback_owner
+        if spec.get("owner"):
+            resolved_owner_source = "contract.candidate_drivers.owner"
+        elif persona_owner and persona_owner != fallback_owner:
+            resolved_owner_source = "persona.lever_owners"
+        else:
+            resolved_owner_source = owner_source
         rank = driver.get("rank") if driver else None
         source_id = (driver or {}).get("source_id") or spec.get("source_id") or spec.get("source")
         period = result.get("target_date") or result.get("as_of")
@@ -158,6 +312,43 @@ class ActionRecommendationEngine:
         limits = (*limitations, "Expected impact is not estimated without a validated deterministic method.")
         if kind == "ACTION_PROPOSAL":
             limits = (*limits, "Conditional observational support is not proof of causality.")
+        # Impact is only projected for a card that asks for a change. A check, an
+        # advisory or a downgraded card states no number, because the engine is
+        # not yet asserting that the lever will move the KPI.
+        impact = (
+            cls._impact_estimate(result, driver)
+            if kind in ACTION_KINDS and driver is not None
+            else {
+                "expected_impact": None, "expected_impact_unit": None,
+                "impact_method": "NOT_ESTIMATED",
+                "impact_explanation": (
+                    "Impact is not estimated: this card does not propose a change, and the "
+                    "driver's attribution has not cleared the threshold for a projection."
+                ),
+                "expected_impact_low": None, "expected_impact_high": None,
+            }
+        )
+        if impact["expected_impact"] is not None:
+            limits = tuple(
+                limitation for limitation in limits
+                if limitation != "Expected impact is not estimated without a validated deterministic method."
+            ) + (
+                f"Expected impact is a {IMPACT_HORIZON_DAYS}-day pro-rata projection of a statistical "
+                "attribution, not a measured outcome.",
+            )
+        # Approval. A card that proposes a change always needs a sign-off; the
+        # persona's approval_threshold decides whether this role may give it or
+        # whether the proposal is escalated above the role.
+        threshold = persona.approval_threshold
+        escalation = ""
+        if approval_required and confidence is not None and confidence < threshold:
+            escalation = (
+                f" Attribution Confidence {confidence:.0%} is below this role's approval threshold "
+                f"{threshold:.0%}, so the proposal is escalated rather than self-approved."
+            )
+            limits = (*limits, escalation.strip())
+        if kind == "ADVISORY":
+            limits = (*limits, "Contextual drivers are not controllable; this card informs planning and proposes no change.")
         return asdict(DecisionCard(
             action_id=f"ACTION_{driver_id or 'EVIDENCE_COLLECTION'}_{kind}", kind=kind,
             status="AWAITING_APPROVAL" if approval_required else "AWAITING_REVIEW",
@@ -166,15 +357,139 @@ class ActionRecommendationEngine:
             controllability=(driver or {}).get("controllability") or spec.get("controllability", "contextual"),
             lever=lever, recommendation=recommendation, owner=owner, owner_source=resolved_owner_source,
             decision_right=decision_right, approval_required=approval_required,
+            expected_impact=impact["expected_impact"],
+            expected_impact_unit=impact["expected_impact_unit"],
+            impact_method=impact["impact_method"],
+            impact_explanation=impact["impact_explanation"],
             evidence_status=cls._evidence_status(result), confidence_status=cls._confidence_status(result),
             evidence_references=references, constraints=("Association is diagnostic only; no causal or monetary impact is established.",),
             monitoring_plan=monitor, success_metric=f"Verify the declared {spec.get('display_name') or lever} signal before any rollout.",
             review_window="Review after the next governed observation window and source validation.",
             stop_conditions=stops, limitations=limits, evidence_paths=evidence_paths,
+            persona=persona.persona_id,
+            attribution_confidence=confidence,
+            attribution_band=(driver or {}).get("band"),
+            attribution_label=(driver or {}).get("label"),
+            expected_impact_low=impact["expected_impact_low"],
+            expected_impact_high=impact["expected_impact_high"],
+            approval_threshold=threshold,
         ))
 
     @classmethod
+    def _persona_cards(
+        cls, result: dict[str, Any], ranked: list[dict[str, Any]],
+        persona: PersonaConfig, verification: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Up to MAX_CARDS cards, strongest Attribution Confidence first.
+
+        A lever family the persona may not act on is dropped, not reworded: the
+        persona config decides which levers this role is offered, and dropping a
+        card changes no number or driver in it. If that leaves nothing, the
+        reviewer still gets the evidence-collection check, which is honest about
+        there being no lever for this role yet.
+        """
+        scored = [
+            (cls._attribution_confidence(driver) or 0.0, driver)
+            for driver in ranked
+            if driver.get("driver_id") in cls.LEVERS
+            and lever_family(driver.get("driver_id")) in persona.allowed_action_levers
+            and not (
+                verification.get("verdict") == "REJECTED"
+                and driver.get("driver_id") == verification.get("driver_id")
+            )
+        ]
+        if not scored:
+            return [cls._evidence_collection_card(result, persona)]
+        scored.sort(key=lambda entry: (
+            -entry[0],
+            entry[1].get("rank") if isinstance(entry[1].get("rank"), int) else 10 ** 6,
+        ))
+        cards = []
+        for confidence, driver in scored[:MAX_CARDS]:
+            kind = cls._card_kind(result, driver, confidence)
+            lever_entry = cls.LEVERS[driver["driver_id"]]
+            family = lever_family(driver.get("driver_id"))
+            cards.append(cls._build_card(
+                result, kind=kind, driver=driver,
+                lever=lever_entry[0], recommendation=cls._recommendation_text(kind, lever_entry),
+                fallback_owner=lever_entry[1], owner_source="validated_action_catalog",
+                decision_right=lever_entry[4] if kind in ACTION_KINDS else "Driver verification review",
+                approval_required=kind in ACTION_KINDS,
+                evidence_paths=("driver_analysis.ranked_drivers",),
+                limitations=("The driver ranking is statistical; each card still needs its own verification before any change.",),
+                persona=persona, confidence=confidence,
+            ) if family != "contextual" else cls._build_card(
+                result, kind=kind, driver=driver,
+                lever=lever_entry[0], recommendation=lever_entry[2],
+                fallback_owner=lever_entry[1], owner_source="validated_action_catalog",
+                decision_right="Merchandising plan review", approval_required=False,
+                evidence_paths=("driver_analysis.ranked_drivers",),
+                limitations=("Contextual drivers cannot be changed by a decision; this is awareness only.",),
+                persona=persona, confidence=confidence,
+            ))
+        return cards
+
+    @classmethod
+    def _evidence_collection_card(
+        cls, result: dict[str, Any], persona: PersonaConfig,
+    ) -> dict[str, Any]:
+        return cls._build_card(result, kind="NEXT_CHECK", driver=None, lever="Evidence collection",
+            recommendation="Review the event timeline and identify a valid comparison group before proposing action.",
+            fallback_owner=persona.default_owner, owner_source="validated_evidence_collection_rule",
+            decision_right=persona.decision_right, approval_required=False,
+            evidence_paths=("causal_verification",), persona=persona)
+
+    @classmethod
+    def _legacy_cards(
+        cls, result: dict[str, Any], ranked: list[dict[str, Any]], persona: PersonaConfig,
+        verification: dict[str, Any], verified_driver: str | None,
+    ) -> list[dict[str, Any]]:
+        """The pre-Stage-8 single card, used when no driver carries an AC.
+
+        A hand-built or projected payload may reach the action engine without
+        the Stage 7 Attribution Confidence fields, in which case there is nothing
+        to rank or threshold by and the older, more conservative single-card
+        rules are used unchanged. The one addition is the persona: the owner
+        falls back to the persona config and the approval threshold is recorded.
+        """
+        confidence_status = cls._confidence_status(result)
+        if verified_driver in cls.LEVERS and verified_driver in {item.get("driver_id") for item in ranked}:
+            driver = next(item for item in ranked if item.get("driver_id") == verified_driver)
+            lever, fallback_owner, check, proposal, decision_right = cls.LEVERS[verified_driver]
+            if verification.get("verdict") == "SUPPORTED_CONDITIONAL":
+                if confidence_status in WEAK_OVERALL_STATUSES:
+                    return [cls._build_card(result, kind="NEXT_CHECK", driver=driver, lever=lever,
+                        recommendation=check, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
+                        decision_right=decision_right, approval_required=False,
+                        evidence_paths=("causal_verification.verdict", "causal_verification.driver_id"),
+                        limitations=("Confidence is insufficient for an operational proposal.",), persona=persona)]
+                return [cls._build_card(result, kind="ACTION_PROPOSAL", driver=driver, lever=lever,
+                    recommendation=proposal, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
+                    decision_right=decision_right, approval_required=True,
+                    evidence_paths=("causal_verification.verdict", "causal_verification.driver_id"),
+                    persona=persona)]
+            if verification.get("verdict") in {"INCONCLUSIVE", "UNTESTABLE"}:
+                return [cls._build_card(result, kind="NEXT_CHECK", driver=driver, lever=lever,
+                    recommendation=check, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
+                    decision_right=decision_right, approval_required=False,
+                    evidence_paths=("causal_verification.verdict", "causal_verification.driver_id"),
+                    persona=persona)]
+        if ranked:
+            candidate = ranked[0]
+            driver_id = candidate.get("driver_id")
+            if driver_id in cls.LEVERS and not (verification.get("verdict") == "REJECTED" and driver_id == verified_driver):
+                lever, fallback_owner, check, _, decision_right = cls.LEVERS[driver_id]
+                return [cls._build_card(result, kind="NEXT_CHECK", driver=candidate, lever=lever,
+                    recommendation=check, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
+                    decision_right=decision_right, approval_required=False,
+                    evidence_paths=("driver_analysis.ranked_drivers", "correlational_candidates"),
+                    limitations=("The ranked relationship is associative and requires verification before action.",),
+                    persona=persona)]
+        return [cls._evidence_collection_card(result, persona)]
+
+    @classmethod
     def recommend(cls, result: dict[str, Any]) -> list[dict[str, Any]]:
+        persona = load_persona(result.get("persona"))
         if result.get("verdict") == "ACCESS_DENIED":
             return []
         if cls._blocked(result):
@@ -183,10 +498,10 @@ class ActionRecommendationEngine:
                 fallback_owner="finance_owner", owner_source="validated_source_integrity_rule",
                 decision_right="Source reconciliation review", approval_required=False,
                 evidence_paths=("reconciliation_verdict.status",),
-                limitations=("Contradictory evidence blocks all operational action proposals.",))]
+                limitations=("Contradictory evidence blocks all operational action proposals.",),
+                persona=persona)]
         if result.get("verdict") not in {"MATERIAL_CAUSE_UNVERIFIED", "EVENT_ASSESSED_CAUSE_UNVERIFIED"}:
             return []
-        confidence_status = cls._confidence_status(result)
         verification = result.get("causal_verification") or {}
         verified_driver = verification.get("driver_id")
         analysis = result.get("driver_analysis")
@@ -197,36 +512,6 @@ class ActionRecommendationEngine:
         if analysis is None and verification.get("verdict") == "SUPPORTED_CONDITIONAL" and verified_driver in cls.LEVERS:
             ranked.append({"driver_id": verified_driver, "claim_type": "CONDITIONAL_CAUSAL_SUPPORT"})
             ranked_ids.add(verified_driver)
-        if verified_driver in cls.LEVERS and verified_driver in ranked_ids:
-            driver = next(item for item in ranked if item.get("driver_id") == verified_driver)
-            lever, fallback_owner, check, proposal, decision_right = cls.LEVERS[verified_driver]
-            if verification.get("verdict") == "SUPPORTED_CONDITIONAL":
-                if confidence_status in {"LOW", "INSUFFICIENT_EVIDENCE", "CONFLICTING_EVIDENCE"}:
-                    return [cls._build_card(result, kind="NEXT_CHECK", driver=driver, lever=lever,
-                        recommendation=check, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
-                        decision_right=decision_right, approval_required=False,
-                        evidence_paths=("causal_verification.verdict", "causal_verification.driver_id"),
-                        limitations=("Confidence is insufficient for an operational proposal.",))]
-                return [cls._build_card(result, kind="ACTION_PROPOSAL", driver=driver, lever=lever,
-                    recommendation=proposal, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
-                    decision_right=decision_right, approval_required=True,
-                    evidence_paths=("causal_verification.verdict", "causal_verification.driver_id"))]
-            if verification.get("verdict") in {"INCONCLUSIVE", "UNTESTABLE"}:
-                return [cls._build_card(result, kind="NEXT_CHECK", driver=driver, lever=lever,
-                    recommendation=check, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
-                    decision_right=decision_right, approval_required=False,
-                    evidence_paths=("causal_verification.verdict", "causal_verification.driver_id"))]
-        if ranked:
-            candidate = ranked[0]
-            driver_id = candidate.get("driver_id")
-            if driver_id in cls.LEVERS and not (verification.get("verdict") == "REJECTED" and driver_id == verified_driver):
-                lever, fallback_owner, check, _, decision_right = cls.LEVERS[driver_id]
-                return [cls._build_card(result, kind="NEXT_CHECK", driver=candidate, lever=lever,
-                    recommendation=check, fallback_owner=fallback_owner, owner_source="validated_action_catalog",
-                    decision_right=decision_right, approval_required=False,
-                    evidence_paths=("driver_analysis.ranked_drivers", "correlational_candidates"),
-                    limitations=("The ranked relationship is associative and requires verification before action.",))]
-        return [cls._build_card(result, kind="NEXT_CHECK", driver=None, lever="Evidence collection",
-            recommendation="Review the event timeline and identify a valid comparison group before proposing action.",
-            fallback_owner="analyst", owner_source="validated_evidence_collection_rule",
-            decision_right="Evidence review", approval_required=False, evidence_paths=("causal_verification",))]
+        if not any(cls._attribution_confidence(driver) is not None for driver in ranked):
+            return cls._legacy_cards(result, ranked, persona, verification, verified_driver)
+        return cls._persona_cards(result, ranked, persona, verification)
