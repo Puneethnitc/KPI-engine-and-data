@@ -24,6 +24,7 @@ import { buildDiagnosisRequest, parseScenarioExecution, mergeScopeOption, isTren
 import ConfidenceWorkspace from '../components/confidence-workspace'
 import type { ConfidenceProfile } from '../lib/confidence-profile'
 import ProcessingTransparencyView from '../components/processing-transparency'
+import KpiFlow, { type KpiStory } from '../components/kpi-flow'
 import type { ProcessingTransparency } from '../lib/processing-transparency'
 
 type Movement = {
@@ -240,6 +241,7 @@ export default function Page() {
   const [results, setResults] = useState<Record<string, Result>>({})
   const [evidenceData, setEvidenceData] = useState<EvidenceSummary | null>(null)
   const [marketingBrief, setMarketingBrief] = useState<MarketingBrief | null>(null)
+  const [kpiStory, setKpiStory] = useState<KpiStory | null>(null)
   const [scenarioHistory, setScenarioHistory] = useState<{ baseline_count?: number, required_observation_count?: number } | null>(null)
   const [movements, setMovements] = useState<ScannedMovement[]>([])
   const [movementsLoading, setMovementsLoading] = useState(false)
@@ -322,6 +324,7 @@ export default function Page() {
     setLoading(true)
     setResults({})
     setMarketingBrief(null)
+    setKpiStory(null)
     pendingMovement.current = target.kpiId
     diagnosisRequest.current += 1
     setMovementRunToken(value => value + 1)
@@ -334,6 +337,7 @@ export default function Page() {
       setLoading(false)
       setResults({})
       setMarketingBrief(null)
+      setKpiStory(null)
       return
     }
     const requestId = ++diagnosisRequest.current
@@ -342,6 +346,7 @@ export default function Page() {
     setAccessDeniedMessage('')
     setResults({})
     setMarketingBrief(null)
+    setKpiStory(null)
     setScenarioHistory(null)
     setScenarioMeta(null)
 
@@ -380,6 +385,7 @@ export default function Page() {
            const payload = execution.payload!
            setResults(payload.results as Record<string, Result> ?? {})
            setMarketingBrief(payload.marketing_brief as MarketingBrief ?? null)
+           setKpiStory(payload.kpi_story as KpiStory ?? null)
            setScenarioMeta(buildScenarioMetadata(payload))
            setMessages([])
            setConversationId(undefined)
@@ -406,6 +412,7 @@ export default function Page() {
 
       setResults(payload.results as Record<string, Result> ?? {})
       setMarketingBrief(payload.marketing_brief as MarketingBrief ?? null)
+      setKpiStory(payload.kpi_story as KpiStory ?? null)
       setScenarioHistory(payload.history as any ?? null)
       if (scenarioId) {
         setScenarioMeta(buildScenarioMetadata(payload))
@@ -455,6 +462,7 @@ export default function Page() {
       .then(payload => {
         const run = payload.result ?? payload
         setResults(current => ({ ...current, [run.kpi_id]: run }))
+        setKpiStory(null)
         setSelected(run.kpi_id as KpiId)
         if (new URLSearchParams(window.location.search).get('assistant') === 'open') setAssistantMode('open')
       })
@@ -684,6 +692,8 @@ export default function Page() {
           {marketingBrief.uncertainty.length > 0 && <details className="brief-limits"><summary>Evidence limitations ({marketingBrief.uncertainty.length})</summary><p>{marketingBrief.uncertainty.map(statusLabelForBrief).join(' · ')}</p></details>}
           <details className="brief-method"><summary>Method and evidence details</summary><p>{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</p><small>Overall evidence: {result?.confidence_profile?.overall.status ?? 'PROFILE_NOT_SAVED'} · Causal verification: {result?.causal_verdict ?? 'UNTESTABLE'} · Engine verdict: {result?.verdict}</small></details>
         </section>}
+
+        {!loading && result?.verdict !== 'ACCESS_DENIED' && <KpiFlow story={kpiStory} onSelect={kpiId => { setSelected(kpiId); detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />}
 
         <section ref={detailRef} className="kpi-selector supporting-kpis" aria-label="Registered KPIs">
           {registeredKpis.map(item => {

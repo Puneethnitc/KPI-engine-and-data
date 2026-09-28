@@ -1,0 +1,11 @@
+version: 1
+revenue_kpi: net_sales_revenue
+relationships:
+  orders: [traffic_total, conversion_rate]
+  units_sold: [orders, units_per_order]
+  net_sales_revenue: [units_sold, revenue_per_unit]
+stages:
+  - {id: traffic, kpi_id: traffic_total, label: Traffic}
+  - {id: conversion, kpi_id: conversion_rate, label: Conversion}
+  - {id: units, kpi_id: units_sold, label: Units per order}
+  - {id: basket, kpi_id: net_sales_revenue, label: Revenue per unit}

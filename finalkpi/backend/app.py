@@ -14,6 +14,7 @@ from backend.rag_pipeline import DynamicRAGPipeline
 from backend.query_router import DynamicQueryRouter
 from backend.retrieval import ContextBuilder
 from backend.schemas import ChatRequest as RagChatRequest
+from kpi_engine.kpi_graph import build_kpi_story
 from backend.service import DEMO_IDENTITY_MODE, authorize_scope, build_persona_brief, diagnose_scope, get_available_filters, get_authorized_candidate_artifact, get_authorized_diagnosis, get_authorized_feedback_run, get_authorized_feedback_record, get_authorized_improvement_proposal, get_authorized_improvement_proposals, get_authorized_proposal_evaluation, get_current_kpi_contract, get_diagnosis, get_evidence, get_feedback, get_feedback_aggregations, get_investigations, get_insights, get_marketing, get_movements, get_registered_kpis, get_run_kpi_contract, get_timeseries, identity_persona
 from backend.domain_policy import require_domain, retrieval_tags_for_persona
 from backend.response_projection import project_diagnosis, project_evidence, project_saved_run
@@ -468,6 +469,7 @@ def api_diagnoses(payload: DiagnosisRequest) -> Dict[str, Any]:
             "target_date": first_result.get("target_date", payload.target_date),
             "as_of": first_result.get("as_of", payload.as_of),
         }, persona=persona)
+        response["kpi_story"] = None if first_result.get("verdict") == "ACCESS_DENIED" else build_kpi_story(response["results"])
         response["results"] = {
             kpi_id: project_diagnosis(result, persona)
             for kpi_id, result in response["results"].items()

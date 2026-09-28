@@ -1121,3 +1121,16 @@ The 538-case `--split all` reports are identical before and after these frontend
 | Quiet-negative false-alarm rate | 0.048 | 0.048 |
 | Attribution Confidence gap | 0.5126 | 0.5126 |
 | Brier score | 0.0977 | 0.0977 |
+
+## Stage KPI connections: before → after
+
+The 538-case `--split all` report is byte-for-byte unchanged. The new graph is an accounting bridge and does not alter detection or attribution.
+
+| Measure | Before | After |
+|---|---:|---:|
+| Top-1 driver accuracy | 0.734 | 0.734 |
+| Quiet-negative false-alarm rate | 0.048 | 0.048 |
+| Attribution Confidence gap | 0.5126 | 0.5126 |
+| Brier score | 0.0977 | 0.0977 |
+
+Real-data checks: North/Electronics 2023-07-31 → traffic / marketing_spend; South/Apparel 2024-02-13 → conversion / stock_availability; aggregate 2024-05-15 → conversion / no qualifying chain. The aggregate checkout_latency candidate has AC 0.0522 and a negative explained share, below the required 0.35 gate.
