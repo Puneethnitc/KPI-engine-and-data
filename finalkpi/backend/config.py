@@ -13,8 +13,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-RUNTIME_DIR = Path(os.getenv("KPI_RUNTIME_DIR", ROOT / "backend" / "runtime"))
-CHROMA_DIR = Path(os.getenv("KPI_CHROMA_DIR", RUNTIME_DIR / "chroma"))
+# Blank values (e.g. "KPI_RUNTIME_DIR=" in .env) mean "use the default".
+RUNTIME_DIR = Path(os.getenv("KPI_RUNTIME_DIR") or ROOT / "backend" / "runtime")
+CHROMA_DIR = Path(os.getenv("KPI_CHROMA_DIR") or RUNTIME_DIR / "chroma")
 
 ENGINE_REGISTRY_DIR = str(ROOT / "kpi_engine" / "registry")
 EVIDENCE_CSV = str(ROOT / "data" / "unstructured_evidence.csv")
@@ -23,7 +24,7 @@ SALES_CSV = str(ROOT / "data" / "sales_daily.csv")
 MARKETING_CSV = str(ROOT / "data" / "marketing_weekly.csv")
 FINANCE_CSV = str(ROOT / "data" / "finance_monthly.csv")
 FEEDBACK_LOG_PATH = str(RUNTIME_DIR / "feedback_log.jsonl")
-DB_PATH = Path(os.getenv("KPI_BACKEND_DB", RUNTIME_DIR / "kpi_backend.sqlite3"))
+DB_PATH = Path(os.getenv("KPI_BACKEND_DB") or RUNTIME_DIR / "kpi_backend.sqlite3")
 
 DEFAULT_PERSONA = os.getenv("KPI_DEMO_PERSONA", "CFO")
 DEFAULT_REGION = os.getenv("KPI_DEMO_REGION", "North")

@@ -1,12 +1,15 @@
 SHELL := /bin/bash
 .ONESHELL:
 
+# Load finalkpi/.env into the API process when it exists (Groq key, LLM pricing).
+ENV_FILE_ARG := $(if $(wildcard .env),--env-file .env,)
+
 .PHONY: dev backend frontend test-engine test-backend typecheck
 
 # Start the API and Next.js dashboard together. Ctrl+C stops both processes.
 dev:
 	set -euo pipefail
-	.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8000 &
+	.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8000 $(ENV_FILE_ARG) &
 	backend_pid=$$!
 	(cd frontend && npm run dev) &
 	frontend_pid=$$!
@@ -14,7 +17,7 @@ dev:
 	wait -n $$backend_pid $$frontend_pid
 
 backend:
-	.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8000
+	.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8000 $(ENV_FILE_ARG)
 
 frontend:
 	cd frontend && npm run dev
