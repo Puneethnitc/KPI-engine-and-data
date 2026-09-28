@@ -381,6 +381,17 @@ class PipelineRegressions(unittest.TestCase):
         # F-C4 (plan §1.7): verify_event never set _causal_design_approved, so
         # build_profile's causal dimension was silently forced to NOT_ASSESSED
         # even after a real DiD ran. An approved design must now change it.
+        #
+        # Stage 7 (F-C1/F-C2) update: the causal dimension always reflects the
+        # one approved design's real verdict, but only *counts toward the
+        # overall conclusion* (Plan §7.2) when it targets the top-ranked
+        # driver -- checkout_latency is not top-ranked for this event (it
+        # does not even rank -- price_discount and promo_flag do), so a
+        # REJECTED verdict here must be visible but must not poison
+        # confidence in a different, better-explained driver. See
+        # test_confidence.py's test_rejected_top_driver_with_no_alternative_is_conflicting /
+        # test_rejected_top_driver_with_strong_alternative_is_not_conflicting
+        # for the top-driver-targeted cases.
         design = VerificationDesign(
             driver_id="checkout_latency",
             treated_slice={"region": "North", "category": "Electronics"},
@@ -395,12 +406,16 @@ class PipelineRegressions(unittest.TestCase):
             "net_sales_revenue", design, persona="CFO", **self.paths,
         )
         self.assertEqual(unapproved["confidence_profile"]["causal"]["status"], "NOT_ASSESSED")
+        self.assertFalse(unapproved["confidence_profile"]["causal"]["inputs"]["approved_design"])
 
         approved = self.pipeline.verify_event(
             "net_sales_revenue", design, persona="CFO",
             approved_causal_design=True, **self.paths,
         )
         self.assertNotEqual(approved["confidence_profile"]["causal"]["status"], "NOT_ASSESSED")
+        self.assertTrue(approved["confidence_profile"]["causal"]["inputs"]["approved_design"])
+        self.assertFalse(approved["confidence_profile"]["causal"]["inputs"]["targets_top_driver"])
+        self.assertFalse(approved["confidence_profile"]["causal"]["inputs"]["counts_toward_overall"])
         self.assertEqual(approved["causal_verdict"], unapproved["causal_verdict"])
 
     def test_event_verification_checks_control_access_before_loading_data(self):

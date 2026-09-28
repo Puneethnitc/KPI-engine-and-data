@@ -99,7 +99,14 @@ class GroundTruthSmokeTest(unittest.TestCase):
         self.assertIn("EVT01", causal["verdict_counts_per_event"])
 
         confidence = metrics["confidence"]
-        self.assertIsNone(confidence["brier_score"])
+        # Stage 7: Brier/AC-gap are no longer placeholders (they were always
+        # None before Attribution Confidence existed); on this tiny 6-case
+        # smoke subset they may still legitimately be None if nothing
+        # scored, so this only checks the fields exist and are well-formed.
+        ac_metrics = confidence["attribution_confidence"]
+        self.assertIn("brier_score", ac_metrics)
+        self.assertIn("ac_gap", ac_metrics)
+        self.assertIn("decoy_max_ac", ac_metrics)
         self.assertTrue(confidence["overall_status_counts"])
 
 

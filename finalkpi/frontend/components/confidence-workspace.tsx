@@ -30,6 +30,17 @@ export default function ConfidenceWorkspace({
       <span className={`evidence-pill ${model.overall.tone}`}>{model.overall.statusLabel}</span>
     </div>
 
+    <div className="confidence-headlines">
+      <div className="confidence-headline">
+        <span className="confidence-headline-question">Is the change real?</span>
+        <span className={`evidence-pill ${model.overall.movementConclusion.tone}`}>{model.overall.movementConclusion.statusLabel}</span>
+      </div>
+      <div className="confidence-headline">
+        <span className="confidence-headline-question">Do we know why?</span>
+        <span className={`evidence-pill ${model.overall.explanationConclusion.tone}`}>{model.overall.explanationConclusion.statusLabel}</span>
+      </div>
+    </div>
+
     <div className="confidence-overall">
       <strong>Overall: {model.overall.statusLabel}</strong>
       {model.overall.reasons.map((reason, index) => <p key={`overall-reason-${index}`}>{reason}</p>)}
@@ -37,6 +48,38 @@ export default function ConfidenceWorkspace({
         Blocking dimensions: {model.overall.blockingDimensions.map(key => model.dimensions.find(item => item.key === key)?.title ?? key).join(', ')}
       </p>}
     </div>
+
+    {model.attributionBars.length > 0 && <div className="attribution-confidence-bars" aria-label="Per-driver Attribution Confidence">
+      <h3>Attribution Confidence by driver</h3>
+      <p className="confidence-boundary">Status: {model.attributionStatus}</p>
+      {model.attributionBars.map(bar => <article
+        className={`attribution-confidence-bar ${bar.tone}`}
+        key={bar.driverId}
+      >
+        <div className="attribution-confidence-bar-heading">
+          <span>{bar.displayName}</span>
+          <span className={`evidence-pill ${bar.tone}`}>
+            {bar.isInsufficientHistory ? 'Insufficient history' : bar.percent == null ? 'Not computed' : `${bar.percent}% - ${bar.bandLabel}`}
+          </span>
+        </div>
+        {bar.percent != null && <div className="attribution-confidence-bar-track">
+          <div className="attribution-confidence-bar-fill" style={{ width: `${bar.percent}%` }} />
+        </div>}
+        {bar.capsApplied.length > 0 && <p className="confidence-blocking">
+          Capped: {bar.capsApplied.map(cap => cap.reason).join('; ')}
+        </p>}
+        {(bar.evidence.length > 0 || bar.capsApplied.length > 0) && <details>
+          <summary>Evidence breakdown (tug-of-war)</summary>
+          <ul className="attribution-confidence-evidence">
+            {bar.evidence.map(item => <li key={item.id} className={item.weight_contribution >= 0 ? 'positive' : item.weight_contribution < 0 ? 'negative' : 'neutral'}>
+              <strong>{item.id}</strong> {item.name.replaceAll('_', ' ')}: {item.weight_contribution >= 0 ? '+' : ''}{item.weight_contribution}
+              {item.note && <span> - {item.note}</span>}
+            </li>)}
+          </ul>
+          <p className="confidence-boundary">Calibration: {bar.calibrationStatus.replaceAll('_', ' ').toLowerCase()}</p>
+        </details>}
+      </article>)}
+    </div>}
 
     <div className="confidence-dimensions">
       {model.dimensions.map(item => <article className="confidence-dimension" key={item.key}>

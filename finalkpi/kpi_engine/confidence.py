@@ -1,22 +1,48 @@
 # IMPLEMENTATION HANDOFF — calibrated confidence and uncertainty
-# Current: run-bound movement/source/driver/causal dimensions use deterministic
-# engine outputs; numeric scores remain null because outcome calibration is absent.
-# Stage 3 (F-R3): the driver dimension's reasoning text now cites the
-# strongest driver's contribution/explained_share (AttributionEngine), not a
-# correlation score; MODERATE/LOW is still keyed off stability_status alone.
+# Current: movement/source dimensions use deterministic engine outputs and
+# stay uncalibrated (score stays null). Stage 7 (F-C1, F-C2): the driver
+# dimension is replaced by `attribution` -- the top-ranked driver's per-driver
+# Attribution Confidence (AC) band from AttributionConfidenceEngine, with
+# `driver` kept only as a compatibility alias of the same dict. The overall
+# status is now the weakest-required-dimension rule over movement, source,
+# attribution and causal (when assessed), with two headline conclusions:
+# movement_conclusion ("is it real?") and explanation_conclusion ("do we
+# know why?").
 # Next: validate probability calibration on reviewed labelled outcomes before
-# exposing any numeric score; keep analysis thresholds in their owning policies.
-# Check: sparse/conflicting evidence abstains, NOT_APPLICABLE stays neutral, and
-# no association or accounting identity is upgraded to a causal claim.
+# treating AC as a validated probability; keep analysis thresholds in their
+# owning policies.
+# Check: sparse/conflicting evidence abstains, NOT_APPLICABLE stays neutral,
+# a REJECTED top-driver causal test with no AC>=0.6 alternative forces
+# CONFLICTING_EVIDENCE, and no association or accounting identity is upgraded
+# to a causal claim.
 
-"""Transparent evidence diagnostics, not a calibrated causal probability."""
+"""Transparent evidence diagnostics; AC is a transparent evidence-weighted
+estimate, not yet a calibrated causal probability (see attribution_confidence.py)."""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import isfinite
 from typing import Any
 
+from kpi_engine.attribution_confidence import AttributionConfidenceEngine, default_model
 from kpi_engine.verification.models import CausalVerificationResult, VerificationPolicy
+
+_DIMENSION_SCALE = {
+    "CONFLICTING_EVIDENCE": 0,
+    "INSUFFICIENT_EVIDENCE": 1,
+    "LOW": 2,
+    "MODERATE": 3,
+    "HIGH": 4,
+}
+
+
+def _weakest(*statuses: str | None) -> str:
+    """Weakest-required-dimension rule (Plan §7.2). A status outside the
+    ordered scale (NOT_ASSESSED, None) is not required and is skipped."""
+    ranked = [status for status in statuses if status in _DIMENSION_SCALE]
+    if not ranked:
+        return "NOT_ASSESSED"
+    return min(ranked, key=lambda status: _DIMENSION_SCALE[status])
 
 
 @dataclass(frozen=True)
@@ -125,6 +151,7 @@ class ConfidenceEngine:
                 applicable=False,
             )
             dimensions = {key: dict(hidden) for key in ("movement", "source", "driver", "causal")}
+            dimensions["attribution"] = dict(hidden)
             return {
                 "version": "1.0",
                 "evaluated_at": evaluated_at,
@@ -133,16 +160,24 @@ class ConfidenceEngine:
                     "method": "BLOCKING_GATES_V1",
                     "reasons": ["No protected evidence was evaluated or returned."],
                     "blocking_dimensions": [],
+                    "movement_conclusion": "NOT_ASSESSED",
+                    "explanation_conclusion": "NOT_ASSESSED",
                 },
+                "attribution_status": "NOT_ASSESSED",
+                "attribution_confidence": [],
                 **dimensions,
             }
 
+        event_mode = "movement_assessment" not in result
         movement = result.get("movement_assessment") or {}
         movement_reasons: list[str] = []
         movement_limits: list[str] = []
         movement_status = "INSUFFICIENT_EVIDENCE"
         movement_refs = ["movement_assessment"] if movement else []
-        if movement.get("status") == "OK":
+        if event_mode:
+            movement_status = "NOT_ASSESSED"
+            movement_reasons.append("Movement is not assessed in event-verification mode; the event window is predeclared.")
+        elif movement.get("status") == "OK":
             statistical = bool(movement.get("is_statistically_significant"))
             material = bool(movement.get("is_business_material"))
             agreement = movement.get("detector_agreement", "NEITHER")
@@ -187,6 +222,10 @@ class ConfidenceEngine:
             applicable=True,
             evidence_refs=movement_refs,
         )
+        # Event mode has no daily materiality gate; treat the predeclared
+        # event as material so overall status follows explanation_conclusion,
+        # not a movement dimension that was never assessed (Plan §7.2).
+        is_material = True if event_mode else bool(movement.get("is_business_material"))
 
         source_evidence = result.get("source_evidence") or {}
         source_ready = source_evidence.get("source_readiness") or {}
@@ -247,59 +286,113 @@ class ConfidenceEngine:
         driver_analysis = result.get("driver_analysis") or {}
         candidates = driver_analysis.get("ranked_drivers") or []
         exclusions = driver_analysis.get("excluded_drivers") or []
-        driver_reasons: list[str] = []
-        driver_limits = [
-            "Association only, not a causal estimate.",
-            "Accounting decomposition is separate and does not derive monetary contribution from driver association.",
+        driver_source_inventory = [
+            {key: source.get(key) for key in ("source_id", "coverage_status", "quality_status", "latest_available_time")}
+            for source in source_evidence.get("sources", [])
         ]
+        attribution_reasons: list[str] = []
+        attribution_limits = [
+            "Statistical attribution of observed movement; causal status is shown separately.",
+        ]
+        ac_model_version = default_model().version
+        ac_profile: dict[str, Any] = {
+            "model_version": ac_model_version, "attribution_status": "NOT_ASSESSED",
+            "drivers": [], "unexplained": None, "top_driver_id": None,
+        }
+        top_driver_id = None
+        causal_verification = result.get("causal_verification") or {}
+        legacy_confidence = result.get("confidence") or {}
+        reason_code = causal_verification.get("reason_code") or (legacy_confidence.get("reasons") or ["NO_DESIGN"])[0]
+        if reason_code in {"CONTROL_NOT_AUTHORIZED", "TREATMENT_SLICE_MISMATCH", "UNDECLARED_DRIVER", "FUTURE_POST_PERIOD"}:
+            causal_design_approved = False
+
         if source_blocking:
-            driver_status = "CONFLICTING_EVIDENCE"
-            driver_reasons.append("Driver interpretation is blocked by contradictory source evidence.")
-        elif candidates:
-            strongest = candidates[0]
-            driver_status = "MODERATE" if strongest.get("stability_status") == "STABLE" else "LOW"
-            driver_reasons.append(
-                f"{strongest.get('display_name', strongest.get('driver_id', 'A ranked driver'))} ranked first by "
-                f"{strongest.get('method', 'the governed attribution method')} "
-                f"(contribution={strongest.get('contribution')}, explained_share={strongest.get('explained_share')}, "
-                f"n={strongest.get('sample_size')})."
+            attribution_status = "CONFLICTING_EVIDENCE"
+            attribution_reasons.append("Driver interpretation is blocked by contradictory source evidence.")
+            ac_profile = AttributionConfidenceEngine.compute_profile(
+                ranked_drivers=candidates, is_material=is_material, source_status=source_status,
+                source_blocking=True,
             )
-            driver_limits.extend(driver_analysis.get("limitations") or [])
-            if strongest.get("stability_status") == "SENSITIVE":
-                driver_limits.append("Top-ranked association is sensitive to analysis window selection.")
+        elif candidates:
+            ac_profile = AttributionConfidenceEngine.compute_profile(
+                ranked_drivers=candidates, is_material=is_material, source_status=source_status,
+                source_blocking=False,
+                causal_verification=causal_verification if causal_design_approved else None,
+            )
+            ac_by_id = {item["driver_id"]: item for item in ac_profile["drivers"]}
+            for candidate in candidates:
+                record = ac_by_id.get(candidate.get("driver_id"))
+                if record is None:
+                    continue
+                candidate.update({
+                    "attribution_confidence": record["attribution_confidence"],
+                    "band": record["band"],
+                    "label": record["label"],
+                    "prior": record["prior"],
+                    "evidence": record["evidence"],
+                    "caps_applied": record["caps_applied"],
+                    "model_version": record["model_version"],
+                    "calibration": record["calibration"],
+                })
+            top_driver_id = ac_profile.get("top_driver_id")
+            scored = [item for item in ac_profile["drivers"] if item.get("attribution_confidence") is not None]
+            band_to_status = {"HIGH": "HIGH", "MODERATE": "MODERATE", "LOW": "LOW", "VERY_LOW": "INSUFFICIENT_EVIDENCE"}
+            if scored:
+                top = scored[0]
+                attribution_status = band_to_status.get(top["band"], "INSUFFICIENT_EVIDENCE")
+                if ac_profile["attribution_status"] == "AMBIGUOUS":
+                    attribution_status = "LOW"
+                elif ac_profile["attribution_status"] == "NO_CONFIDENT_DRIVER":
+                    attribution_status = "INSUFFICIENT_EVIDENCE"
+                attribution_reasons.append(
+                    f"{top.get('display_name', top.get('driver_id'))} is the top-ranked driver with Attribution "
+                    f"Confidence {top['attribution_confidence'] * 100:.0f}% ({top['label']})."
+                )
+                if ac_profile["attribution_status"] == "AMBIGUOUS":
+                    attribution_limits.append(
+                        "Two or more drivers have similar Attribution Confidence; attribution is ambiguous."
+                    )
+                if top.get("caps_applied"):
+                    attribution_limits.append(
+                        "The top driver's Attribution Confidence is capped: "
+                        + "; ".join(cap["reason"] for cap in top["caps_applied"])
+                    )
+            else:
+                attribution_status = "INSUFFICIENT_EVIDENCE"
+                attribution_reasons.append("No ranked driver had sufficient history to compute Attribution Confidence.")
+            attribution_limits.extend(driver_analysis.get("limitations") or [])
         elif exclusions:
-            driver_status = "INSUFFICIENT_EVIDENCE"
-            driver_reasons.append("No candidate driver passed its configured checks; exclusions are retained below.")
-            driver_limits.extend(driver_analysis.get("limitations") or [])
+            attribution_status = "INSUFFICIENT_EVIDENCE"
+            attribution_reasons.append("No candidate driver passed its configured checks; exclusions are retained below.")
+            attribution_limits.extend(driver_analysis.get("limitations") or [])
         else:
-            driver_status = "NOT_ASSESSED" if not movement else "INSUFFICIENT_EVIDENCE"
-            driver_reasons.append("No ranked driver evidence was produced for this run.")
-        driver_dimension = dimension(
-            driver_status, "JOINT_ROBUST_REGRESSION_EXPLAINED_MOVEMENT",
+            attribution_status = "NOT_ASSESSED" if not movement else "INSUFFICIENT_EVIDENCE"
+            attribution_reasons.append("No ranked driver evidence was produced for this run.")
+
+        attribution_dimension = dimension(
+            attribution_status, "ATTRIBUTION_CONFIDENCE_V1",
             {
                 "candidates": candidates,
                 "exclusions": exclusions,
                 "driver_analysis": driver_analysis,
                 "source_coverage": result.get("source_coverage"),
                 "missingness_denominator": None,
-                "driver_source_inventory": [
-                    {key: source.get(key) for key in ("source_id", "coverage_status", "quality_status", "latest_available_time")}
-                    for source in source_evidence.get("sources", [])
-                ],
+                "driver_source_inventory": driver_source_inventory,
+                "attribution_confidence_profile": ac_profile,
             },
-            driver_reasons, driver_limits,
+            attribution_reasons, attribution_limits,
             applicable=bool(driver_analysis) or source_blocking,
             blocking=source_blocking,
-            evidence_refs=["driver_analysis.ranked_drivers", "driver_analysis.excluded_drivers"] if driver_analysis else [],
+            evidence_refs=["driver_analysis.ranked_drivers", "driver_analysis.excluded_drivers", "attribution_confidence"] if driver_analysis else [],
         )
 
-        verification = result.get("causal_verification") or {}
-        legacy_confidence = result.get("confidence") or {}
-        reason_code = verification.get("reason_code") or (legacy_confidence.get("reasons") or ["NO_DESIGN"])[0]
-        if reason_code in {"CONTROL_NOT_AUTHORIZED", "TREATMENT_SLICE_MISMATCH", "UNDECLARED_DRIVER", "FUTURE_POST_PERIOD"}:
-            causal_design_approved = False
-        causal_reasons = [verification.get("reason") or "No approved causal design was evaluated."]
+        causal_reasons = [causal_verification.get("reason") or "No approved causal design was evaluated."]
         causal_limits: list[str] = []
+        targets_top_driver = bool(
+            causal_design_approved and top_driver_id
+            and causal_verification.get("driver_id") == top_driver_id
+        )
+        top_driver_causal_rejected = False
         if source_blocking:
             causal_status = "CONFLICTING_EVIDENCE"
             causal_reasons = ["Causal claims are blocked by contradictory source evidence."]
@@ -308,82 +401,131 @@ class ConfidenceEngine:
             causal_reasons = ["No approved, authorized server-side causal design exists for this run."]
             causal_limits.append("Correlation and accounting decomposition do not establish operational causality.")
         else:
-            causal_status = {
-                "CONDITIONAL_SUPPORT": "MODERATE",
-                "CONFLICTING": "CONFLICTING_EVIDENCE",
-                "INSUFFICIENT": "INSUFFICIENT_EVIDENCE",
-                "INCONCLUSIVE": "LOW",
-                "NOT_ASSESSED": "NOT_ASSESSED",
-            }.get(legacy_confidence.get("status"), "INSUFFICIENT_EVIDENCE")
-            if causal_status == "MODERATE":
+            verdict = causal_verification.get("verdict")
+            sensitivity = causal_verification.get("sensitivity_status")
+            if verdict == "UNTESTABLE":
+                # A design was authorized and the verifier ran; UNTESTABLE
+                # means it could not be evaluated for a substantive reason
+                # (e.g. insufficient exposure), which is weaker evidence than
+                # "no design was ever supplied" (NO_DESIGN -> NOT_ASSESSED).
+                causal_status = "NOT_ASSESSED" if reason_code == "NO_DESIGN" else "INSUFFICIENT_EVIDENCE"
+            else:
+                causal_status = {
+                    "SUPPORTED_CONDITIONAL": "MODERATE" if sensitivity == "SENSITIVE" else "HIGH",
+                    "INCONCLUSIVE": "LOW",
+                    "REJECTED": "CONFLICTING_EVIDENCE",
+                }.get(verdict, "NOT_ASSESSED")
+            if causal_status == "HIGH":
+                causal_limits.append("Approved observational diagnostics are supportive; this is not proof of causality.")
+            elif causal_status == "MODERATE":
                 causal_limits.append("Observational design support is conditional and is not proof of causality.")
+            elif causal_status == "CONFLICTING_EVIDENCE" and targets_top_driver:
+                top_driver_causal_rejected = True
+            if not targets_top_driver and candidates:
+                # Plan §7.2: the causal dimension counts toward the overall
+                # explanation only when it targets the top-ranked driver, so
+                # a rejected test on a minor driver never poisons confidence
+                # in a different, well-explained top driver.
+                causal_reasons.append(
+                    "This design does not target the top-ranked driver, so it does not count toward the overall conclusion."
+                )
         if not source_blocking and reason_code in {"CONTROL_NOT_AUTHORIZED", "TREATMENT_SLICE_MISMATCH", "UNDECLARED_DRIVER", "FUTURE_POST_PERIOD"}:
             causal_status = "NOT_ASSESSED"
             causal_limits.append("Design authorization or scope validation did not pass.")
+        causal_required = causal_status != "NOT_ASSESSED" and (targets_top_driver or not candidates)
         causal_inputs = {
             "approved_design": causal_design_approved,
+            "top_driver_id": top_driver_id,
+            "targets_top_driver": targets_top_driver,
+            "counts_toward_overall": causal_required,
             "treatment_authorized": result.get("verdict") != "ACCESS_DENIED",
             "control_authorized": causal_design_approved and reason_code != "CONTROL_NOT_AUTHORIZED",
             "source_conflict_check_passed": not source_blocking,
             "reason_code": reason_code,
-            "method": verification.get("method"),
-            "pre_days": verification.get("pre_days"),
-            "post_days": verification.get("post_days"),
+            "method": causal_verification.get("method"),
+            "pre_days": causal_verification.get("pre_days"),
+            "post_days": causal_verification.get("post_days"),
             "outcome_window_coverage": (legacy_confidence.get("sub_scores") or {}).get("outcome_window_coverage"),
-            "temporal_precedence_passed": verification.get("temporal_precedence_passed"),
-            "pretrend_slope": verification.get("pretrend_slope"),
-            "pretrend_p_value": verification.get("pretrend_p_value"),
-            "pre_event_shift": verification.get("pre_event_shift"),
-            "placebo_effects": verification.get("placebo_effects"),
-            "driver_exposure_effect": verification.get("driver_exposure_effect"),
-            "driver_exposure_periods": verification.get("driver_exposure_periods"),
-            "effect": verification.get("did_effect"),
-            "interval": verification.get("confidence_interval"),
+            "temporal_precedence_passed": causal_verification.get("temporal_precedence_passed"),
+            "pretrend_slope": causal_verification.get("pretrend_slope"),
+            "pretrend_p_value": causal_verification.get("pretrend_p_value"),
+            "pre_event_shift": causal_verification.get("pre_event_shift"),
+            "placebo_effects": causal_verification.get("placebo_effects"),
+            "driver_exposure_effect": causal_verification.get("driver_exposure_effect"),
+            "driver_exposure_periods": causal_verification.get("driver_exposure_periods"),
+            "effect": causal_verification.get("did_effect"),
+            "interval": causal_verification.get("confidence_interval"),
             "interval_precision_diagnostic": (legacy_confidence.get("sub_scores") or {}).get("did_interval_precision"),
             "diagnostic_status": legacy_confidence.get("status"),
         }
         causal_dimension = dimension(
-            causal_status, verification.get("method", "APPROVED_DESIGN_DIAGNOSTICS"),
+            causal_status, causal_verification.get("method", "APPROVED_DESIGN_DIAGNOSTICS"),
             causal_inputs, causal_reasons, causal_limits,
             applicable=causal_design_approved or source_blocking,
             blocking=source_blocking,
-            evidence_refs=["causal_verification", "confidence"] if verification or legacy_confidence else [],
+            evidence_refs=["causal_verification", "confidence"] if causal_verification or legacy_confidence else [],
         )
 
         dimensions = {
             "movement": movement_dimension,
             "source": source_dimension,
-            "driver": driver_dimension,
+            "attribution": attribution_dimension,
             "causal": causal_dimension,
         }
         blocking_dimensions = [name for name, item in dimensions.items() if item["blocking"]]
-        if source_blocking:
+
+        other_driver_ge_06 = any(
+            item.get("driver_id") != top_driver_id and (item.get("attribution_confidence") or 0) >= 0.6
+            for item in ac_profile.get("drivers", [])
+        )
+        conflicting_override = source_blocking or (top_driver_causal_rejected and not other_driver_ge_06)
+
+        movement_conclusion = _weakest(movement_status, source_status)
+        explanation_conclusion = _weakest(
+            movement_status, source_status, attribution_status,
+            causal_status if causal_required else None,
+        )
+
+        if conflicting_override:
             overall_status = "CONFLICTING_EVIDENCE"
-            overall_reasons = ["A blocking source contradiction takes precedence over other dimension statuses."]
-        elif movement_status == "INSUFFICIENT_EVIDENCE" or source_status == "INSUFFICIENT_EVIDENCE":
-            overall_status = "INSUFFICIENT_EVIDENCE"
-            overall_reasons = ["A required movement-history or source-evidence gate is insufficient; abstain from a stronger conclusion."]
-        elif movement_status == "LOW" or source_status == "LOW":
-            overall_status = "LOW"
-            overall_reasons = ["At least one required evidence dimension has a failed or limited gate."]
-        elif causal_status == "NOT_ASSESSED":
-            overall_status = "MODERATE"
-            overall_reasons = ["Movement/source evidence is assessed, but no approved causal design supports a causal conclusion."]
-        elif causal_status == "MODERATE" and movement_status == "HIGH" and source_status in ("HIGH", "MODERATE"):
-            overall_status = "MODERATE"
-            overall_reasons = ["Approved observational diagnostics are conditionally supportive; no probability of causation is claimed."]
+            if source_blocking:
+                overall_reasons = ["A blocking source contradiction takes precedence over other dimension statuses."]
+            else:
+                overall_reasons = [
+                    "The top-ranked driver's causal test was rejected and no alternative driver reaches "
+                    "Attribution Confidence >= 60%."
+                ]
         else:
-            overall_status = "HIGH" if movement_status == "HIGH" and source_status == "HIGH" and causal_status == "MODERATE" else "MODERATE"
-            overall_reasons = ["Conclusion follows the dimension gates; it is not an averaged score or probability."]
+            overall_status = explanation_conclusion if is_material else movement_conclusion
+            if overall_status == "INSUFFICIENT_EVIDENCE":
+                overall_reasons = ["A required evidence dimension is insufficient; abstain from a stronger conclusion."]
+            elif overall_status == "LOW":
+                overall_reasons = ["At least one required evidence dimension has a failed or limited gate."]
+            elif not causal_required:
+                overall_reasons = [
+                    "Movement, source and attribution evidence are assessed, but no approved causal design "
+                    "supports a causal conclusion for the top driver."
+                ]
+            elif overall_status == "HIGH":
+                overall_reasons = ["Every required evidence dimension, including a supportive causal test, reached HIGH."]
+            else:
+                overall_reasons = ["Conclusion follows the weakest required evidence dimension; it is not an averaged score."]
 
         return {
             "version": "1.0",
             "evaluated_at": evaluated_at,
             "overall": {
                 "status": overall_status,
-                "method": "BLOCKING_GATES_V1",
+                "method": "WEAKEST_REQUIRED_DIMENSION_V1",
                 "reasons": overall_reasons,
                 "blocking_dimensions": blocking_dimensions,
+                "movement_conclusion": movement_conclusion,
+                "explanation_conclusion": explanation_conclusion,
             },
+            "attribution_status": ac_profile.get("attribution_status", "NOT_ASSESSED"),
+            "attribution_confidence": ac_profile.get("drivers", []) + (
+                [ac_profile["unexplained"]] if ac_profile.get("unexplained") else []
+            ),
             **dimensions,
+            "driver": attribution_dimension,
         }

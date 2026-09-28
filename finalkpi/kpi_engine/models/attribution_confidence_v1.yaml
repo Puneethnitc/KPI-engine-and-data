@@ -1,0 +1,73 @@
+# Attribution Confidence (AC) model weights, caps, bands and thresholds.
+# Plan §7.1. Hand-set priors; --calibrate on the dev split fits a v2 file by
+# logistic regression starting from these values (never overwrites this file).
+version: attribution-confidence-v1
+calibration_status: HAND_SET_PRIOR
+
+weights:
+  # E1 explained share: +2.0 x min(s_d, 1) ; -1.5 if s_d < 0.1
+  E1_explained_share: 2.0
+  E1_explained_share_low_penalty: -1.5
+  E1_explained_share_low_threshold: 0.1
+  # E2 driver actually moved: |z_delta_d|
+  E2_moved_strong: 0.8
+  E2_moved_strong_threshold: 3.0
+  E2_moved_moderate: 0.4
+  E2_moved_moderate_threshold: 2.0
+  E2_moved_weak_penalty: -2.0
+  E2_moved_weak_threshold: 1.5
+  # E3 direction consistent with contract
+  E3_direction_consistent: 0.5
+  E3_direction_conflict: -2.5
+  # E4 temporal precedence
+  E4_precedence_before: 0.5
+  E4_precedence_after_penalty: -1.5
+  # E5 stability (disjoint halves)
+  E5_stability_stable: 0.3
+  E5_stability_sensitive: -0.7
+  # E6 statistical support (adjusted p-value)
+  E6_pvalue_strong: 0.5
+  E6_pvalue_strong_threshold: 0.01
+  E6_pvalue_moderate: 0.2
+  E6_pvalue_moderate_threshold: 0.05
+  E6_pvalue_weak_penalty: -0.5
+  E6_pvalue_weak_threshold: 0.2
+  # E7 causal test (Stage 5)
+  E7_causal_supported_consistent: 2.0
+  E7_causal_supported_sensitive: 0.8
+  E7_causal_inconclusive: -0.3
+  E7_causal_rejected: -3.0
+  # E8 unstructured corroboration (Stage 6)
+  E8_corroborated: 1.0
+  E8_contradicted: -1.5
+  # E9 data quality
+  E9_coverage_penalty: -0.5
+  E9_coverage_threshold: 0.8
+  E9_source_low_penalty: -1.0
+
+caps:
+  no_causal_test_max: 0.75
+  causal_rejected_max: 0.20
+  direction_undeclared_max: 0.60
+  non_material_max: 0.5
+
+bands:
+  HIGH:
+    min: 0.80
+    label: "Very likely a cause"
+  MODERATE:
+    min: 0.60
+    label: "Likely a contributing cause"
+  LOW:
+    min: 0.35
+    label: "Possible; needs verification"
+  VERY_LOW:
+    min: 0.0
+    label: "Unlikely to explain this change"
+
+thresholds:
+  material_share: 0.20
+  ambiguous_gap: 0.1
+  ambiguous_min_ac: 0.5
+  no_confident_driver_max_ac: 0.35
+  min_history_periods: 14

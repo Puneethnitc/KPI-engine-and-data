@@ -13,6 +13,35 @@ export type ConfidenceDimension = {
   evidence_refs: string[]
 }
 
+export type AttributionConfidenceEvidenceItem = {
+  id: string
+  name: string
+  value: unknown
+  weight_contribution: number
+  note?: string
+  doc_ids?: string[]
+}
+
+export type AttributionConfidenceCap = {
+  name: string
+  max: number
+  reason: string
+}
+
+export type AttributionConfidenceDriver = {
+  driver_id: string
+  display_name: string
+  attribution_confidence: number | null
+  band: string | null
+  label: string | null
+  prior: number | null
+  evidence: AttributionConfidenceEvidenceItem[]
+  caps_applied: AttributionConfidenceCap[]
+  model_version: string
+  calibration: { status: string; split: string | null }
+  status?: string
+}
+
 export type ConfidenceProfile = {
   version: string
   evaluated_at: string
@@ -21,15 +50,20 @@ export type ConfidenceProfile = {
     method: string
     reasons: string[]
     blocking_dimensions: string[]
+    movement_conclusion: string
+    explanation_conclusion: string
   }
+  attribution_status: string
+  attribution_confidence: AttributionConfidenceDriver[]
   movement: ConfidenceDimension
   source: ConfidenceDimension
+  attribution: ConfidenceDimension
   driver: ConfidenceDimension
   causal: ConfidenceDimension
 }
 
 export type ConfidenceDimensionView = {
-  key: keyof Pick<ConfidenceProfile, 'movement' | 'source' | 'driver' | 'causal'>
+  key: keyof Pick<ConfidenceProfile, 'movement' | 'source' | 'attribution' | 'causal'>
   title: string
   status: string
   statusLabel: string
@@ -42,10 +76,24 @@ export type ConfidenceDimensionView = {
   details: ConfidenceDimension
 }
 
+export type AttributionConfidenceBar = {
+  driverId: string
+  displayName: string
+  percent: number | null
+  band: string | null
+  bandLabel: string | null
+  tone: ConfidenceDimensionView['tone']
+  isUnexplained: boolean
+  isInsufficientHistory: boolean
+  evidence: AttributionConfidenceEvidenceItem[]
+  capsApplied: AttributionConfidenceCap[]
+  calibrationStatus: string
+}
+
 const dimensionTitles = {
   movement: 'Movement evidence',
   source: 'Source evidence',
-  driver: 'Driver evidence',
+  attribution: 'Attribution evidence',
   causal: 'Causal evidence',
 } as const
 
@@ -81,13 +129,40 @@ export function confidenceProfileUnavailableMessage(
   return 'No confidence profile was saved for this historical run. It has not been recomputed from current data.'
 }
 
+const attributionBandTone: Record<string, AttributionConfidenceBar['tone']> = {
+  HIGH: 'good',
+  MODERATE: 'limited',
+  LOW: 'limited',
+  VERY_LOW: 'warning',
+  EXPLORATORY: 'neutral',
+}
+
+export function attributionConfidenceBars(
+  profile: ConfidenceProfile | null | undefined,
+): AttributionConfidenceBar[] {
+  if (!profile) return []
+  return (profile.attribution_confidence ?? []).map(driver => ({
+    driverId: driver.driver_id,
+    displayName: driver.driver_id === 'unexplained' ? 'Unexplained' : driver.display_name,
+    percent: driver.attribution_confidence == null ? null : Math.round(driver.attribution_confidence * 100),
+    band: driver.band,
+    bandLabel: driver.label,
+    tone: driver.band ? (attributionBandTone[driver.band] ?? 'neutral') : 'neutral',
+    isUnexplained: driver.driver_id === 'unexplained',
+    isInsufficientHistory: driver.status === 'INSUFFICIENT_HISTORY',
+    evidence: driver.evidence ?? [],
+    capsApplied: driver.caps_applied ?? [],
+    calibrationStatus: driver.calibration?.status ?? 'HAND_SET_PRIOR',
+  } satisfies AttributionConfidenceBar))
+}
+
 export function confidenceWorkspaceModel(
   profile: ConfidenceProfile | null | undefined,
   persona: string,
   verdict?: string | null,
 ) {
   if (!profile || verdict === 'ACCESS_DENIED') return null
-  const keys = ['movement', 'source', 'driver', 'causal'] as const
+  const keys = ['movement', 'source', 'attribution', 'causal'] as const
   const dimensions = keys.map(key => {
     const details = profile[key]
     return {
@@ -100,10 +175,10 @@ export function confidenceWorkspaceModel(
       method: details.method.replaceAll('_', ' ').toLowerCase(),
       reason: details.reasons[0] ?? 'No supporting reason was recorded.',
       limitation: details.limitations[0] ?? 'No additional limitation recorded.',
-      boundaryMessage: key === 'driver'
-        ? 'Association only - not a causal estimate.'
+      boundaryMessage: key === 'attribution'
+        ? 'Attribution Confidence is a transparent evidence-weighted estimate, not yet a calibrated probability.'
         : key === 'causal' && details.status === 'NOT_ASSESSED'
-          ? 'Not assessed: no approved causal design exists for this run.'
+          ? 'Not assessed: no approved causal design targets the top-ranked driver for this run.'
           : null,
       details,
     } satisfies ConfidenceDimensionView
@@ -118,7 +193,19 @@ export function confidenceWorkspaceModel(
       tone: confidenceStatusTone(profile.overall.status),
       reasons: profile.overall.reasons,
       blockingDimensions: profile.overall.blocking_dimensions,
+      movementConclusion: {
+        status: profile.overall.movement_conclusion,
+        statusLabel: confidenceStatusLabel(profile.overall.movement_conclusion),
+        tone: confidenceStatusTone(profile.overall.movement_conclusion),
+      },
+      explanationConclusion: {
+        status: profile.overall.explanation_conclusion,
+        statusLabel: confidenceStatusLabel(profile.overall.explanation_conclusion),
+        tone: confidenceStatusTone(profile.overall.explanation_conclusion),
+      },
     },
+    attributionStatus: profile.attribution_status,
+    attributionBars: attributionConfidenceBars(profile),
     personaFrame,
     dimensions,
   }

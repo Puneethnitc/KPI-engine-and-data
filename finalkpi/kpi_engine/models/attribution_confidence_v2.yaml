@@ -1,0 +1,57 @@
+version: attribution-confidence-v2
+calibration_status: CALIBRATED_ON_SYNTHETIC_LABELS
+weights:
+  E1_explained_share_low_threshold: 0.1
+  E2_moved_strong_threshold: 3.0
+  E2_moved_moderate_threshold: 2.0
+  E2_moved_weak_threshold: 1.5
+  E6_pvalue_strong_threshold: 0.01
+  E6_pvalue_moderate_threshold: 0.05
+  E6_pvalue_weak_threshold: 0.2
+  E9_coverage_threshold: 0.8
+  E1_explained_share: 2.3599832821420104
+  E1_explained_share_low_penalty: -1.717309649801029
+  E2_moved_strong: 1.790761386208773
+  E2_moved_moderate: 0.11718366235443854
+  E2_moved_weak_penalty: -2.0
+  E3_direction_consistent: 0.5115939582184559
+  E3_direction_conflict: -2.7964564638997724
+  E4_precedence_before: 0.343016081456114
+  E4_precedence_after_penalty: -1.5
+  E5_stability_stable: 0.3204343316775726
+  E5_stability_sensitive: -1.2261914174846456
+  E6_pvalue_strong: 0.5485966925385689
+  E6_pvalue_moderate: 0.28739701708712606
+  E6_pvalue_weak_penalty: -0.5
+  E7_causal_supported_consistent: 2.0
+  E7_causal_supported_sensitive: 0.8
+  E7_causal_inconclusive: -0.3
+  E7_causal_rejected: -3.0
+  E8_corroborated: 1.0
+  E8_contradicted: -1.5
+  E9_coverage_penalty: -0.5
+  E9_source_low_penalty: -0.9765101361459418
+caps:
+  no_causal_test_max: 0.75
+  causal_rejected_max: 0.2
+  direction_undeclared_max: 0.6
+  non_material_max: 0.5
+bands:
+  HIGH:
+    min: 0.8
+    label: Very likely a cause
+  MODERATE:
+    min: 0.6
+    label: Likely a contributing cause
+  LOW:
+    min: 0.35
+    label: Possible; needs verification
+  VERY_LOW:
+    min: 0.0
+    label: Unlikely to explain this change
+thresholds:
+  material_share: 0.2
+  ambiguous_gap: 0.1
+  ambiguous_min_ac: 0.5
+  no_confident_driver_max_ac: 0.35
+  min_history_periods: 14

@@ -24,11 +24,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 from typing import Any
 
+import yaml
+
+from kpi_engine.attribution_confidence import AttributionConfidenceEngine, AttributionConfidenceModel, default_model
 from kpi_engine.pipeline import KPIEnginePipeline
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,7 +71,7 @@ EXPECTED_DIRECTION_SIGN = {
 # ground-truth weather event (EVT06) is category=Apparel.
 WEATHER_DIRECTION_BY_CATEGORY = {"Apparel": "NEGATIVE"}
 MAX_IS_BETTER_METRICS = {"false_alarm_rate_negatives", "decoy_false_alarm_rate_all_kpis",
-                          "decoy_false_alarm_rate_revenue"}
+                          "decoy_false_alarm_rate_revenue", "decoy_max_ac"}
 
 
 def expected_direction_sign(driver_id: str, category: str) -> str | None:
@@ -130,6 +134,159 @@ def top_driver_ids(result: dict[str, Any], n: int) -> list[str]:
     return [canonical_driver_id(item["driver_id"]) for item in ranked[:n]]
 
 
+def attribution_confidence_metrics(
+    ac_labels: list[tuple[float, int]], decoy_ac_values: list[float],
+) -> dict[str, Any]:
+    true_acs = [ac for ac, label in ac_labels if label == 1]
+    false_acs = [ac for ac, label in ac_labels if label == 0]
+    mean_true_ac = round(sum(true_acs) / len(true_acs), 4) if true_acs else None
+    mean_false_ac = round(sum(false_acs) / len(false_acs), 4) if false_acs else None
+    ac_gap = round(mean_true_ac - mean_false_ac, 4) if mean_true_ac is not None and mean_false_ac is not None else None
+    brier = round(sum((ac - label) ** 2 for ac, label in ac_labels) / len(ac_labels), 4) if ac_labels else None
+    return {
+        "mean_true_driver_ac": mean_true_ac,
+        "mean_false_driver_ac": mean_false_ac,
+        "ac_gap": ac_gap,
+        "decoy_max_ac": round(max(decoy_ac_values), 4) if decoy_ac_values else None,
+        "brier_score": brier,
+        "n_true_driver_scored": len(true_acs),
+        "n_false_driver_scored": len(false_acs),
+        "n_decoy_scored": len(decoy_ac_values),
+    }
+
+
+def collect_ac_training_rows(
+    cases: list[dict[str, Any]], pipeline: KPIEnginePipeline, model: AttributionConfidenceModel,
+) -> list[dict[str, Any]]:
+    """One row per ranked, AC-scored driver in an event_present case with a
+    labelled true driver: its feature activations (Plan §7.1's evidence
+    items, at the same weight-key granularity as the model file) plus the
+    1/0 label (is this the labelled true driver?). Used by --calibrate to
+    fit new weights by L2-regularised logistic regression (dev split only)."""
+    rows: list[dict[str, Any]] = []
+    for row in cases:
+        if row["is_decoy"] or not (row.get("event_id") and row["event_present"] and row["true_driver_id"]):
+            continue
+        result = run_case(pipeline, row)
+        true_id = canonical_driver_id(row["true_driver_id"])
+        source_status = ((result.get("confidence_profile") or {}).get("source") or {}).get("status")
+        causal_verification = result.get("causal_verification") or {}
+        causal_design_approved = bool(result.get("_causal_design_approved"))
+        for driver in (result.get("driver_analysis") or {}).get("ranked_drivers") or []:
+            if not driver.get("moved") or driver.get("offsetting"):
+                continue
+            if (driver.get("sample_size") or 0) < model.thresholds["min_history_periods"]:
+                continue
+            causal_for_driver = (
+                causal_verification if causal_design_approved
+                and causal_verification.get("driver_id") == driver.get("driver_id") else None
+            )
+            features = AttributionConfidenceEngine.feature_activations(
+                driver, causal_result=causal_for_driver, corroboration=None,
+                source_status=source_status, model=model,
+            )
+            rows.append({
+                "features": features,
+                "label": 1 if canonical_driver_id(driver["driver_id"]) == true_id else 0,
+            })
+    return rows
+
+
+def fit_logistic_regression(
+    rows: list[dict[str, Any]], keys: tuple[str, ...], *, priors: dict[str, float],
+    l2: float = 1.0, lr: float = 0.1, iterations: int = 2000,
+) -> dict[str, float]:
+    """L2-regularised logistic regression by gradient descent, starting from
+    the hand-set weights as priors (Plan §7.1's calibration note) -- no
+    sklearn dependency is installed in this environment. The L2 penalty is
+    centred on the prior, not on zero, so an under-represented feature
+    decays toward the hand-set judgement rather than toward "no effect"."""
+    n = len(rows)
+    if n == 0:
+        return dict(priors)
+    weights = dict(priors)
+    for _ in range(iterations):
+        gradients = {key: 0.0 for key in keys}
+        for row in rows:
+            z = sum(row["features"].get(key, 0.0) * weights[key] for key in keys)
+            prediction = 1.0 / (1.0 + math.exp(-z)) if z >= 0 else math.exp(z) / (1.0 + math.exp(z))
+            error = prediction - row["label"]
+            for key in keys:
+                activation = row["features"].get(key, 0.0)
+                if activation:
+                    gradients[key] += error * activation
+        for key in keys:
+            grad = gradients[key] / n + l2 * (weights[key] - priors[key]) / n
+            weights[key] -= lr * grad
+    return weights
+
+
+def calibrate_attribution_confidence(
+    dev_cases: list[dict[str, Any]], holdout_cases: list[dict[str, Any]], pipeline: KPIEnginePipeline,
+) -> dict[str, Any]:
+    v1 = default_model()
+    dev_rows = collect_ac_training_rows(dev_cases, pipeline, v1)
+    priors = {key: v1.weights[key] for key in AttributionConfidenceEngine.WEIGHT_KEYS}
+    fitted = fit_logistic_regression(dev_rows, AttributionConfidenceEngine.WEIGHT_KEYS, priors=priors)
+
+    v2_data = {
+        "version": "attribution-confidence-v2",
+        "calibration_status": "CALIBRATED_ON_SYNTHETIC_LABELS",
+        "weights": {**{k: v1.weights[k] for k in v1.weights if k not in AttributionConfidenceEngine.WEIGHT_KEYS}, **fitted},
+        "caps": dict(v1.caps),
+        "bands": {name: dict(spec) for name, spec in v1.bands.items()},
+        "thresholds": dict(v1.thresholds),
+    }
+    v2_path = ROOT / "kpi_engine" / "models" / "attribution_confidence_v2.yaml"
+    with open(v2_path, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(v2_data, handle, sort_keys=False)
+    v2_model = AttributionConfidenceModel.load(v2_path)
+
+    holdout_rows = collect_ac_training_rows(holdout_cases, pipeline, v1)
+    holdout_labels: list[tuple[float, int]] = []
+    for row in holdout_rows:
+        logit_ac = math.log(0.5 / 0.5) + sum(
+            row["features"].get(key, 0.0) * v2_model.weights[key] for key in AttributionConfidenceEngine.WEIGHT_KEYS
+        )
+        ac = 1.0 / (1.0 + math.exp(-logit_ac)) if logit_ac >= 0 else math.exp(logit_ac) / (1.0 + math.exp(logit_ac))
+        holdout_labels.append((ac, row["label"]))
+    brier = (
+        round(sum((ac - label) ** 2 for ac, label in holdout_labels) / len(holdout_labels), 4)
+        if holdout_labels else None
+    )
+    log_loss = None
+    if holdout_labels:
+        eps = 1e-9
+        log_loss = round(
+            -sum(
+                label * math.log(max(ac, eps)) + (1 - label) * math.log(max(1 - ac, eps))
+                for ac, label in holdout_labels
+            ) / len(holdout_labels), 4,
+        )
+    bins: dict[str, dict[str, Any]] = {}
+    for low in (0.0, 0.2, 0.4, 0.6, 0.8):
+        bucket = [(ac, label) for ac, label in holdout_labels if low <= ac < low + 0.2 or (low == 0.8 and ac == 1.0)]
+        bins[f"{low:.1f}-{low + 0.2:.1f}"] = {
+            "n": len(bucket),
+            "mean_predicted": round(sum(ac for ac, _ in bucket) / len(bucket), 4) if bucket else None,
+            "observed_rate": round(sum(label for _, label in bucket) / len(bucket), 4) if bucket else None,
+        }
+
+    return {
+        "v2_path": str(v2_path),
+        "n_dev_rows": len(dev_rows),
+        "n_holdout_rows": len(holdout_rows),
+        "holdout_brier": brier,
+        "holdout_log_loss": log_loss,
+        "holdout_reliability_bins": bins,
+        "note": "Weights are fit on --split dev only, starting from the v1 hand-set weights as an L2 "
+                "prior. Holdout Brier/log-loss/reliability above are reported, never used to pick "
+                "weights or thresholds (AGENTS.md rule 5). Labels are the synthetic ground-truth "
+                "true_driver_id column, not reviewed real-world outcomes -- calibration_status stays "
+                "CALIBRATED_ON_SYNTHETIC_LABELS, never 'calibrated on real data'.",
+    }
+
+
 def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[str, Any]:
     detection_by_event: dict[str, Counter] = defaultdict(Counter)
     revenue_recall_by_event: dict[str, Counter] = defaultdict(Counter)
@@ -154,6 +311,8 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
     causal_by_event: dict[str, Counter] = defaultdict(Counter)
     confidence_overall = Counter()
     reconciliation_by_kpi: dict[str, Counter] = defaultdict(Counter)
+    ac_labels: list[tuple[float, int]] = []
+    decoy_ac_values: list[float] = []
 
     for row in cases:
         result = run_case(pipeline, row)
@@ -174,6 +333,11 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
                 decoy_confident_hits += 1
             causal = result.get("causal_verification") or {}
             causal_by_event[event_id][causal.get("verdict") or "NOT_ASSESSED"] += 1
+            decoy_ac_values.extend(
+                item["attribution_confidence"]
+                for item in (result.get("driver_analysis") or {}).get("ranked_drivers") or []
+                if item.get("attribution_confidence") is not None
+            )
 
         elif event_id and row["event_present"]:
             bucket = detection_by_event[event_id]
@@ -205,6 +369,12 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
                 if true_id in top3_ids:
                     driver_top3_hits += 1
                     event_bucket["top3"] += 1
+                for item in (result.get("driver_analysis") or {}).get("ranked_drivers") or []:
+                    ac = item.get("attribution_confidence")
+                    if ac is None:
+                        continue
+                    label = 1 if canonical_driver_id(item["driver_id"]) == true_id else 0
+                    ac_labels.append((ac, label))
 
             causal = result.get("causal_verification") or {}
             causal_by_event[event_id][causal.get("verdict") or "NOT_ASSESSED"] += 1
@@ -345,9 +515,12 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
         },
         "confidence": {
             "overall_status_counts": dict(confidence_overall),
-            "brier_score": None,
-            "reliability_bins": None,
-            "note": "Attribution Confidence does not exist until Stage 7; these are placeholders.",
+            "attribution_confidence": attribution_confidence_metrics(ac_labels, decoy_ac_values),
+            "note": "Attribution Confidence (Stage 7): mean_true_driver_ac/mean_false_driver_ac/ac_gap "
+                    "score every ranked driver in an event_present case with a labelled true driver "
+                    "(true_driver_id) against every OTHER ranked driver in that case (label 0). "
+                    "decoy_max_ac is the max AC seen across the EVT05 decoy cases (never folded into "
+                    "the true/false split above). brier_score is over the same true/false pairs.",
         },
         "reconciliation": {
             "by_kpi": reconciliation,
@@ -421,6 +594,17 @@ def to_markdown(metrics: dict[str, Any]) -> str:
     lines.append("## Overall confidence status distribution")
     lines.append(f"{metrics['confidence']['overall_status_counts']}")
     lines.append("")
+    ac_metrics = metrics["confidence"]["attribution_confidence"]
+    lines.append("## Attribution Confidence (Stage 7)")
+    lines.append(f"- Mean AC, true driver: {ac_metrics['mean_true_driver_ac']} "
+                 f"({ac_metrics['n_true_driver_scored']} scored)")
+    lines.append(f"- Mean AC, false drivers: {ac_metrics['mean_false_driver_ac']} "
+                 f"({ac_metrics['n_false_driver_scored']} scored)")
+    lines.append(f"- AC gap (true - false, accept >= 0.30): {ac_metrics['ac_gap']}")
+    lines.append(f"- Decoy (EVT05) max AC (accept < 0.5): {ac_metrics['decoy_max_ac']} "
+                 f"({ac_metrics['n_decoy_scored']} scored)")
+    lines.append(f"- Brier score: {ac_metrics['brier_score']}")
+    lines.append("")
     lines.append("## Reconciliation status by KPI (Stage 4, F-C3)")
     lines.append("| kpi | resolved rate (target >= 0.70) | status counts |")
     lines.append("|---|---|---|")
@@ -451,6 +635,8 @@ def check_thresholds(metrics: dict[str, Any], thresholds: dict[str, float]) -> l
         "events_with_any_top1_direction_hit": metrics["attribution"]["events_with_any_top1_direction_hit"],
         "decoy_false_alarm_rate_all_kpis": metrics["decoy"]["false_alarm_rate_all_kpis"],
         "decoy_false_alarm_rate_revenue": metrics["decoy"]["false_alarm_rate_revenue"],
+        "ac_gap": metrics["confidence"]["attribution_confidence"]["ac_gap"],
+        "decoy_max_ac": metrics["confidence"]["attribution_confidence"]["decoy_max_ac"],
     }
     for kpi_id, row in metrics["reconciliation"]["by_kpi"].items():
         flat[f"reconciliation_resolved_rate_{kpi_id}"] = row["resolved_rate"]
@@ -481,10 +667,23 @@ def main() -> int:
                          help="key=value; recall_EVT01=0.7 (min) or false_alarm_rate_negatives=0.05 "
                               "(max, for keys in MAX_IS_BETTER_METRICS). Repeatable.")
     parser.add_argument("--markdown-out", default=None, help="Optional path to also write the markdown table.")
+    parser.add_argument("--calibrate", action="store_true",
+                         help="Fit Attribution Confidence weights on --split dev by L2-regularised "
+                              "logistic regression, write attribution_confidence_v2.yaml, and report "
+                              "Brier/log-loss/reliability on holdout (Plan §7.1). Never changes --split "
+                              "used for the main evaluation below.")
     args = parser.parse_args()
 
     cases = load_cases(Path(args.labels_csv), args.split)
     pipeline = build_pipeline()
+
+    if args.calibrate:
+        dev_cases = load_cases(Path(args.labels_csv), "dev")
+        holdout_cases = load_cases(Path(args.labels_csv), "holdout")
+        calibration = calibrate_attribution_confidence(dev_cases, holdout_cases, pipeline)
+        print(json.dumps({"calibration": calibration}, indent=2, allow_nan=False))
+        print()
+
     metrics = evaluate(cases, pipeline)
     report = {"split": args.split, "labels_csv": args.labels_csv, "metrics": metrics}
     print(json.dumps(report, indent=2, allow_nan=False))

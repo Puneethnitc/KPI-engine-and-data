@@ -285,6 +285,25 @@ td strong, td:nth-child(2) { color: var(--text); }
 .confidence-overall { margin: 14px 0; padding: 11px 13px; border-left: 3px solid var(--blue); background: var(--panel-2); }
 .confidence-overall p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .confidence-blocking { color: var(--amber) !important; font-weight: 650; }
+.confidence-headlines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.confidence-headline { display: flex; flex-direction: column; gap: 7px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.confidence-headline-question { color: var(--muted); font-size: 11px; font-weight: 650; }
+.attribution-confidence-bars { margin: 16px 0; }
+.attribution-confidence-bars h3 { margin: 0 0 4px; font-size: 15px; }
+.attribution-confidence-bar { margin: 10px 0; padding: 12px 13px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.attribution-confidence-bar-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 650; }
+.attribution-confidence-bar-track { height: 8px; margin-top: 9px; border-radius: 5px; background: var(--panel-3); overflow: hidden; }
+.attribution-confidence-bar-fill { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
+.attribution-confidence-bar.good .attribution-confidence-bar-fill { background: var(--green); }
+.attribution-confidence-bar.warning .attribution-confidence-bar-fill { background: var(--red); }
+.attribution-confidence-bar.neutral .attribution-confidence-bar-fill { background: var(--faint); }
+.attribution-confidence-bar details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.attribution-confidence-bar summary { color: var(--blue); cursor: pointer; font-size: 11px; }
+.attribution-confidence-evidence { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 11px; line-height: 1.5; }
+.attribution-confidence-evidence li { padding: 6px 8px; border-left: 3px solid var(--line); background: var(--panel-2); }
+.attribution-confidence-evidence li.positive { border-left-color: var(--green); }
+.attribution-confidence-evidence li.negative { border-left-color: var(--red); }
+.evidence-pill.neutral { color: var(--faint); }
 .confidence-dimensions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .confidence-dimension { min-width: 0; padding: 13px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 .confidence-dimension h3 { margin: 2px 0 0; font-size: 13px; }
