@@ -5,10 +5,33 @@ import unittest
 from fastapi import HTTPException
 
 from backend.app import api_movements
-from backend.service import get_movements
+from backend.service import diagnose_scope, get_movements, movement_priority
 
 
 class MovementsServiceTests(unittest.TestCase):
+    def test_company_wide_movement_target_runs_without_a_dimension_filter(self):
+        response = diagnose_scope(
+            kpis=["orders"], target_date="2024-05-15", persona="CFO",
+            scope={"region": None, "category": None},
+        )
+        result = response["results"]["orders"]
+        self.assertEqual(result["segment"], {})
+        self.assertIsNotNone(result["movement_assessment"]["actual_value"])
+
+    def test_orders_outrank_a_smaller_revenue_movement_after_baseline_conversion(self):
+        baseline = {"net_sales_revenue": 10000.0, "orders": 100.0}
+        orders = movement_priority(
+            {"delta": 20.0, "robust_score": 5.0},
+            {"identity": {"kpi_id": "orders"}, "materiality": {"impact_to_revenue": {"method": "aov"}, "statistical_thresholds": {"z_threshold": 2.5}, "kpi_weight": 0.8}},
+            baseline,
+        )
+        revenue = movement_priority(
+            {"delta": 500.0, "robust_score": 5.0},
+            {"identity": {"kpi_id": "net_sales_revenue"}, "materiality": {"impact_to_revenue": {"method": "identity"}, "statistical_thresholds": {"z_threshold": 2.5}, "kpi_weight": 1.0}},
+            baseline,
+        )
+        self.assertGreater(orders, revenue)
+
     def test_regional_persona_only_sees_its_own_region(self):
         payload = get_movements("2024-05-15", "demo-regional-north", ["net_sales_revenue"])
         self.assertEqual(payload["persona"], "regional_manager_north")
@@ -29,6 +52,7 @@ class MovementsServiceTests(unittest.TestCase):
     def test_defaults_to_every_registered_kpi(self):
         payload = get_movements("2024-05-15", "demo-cfo", None)
         self.assertTrue({item["kpi_id"] for item in payload["movements"]} >= {"net_sales_revenue"})
+        self.assertTrue(any(item["kpi_id"] != "net_sales_revenue" for item in payload["movements"][:5]))
 
 
 class MovementsRouteTests(unittest.TestCase):

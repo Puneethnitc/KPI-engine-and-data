@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { createContext, useContext } from 'react'
 import { contextHref } from '../lib/presentation'
 import { DemoScenario, identityForPersona as identityFromPersona, personaLabel } from '../lib/demo-scenarios'
+import { movementScopeOptions } from '../lib/movement-navigation'
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api/backend'
 export const identityForPersona = identityFromPersona
@@ -64,9 +65,10 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
         if (stored[key] && valid.includes(stored[key])) return stored[key]
         return fallback ?? valid[0] ?? ''
       }
-      setPersona(choose('persona', allowedValues.personas, payload.default?.persona || 'marketing_manager'))
-      setRegion(choose('region', allowedValues.regions, payload.default?.region))
-      setCategory(choose('category', allowedValues.categories, payload.default?.category))
+      const nextPersona = choose('persona', allowedValues.personas, payload.default?.persona || 'marketing_manager')
+      setPersona(nextPersona)
+      setRegion(choose('region', movementScopeOptions(allowedValues.regions, 'region', nextPersona), payload.default?.region))
+      setCategory(choose('category', movementScopeOptions(allowedValues.categories, 'category', nextPersona), payload.default?.category))
       setDate(choose('date', allowedValues.dates, payload.default?.date))
 
       fetch(`${API_BASE}/api/demo-scenarios`, { cache: 'no-store' }).then(res => res.ok ? res.json() : Promise.reject(new Error('Scenarios unavailable'))).then(data => {
@@ -100,13 +102,13 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
       if (scenarioId) return
       const params = new URLSearchParams(window.location.search)
       if (params.get('persona') && allowed.personas.includes(params.get('persona')!)) setPersona(params.get('persona')!)
-      if (params.get('region') && allowed.regions.includes(params.get('region')!)) setRegion(params.get('region')!)
-      if (params.get('category') && allowed.categories.includes(params.get('category')!)) setCategory(params.get('category')!)
+      if (params.get('region') && movementScopeOptions(allowed.regions, 'region', persona).includes(params.get('region')!)) setRegion(params.get('region')!)
+      if (params.get('category') && movementScopeOptions(allowed.categories, 'category', persona).includes(params.get('category')!)) setCategory(params.get('category')!)
       if (params.get('date') && allowed.dates.includes(params.get('date')!)) setDate(params.get('date')!)
     }
     window.addEventListener('popstate', restoreUrlScope)
     return () => window.removeEventListener('popstate', restoreUrlScope)
-  }, [allowed, scenarioId])
+  }, [allowed, persona, scenarioId])
 
   const selectScenario = (id: string) => {
     if (!id) {
@@ -153,6 +155,17 @@ export function useDemoContext() {
 
 import { CustomSelect } from './ui/custom-select'
 
+export function DateFilter({ date, dates, onChange, disabled, label = 'Date' }: {
+  date: string; dates: string[]; onChange: (date: string) => void; disabled?: boolean; label?: string
+}) {
+  const sorted = [...dates].sort()
+  const unavailable = Boolean(date && sorted.length && !sorted.includes(date))
+  return <div className="date-filter" title={disabled ? 'Locked by active scenario' : undefined}>
+    <label><span>{label}</span><input aria-label="Date" type="date" value={date} min={sorted[0]} max={sorted.at(-1)} onChange={event => onChange(event.target.value)} disabled={disabled} aria-invalid={unavailable} /></label>
+    {unavailable && <small role="status" className="date-filter-message">No data is available for this date. Choose another date to run the diagnosis.</small>}
+  </div>
+}
+
 export function AppHeader({ active }: { active: string }) {
   const demo = useDemoContext()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -191,9 +204,10 @@ export function AppHeader({ active }: { active: string }) {
 
 export default function AppShell({ children, active, context }: { children: React.ReactNode; active: string; context?: string }) {
   const demo = useDemoContext()
-  const regionOptions = demo.options.regions.includes(demo.region) ? demo.options.regions : [...demo.options.regions, demo.region]
-  const categoryOptions = demo.options.categories.includes(demo.category) ? demo.options.categories : [...demo.options.categories, demo.category]
-  const dateOptions = demo.options.dates.includes(demo.date) ? demo.options.dates : [...demo.options.dates, demo.date]
+  const availableRegions = movementScopeOptions(demo.options.regions, 'region', demo.persona)
+  const availableCategories = movementScopeOptions(demo.options.categories, 'category', demo.persona)
+  const regionOptions = availableRegions.includes(demo.region) ? availableRegions : [...availableRegions, demo.region]
+  const categoryOptions = availableCategories.includes(demo.category) ? availableCategories : [...availableCategories, demo.category]
 
   return <div className={`app-shell ${demo.theme}`} data-context-ready={demo.ready}>
     <AppHeader active={active} />
@@ -206,9 +220,7 @@ export default function AppShell({ children, active, context }: { children: Reac
       <div style={{ width: '150px' }} title={demo.scenarioLocked ? 'Locked by active scenario' : ''}>
         <CustomSelect ariaLabel="Category" value={demo.category} onChange={demo.setCategory} options={categoryOptions} disabled={demo.scenarioLocked} />
       </div>
-      <div style={{ width: '140px' }} title={demo.scenarioLocked ? 'Locked by active scenario' : ''}>
-        <CustomSelect ariaLabel="Date" value={demo.date} onChange={demo.setDate} options={dateOptions} searchable disabled={demo.scenarioLocked} />
-      </div>
+      <DateFilter date={demo.date} dates={demo.options.dates} onChange={demo.setDate} disabled={demo.scenarioLocked} label="" />
     </div>}
     {context && <div className="route-context">Active scope: {context} · {demo.persona === 'CFO' ? 'CFO review' : 'Marketing Manager workspace'}</div>}
     <main className="workspace"><section className="dashboard-column">{children}</section></main>

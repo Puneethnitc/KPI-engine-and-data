@@ -54,8 +54,9 @@ export function buildDiagnosisRequest(args: {
     body: {
       kpis: ['all'],
       target_date: args.date,
-      region: args.region,
-      category: args.category,
+      ...(args.region === 'ALL' || args.category === 'ALL'
+        ? { scope: { region: args.region === 'ALL' ? null : args.region, category: args.category === 'ALL' ? null : args.category } }
+        : { region: args.region, category: args.category }),
       persona: args.persona,
       user_id: args.userId,
     },

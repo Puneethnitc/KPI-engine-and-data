@@ -7,7 +7,7 @@ import {
   Database, GripVertical, LayoutDashboard, Maximize2, Minimize2, RefreshCw, Send,
   ShieldAlert, Sparkles, TrendingDown, X,
 } from 'lucide-react'
-import { AppHeader, identityForPersona, useDemoContext } from '../components/app-shell'
+import { AppHeader, DateFilter, identityForPersona, useDemoContext } from '../components/app-shell'
 import ActionWorkspace from '../components/action-workspace'
 import FunnelBridgeCard, { type FunnelBridge } from '../components/funnel-bridge'
 import type { DriverAnalysis } from '../lib/driver-analysis'
@@ -15,6 +15,7 @@ import type { ActionContract } from '../lib/action-workspace'
 import { statusLabel } from '../lib/presentation'
 import { contractViewerHref } from '../lib/semantic-contract'
 import { CustomSelect } from '../components/ui/custom-select'
+import { movementScopeOptions, movementSelection } from '../lib/movement-navigation'
 import { KpiTrendChart } from '../components/kpi-trend-chart'
 import { buildDiagnosisRequest, parseScenarioExecution, mergeScopeOption, isTrendChartAllowed, isAssistantAllowed, validateGovernedAccessDenied, buildScenarioMetadata } from '../lib/demo-scenarios'
 import ConfidenceWorkspace from '../components/confidence-workspace'
@@ -39,6 +40,7 @@ type Movement = {
 // persona-wide "Top movements today" feed, across every authorised slice.
 type ScannedMovement = {
   kpi_id: string
+  target_date: string
   region: string | null
   category: string | null
   is_material: boolean
@@ -235,6 +237,9 @@ export default function Page() {
   const [scenarioHistory, setScenarioHistory] = useState<{ baseline_count?: number, required_observation_count?: number } | null>(null)
   const [movements, setMovements] = useState<ScannedMovement[]>([])
   const [movementsLoading, setMovementsLoading] = useState(false)
+  const [movementsFetched, setMovementsFetched] = useState(false)
+  const [priorityInfoOpen, setPriorityInfoOpen] = useState(false)
+  const [movementRunToken, setMovementRunToken] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [accessDeniedMessage, setAccessDeniedMessage] = useState('')
@@ -253,6 +258,9 @@ export default function Page() {
   const [conversationId, setConversationId] = useState<string | undefined>()
   const [asking, setAsking] = useState(false)
   const conversationEnd = useRef<HTMLDivElement>(null)
+  const detailRef = useRef<HTMLElement>(null)
+  const pendingMovement = useRef<string | null>(null)
+  const diagnosisRequest = useRef(0)
 
   const result = results[selected]
   const kpi = registeredKpis.find(item => item.kpi_id === selected) ?? registeredKpis[0] ?? { kpi_id: selected, unit: 'count', version: 1, definition: '', dimensions: [] }
@@ -265,7 +273,9 @@ export default function Page() {
   async function loadMetadata() {
     try {
       const metadataUser = activeScenario ? activeScenario.user_id : identityForPersona(persona)
-      const metadataParams = new URLSearchParams({ user_id: metadataUser, region, category })
+      const metadataParams = new URLSearchParams({ user_id: metadataUser })
+      if (region !== 'ALL') metadataParams.set('region', region)
+      if (category !== 'ALL') metadataParams.set('category', category)
       const kpiResponse = await fetch(`${API_BASE}/api/kpis?${metadataParams}`, { cache: 'no-store' })
       if (!kpiResponse.ok) throw new Error('Could not load KPI metadata')
       const kpiPayload = await kpiResponse.json()
@@ -291,13 +301,31 @@ export default function Page() {
 
   function openMovement(item: ScannedMovement) {
     if (scenarioLocked) return
-    if (item.region) setRegion(item.region)
-    if (item.category) setCategory(item.category)
-    if (registeredKpis.some(candidate => candidate.kpi_id === item.kpi_id)) setSelected(item.kpi_id)
+    const target = movementSelection(item, date, options, persona)
+    if (!target) return
+    returnToManual()
+    setRegion(target.region)
+    setCategory(target.category)
+    setDate(target.date)
+    setSelected(target.kpiId)
+    setLoading(true)
+    setResults({})
+    setMarketingBrief(null)
+    pendingMovement.current = target.kpiId
+    diagnosisRequest.current += 1
+    setMovementRunToken(value => value + 1)
   }
 
   async function diagnose() {
     if (!ready) return
+    if (!options.dates.includes(date)) {
+      diagnosisRequest.current += 1
+      setLoading(false)
+      setResults({})
+      setMarketingBrief(null)
+      return
+    }
+    const requestId = ++diagnosisRequest.current
     setLoading(true)
     setError('')
     setAccessDeniedMessage('')
@@ -311,7 +339,7 @@ export default function Page() {
     }
 
     const requestScope = { persona, region, category, target_date: date }
-    if (process.env.NODE_ENV !== 'production' && !scenarioLocked && (!options.regions.includes(region) || !options.categories.includes(category) || !options.dates.includes(date))) {
+    if (process.env.NODE_ENV !== 'production' && !scenarioLocked && (!movementScopeOptions(options.regions, 'region', persona).includes(region) || !movementScopeOptions(options.categories, 'category', persona).includes(category))) {
       const message = 'Visible filter scope is not present in backend filter metadata.'
       console.error(message, { requestScope, options })
       setError(message)
@@ -328,6 +356,7 @@ export default function Page() {
         body: JSON.stringify(req.body),
       })
       const rawPayload = await response.json().catch(() => null)
+      if (requestId !== diagnosisRequest.current) return
       const execution = parseScenarioExecution(response.status, rawPayload)
 
       if (!execution.ok) {
@@ -354,7 +383,7 @@ export default function Page() {
 
       const payload = execution.payload!
       const responseScope = (payload.marketing_brief as any)?.scope
-      if (!scenarioLocked && responseScope && (responseScope.region !== region || responseScope.category !== category || responseScope.target_date !== date)) {
+      if (!scenarioLocked && responseScope && ((responseScope.region ?? 'ALL') !== region || (responseScope.category ?? 'ALL') !== category || responseScope.target_date !== date)) {
         const message = 'Returned diagnosis scope does not match the visible filters.'
         console.error(message, { requestScope, responseScope })
         throw new Error(message)
@@ -373,25 +402,40 @@ export default function Page() {
       setMessages([])
       setConversationId(undefined)
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Could not reach the KPI backend')
+      if (requestId === diagnosisRequest.current) setError(requestError instanceof Error ? requestError.message : 'Could not reach the KPI backend')
     } finally {
-      setLoading(false)
+      if (requestId === diagnosisRequest.current) setLoading(false)
     }
   }
 
   useEffect(() => { void loadMetadata() }, [])
-  useEffect(() => { if (ready) void diagnose() }, [ready, region, category, date, persona, scenarioId])
+  useEffect(() => { if (ready) void diagnose() }, [ready, region, category, date, persona, scenarioId, movementRunToken])
+  useEffect(() => {
+    if (!loading && result && pendingMovement.current === selected) {
+      pendingMovement.current = null
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [loading, result, selected])
   useEffect(() => {
     if (!ready || !date) return
+    if (!options.dates.includes(date)) {
+      setMovements([])
+      setMovementsLoading(false)
+      setMovementsFetched(true)
+      return
+    }
+    const controller = new AbortController()
     const userId = activeScenario ? activeScenario.user_id : identityForPersona(persona)
     setMovementsLoading(true)
+    setMovementsFetched(false)
     const params = new URLSearchParams({ date, user_id: userId })
-    fetch(`${API_BASE}/api/movements?${params}`, { cache: 'no-store' })
+    fetch(`${API_BASE}/api/movements?${params}`, { cache: 'no-store', signal: controller.signal })
       .then(response => response.ok ? response.json() : null)
-      .then(payload => setMovements(payload?.movements ?? []))
-      .catch(() => setMovements([]))
-      .finally(() => setMovementsLoading(false))
-  }, [ready, date, persona, activeScenario])
+      .then(payload => { if (!controller.signal.aborted) setMovements(payload?.movements ?? []) })
+      .catch(() => { if (!controller.signal.aborted) setMovements([]) })
+      .finally(() => { if (!controller.signal.aborted) { setMovementsLoading(false); setMovementsFetched(true) } })
+    return () => controller.abort()
+  }, [ready, date, persona, activeScenario, options.dates])
   useEffect(() => {
     const runId = new URLSearchParams(window.location.search).get('runId')
     if (!runId) return
@@ -487,9 +531,8 @@ export default function Page() {
     technical_details: [insight.narrative, insight.confidence_status, insight.kpi_id],
   }))) : []
   const hasPositiveOpportunity = marketingBrief?.positive_opportunity ?? false
-  const regionOptions = mergeScopeOption(options.regions, region)
-  const categoryOptions = mergeScopeOption(options.categories, category)
-  const dateOptions = mergeScopeOption(options.dates, date)
+  const regionOptions = mergeScopeOption(movementScopeOptions(options.regions, 'region', persona), region)
+  const categoryOptions = mergeScopeOption(movementScopeOptions(options.categories, 'category', persona), category)
   const scenarioOptions = [{ value: '', label: 'Standard view' }, ...scenarios.map(s => ({ value: s.scenario_id, label: s.title }))]
 
   return <div className={`app-shell ${theme}`} style={{ '--assistant-width': `${panelWidth}px` } as React.CSSProperties}>
@@ -509,10 +552,8 @@ export default function Page() {
             <div style={{ width: '150px' }} title={scenarioLocked ? 'Locked by active scenario' : ''}>
               <CustomSelect label="Category" ariaLabel="Category" value={category} onChange={setCategory} options={categoryOptions} disabled={scenarioLocked} />
             </div>
-            <div style={{ width: '140px' }} title={scenarioLocked ? 'Locked by active scenario' : ''}>
-              <CustomSelect label="Date" ariaLabel="Date" value={date} onChange={setDate} options={dateOptions} searchable disabled={scenarioLocked} />
-            </div>
-            <button className="run-button" style={{ minHeight: '40px', height: '40px' }} disabled={!ready || loading} onClick={() => void diagnose()}>
+            <DateFilter date={date} dates={options.dates} onChange={setDate} disabled={scenarioLocked} />
+            <button className="run-button" style={{ minHeight: '40px', height: '40px' }} disabled={!ready || loading || !options.dates.includes(date)} onClick={() => void diagnose()}>
               <RefreshCw size={15} className={loading ? 'spin' : ''} /> Run
             </button>
           </div>
@@ -563,38 +604,44 @@ export default function Page() {
         {error && <div className="alert error"><ShieldAlert size={18} /><span>{error}</span></div>}
         {loading && <div className="alert"><Activity className="spin" size={18} /><span>Running the governed KPI engine across daily, weekly, and monthly sources…</span></div>}
 
-        {movements.length > 0 && (
-          <section className="card" aria-labelledby="movements-title" style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {(movementsLoading || movementsFetched) && (
+          <section className="card movements-card" aria-labelledby="movements-title">
+            <div className="movements-heading">
               <div>
                 <span className="eyebrow">Detection only, ranked by priority</span>
-                <h3 id="movements-title" style={{ margin: '2px 0' }}>Top movements today</h3>
+                <div className="movements-title-row"><h3 id="movements-title">Top movements today</h3>
+                  <button type="button" className="movements-info-button" aria-label="How movement priority is ranked" aria-expanded={priorityInfoOpen} aria-controls="movements-priority-info" onClick={() => setPriorityInfoOpen(value => !value)}>ⓘ</button>
+                </div>
               </div>
               {movementsLoading && <Activity className="spin" size={16} />}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
-              {movements.slice(0, 5).map(item => {
+            {priorityInfoOpen && <div id="movements-priority-info" className="movements-popover" role="note">
+              Priority = how far the change is outside its normal range (capped at 3× the alert threshold) × the change in revenue terms × this KPI’s weight. Material movements are flagged separately.
+            </div>}
+            {movementsLoading && !movementsFetched ? <div className="movements-list" aria-label="Loading movements">{[1, 2, 3].map(rank => <div className="movement-skeleton" key={rank} />)}</div>
+              : movements.length === 0 ? <p className="movements-empty">No movements were found for this date and persona.</p>
+              : <div className="movements-list">
+              {movements.slice(0, 5).map((item, index) => {
                 const unit = registeredKpis.find(candidate => candidate.kpi_id === item.kpi_id)?.unit ?? 'count'
+                const active = selected === item.kpi_id && region === (item.region ?? 'ALL') && category === (item.category ?? 'ALL') && date === item.target_date
                 return (
                   <button
                     key={`${item.kpi_id}-${item.region ?? 'ALL'}-${item.category ?? 'ALL'}`}
                     onClick={() => openMovement(item)}
                     disabled={scenarioLocked}
-                    style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
-                      width: '100%', textAlign: 'left', background: 'none', cursor: scenarioLocked ? 'default' : 'pointer',
-                      border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 12px',
-                    }}
+                    title={scenarioLocked ? 'Return to Standard view to open a movement; this demo scenario locks its scope.' : `Priority ${item.priority.toLocaleString('en-IN', { maximumFractionDigits: 1 })}`}
+                    className={`movement-row${active ? ' active' : ''}`}
+                    aria-current={active ? 'true' : undefined}
                   >
-                    <span><strong>{kpiLabel(item.kpi_id)}</strong> · {item.region ?? 'All regions'} · {item.category ?? 'All categories'}</span>
-                    <span className={`evidence-pill ${item.is_material ? 'warning' : 'neutral'}`}>
-                      {formatDelta(item.delta, unit)}{item.is_material ? ' · material' : ''}
-                    </span>
+                    <span className="movement-rank">{index + 1}</span>
+                    <span className="movement-name"><strong>{kpiLabel(item.kpi_id)}</strong><small>{item.region ?? 'All regions'} · {item.category ?? 'All categories'}</small></span>
+                    <span className="movement-change"><strong>{formatDelta(item.delta, unit)}</strong><small>{item.rel_delta == null ? 'Change % unavailable' : `${(item.rel_delta * 100).toFixed(1)}% change`} · Priority {item.priority.toLocaleString('en-IN', { maximumFractionDigits: 1 })}</small></span>
+                    <span className={`movement-material ${item.is_material ? 'material' : 'not-material'}`}>{item.is_material ? 'Material' : 'Not material'}</span>
                   </button>
                 )
               })}
-            </div>
-            <small style={{ display: 'block', marginTop: '8px', color: 'var(--muted)' }}>
+            </div>}
+            <small className="movements-footnote">
               Movement detection only -- no driver ranking or causal check yet. Click a row to open that slice's full diagnosis.
             </small>
           </section>
@@ -640,7 +687,7 @@ export default function Page() {
           <details className="brief-method"><summary>Method and evidence details</summary><p>{marketingBrief.method}. Co-movement is not proof of causality and related KPI movements are not summed as separate causes.</p><small>Overall evidence: {result?.confidence_profile?.overall.status ?? 'PROFILE_NOT_SAVED'} · Causal verification: {result?.causal_verdict ?? 'UNTESTABLE'} · Engine verdict: {result?.verdict}</small></details>
         </section>}
 
-        <section className="kpi-selector supporting-kpis" aria-label="Registered KPIs">
+        <section ref={detailRef} className="kpi-selector supporting-kpis" aria-label="Registered KPIs">
           {registeredKpis.map(item => {
             const itemResult = results[item.kpi_id]
             const itemMovement = itemResult?.movement_assessment

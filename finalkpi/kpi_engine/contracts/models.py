@@ -463,7 +463,7 @@ class KPIContract:
             if not isinstance(self.impact_to_revenue, dict) or "method" not in self.impact_to_revenue:
                 raise ValueError(f"KPI {self.kpi_id}.impact_to_revenue: a 'method' is required.")
             method = self.impact_to_revenue["method"]
-            if method not in {"identity", "aov", "value_per_visit"}:
+            if method not in {"identity", "aov", "value_per_visit", "revenue_per_unit", "revenue_per_visit", "traffic_aov"}:
                 raise ValueError(f"KPI {self.kpi_id}.impact_to_revenue.method: unsupported method '{method}'.")
             if method != "identity" and not self.impact_to_revenue.get("rate_column"):
                 raise ValueError(f"KPI {self.kpi_id}.impact_to_revenue: '{method}' requires a rate_column.")

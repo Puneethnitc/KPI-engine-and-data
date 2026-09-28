@@ -1050,3 +1050,18 @@ remains 6 `NOT_ASSESSED` plus 6 `UNTESTABLE`.
   is retained deliberately: a run cached under the pre-merge `ENGINE_VERSION`
   genuinely has no AC field, and the chat still has to say so rather than
   inventing one. The real-AC path is covered by the two new chat tests.
+
+## UI movements and priority: before → after
+
+The 538-case `--split all` ground-truth run is unchanged because this fix updates the cross-slice movement feed and its navigation, not the diagnosis detector or driver model.
+
+| Measure | Before | After |
+|---|---:|---:|
+| Top-1 driver accuracy | 0.734 | 0.734 |
+| Direction-aware top-1 accuracy | 0.719 | 0.719 |
+| Top-3 driver accuracy | 0.766 | 0.766 |
+| Quiet-negative false-alarm rate | 0.048 | 0.048 |
+| Attribution Confidence gap | 0.5126 | 0.5126 |
+| Brier score | 0.0977 | 0.0977 |
+
+For the CFO feed on 2024-05-15, the refreshed top five include revenue, conversion rate, orders, and units sold. Priority now uses same-slice weekday baseline rates to express each delta in revenue terms before applying the capped alert multiple and KPI weight.

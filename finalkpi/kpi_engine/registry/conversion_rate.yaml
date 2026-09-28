@@ -53,11 +53,9 @@ seasonal_period: 7
 min_history_periods: 60
 owner: growth_lead
 access_tags: [region_scoped]
-# Stage 2 (F-D4): cross-KPI movement-priority weight. The plan's "0.8 x
-# revenue-per-point" multiplier is not computed here (that needs a live
-# revenue-per-conversion-point rate, not a static contract constant); 0.8 is
-# used as a flat approximation until MovementScanner needs the exact figure.
+# Revenue per conversion point uses same-slice weekday traffic and order value.
 kpi_weight: 0.8
+impact_to_revenue: {method: traffic_aov, rate_column: aov}
 
 # Explicit unsupported/not-declared capabilities, not successful empty results.
 decomposition: null

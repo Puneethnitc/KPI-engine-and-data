@@ -50,11 +50,9 @@ seasonal_period: 7
 min_history_periods: 60
 owner: growth_lead
 access_tags: [region_scoped]
-# Stage 2 (F-D4): cross-KPI movement-priority weight. No impact_to_revenue:
-# there is no single source column for "revenue per visit" in this dataset,
-# so a revenue-equivalent figure for traffic is left unreported rather than
-# guessed from an unrelated rate column.
+# Revenue per visit is derived from the same-slice weekday revenue and traffic baselines.
 kpi_weight: 0.5
+impact_to_revenue: {method: revenue_per_visit, rate_column: net_sales_revenue}
 
 # Optional capabilities deliberately absent in the current definition.
 decomposition: null

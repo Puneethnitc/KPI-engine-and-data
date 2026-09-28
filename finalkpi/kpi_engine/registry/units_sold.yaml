@@ -51,7 +51,7 @@ owner: operations_lead
 access_tags: [region_scoped]
 # Stage 2 (F-D4): cross-KPI movement-priority weight and revenue-equivalent impact.
 kpi_weight: 0.6
-impact_to_revenue: {method: aov, rate_column: aov}
+impact_to_revenue: {method: revenue_per_unit, rate_column: net_sales_revenue}
 
 # No quantity/rate identity currently configured.
 decomposition: null

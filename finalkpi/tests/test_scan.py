@@ -53,6 +53,17 @@ class MovementScannerTests(unittest.TestCase):
         priorities = [item["priority"] for item in movements]
         self.assertEqual(priorities, sorted(priorities, reverse=True))
 
+    def test_priority_is_independent_of_other_requested_kpis(self):
+        single = self.scanner.scan(
+            date="2024-05-15", persona="CFO", kpis=["orders"], sales_csv=self.sales_csv,
+        )
+        combined = self.scanner.scan(
+            date="2024-05-15", persona="CFO", kpis=["conversion_rate", "orders"], sales_csv=self.sales_csv,
+        )
+        first = next(item for item in single if item["region"] is None and item["category"] is None)
+        second = next(item for item in combined if item["kpi_id"] == "orders" and item["region"] is None and item["category"] is None)
+        self.assertAlmostEqual(first["priority"], second["priority"])
+
     def test_quiet_date_returns_no_material_movements_but_still_scores(self):
         # 2023-05-22 is a verified quiet North/Electronics date (Stage 0's
         # ground-truth negatives; see backend/demo_scenarios.py's

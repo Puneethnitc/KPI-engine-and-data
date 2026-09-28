@@ -32,7 +32,7 @@ from kpi_engine.access import AccessController
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import daily_values, prepare_metric_request
 from kpi_engine.pipeline import KPIEnginePipeline
-from kpi_engine.scan import MovementScanner
+from kpi_engine.scan import MovementScanner, revenue_equivalent_delta
 from kpi_engine.query.catalog import SourceCatalog
 from kpi_engine.query.service import QueryService
 
@@ -58,7 +58,7 @@ DEMO_IDENTITIES = {
     # has can_view_categories = ALL).
     "demo-category-manager-north-electronics": "category_manager_north_electronics",
 }
-ENGINE_VERSION = "kpi-engine-stage-final-v2"
+ENGINE_VERSION = "kpi-engine-ui-movements-v2"
 from kpi_engine.verification.registry import resolve_governed_design
 
 
@@ -416,7 +416,7 @@ def _prepare_requested_kpis(
     registry = _registry_with_catalog(catalog)
     service = QueryService(catalog)
     prepared: Dict[str, Any] = {}
-    dimension_slice = {key: value for key, value in scope.items() if key not in {"target_date", "date", "as_of", "persona"}}
+    dimension_slice = {key: value for key, value in scope.items() if key not in {"target_date", "date", "as_of", "persona"} and value is not None}
 
     for kpi_id in selected:
         contract = registry.get(kpi_id)
@@ -478,7 +478,7 @@ def diagnose_scope(
     pipeline = _build_pipeline()
     results: Dict[str, Any] = {}
     pending: list[str] = []
-    dimension_slice = {key: value for key, value in effective_scope.items() if key not in {"target_date", "date", "as_of", "persona"}}
+    dimension_slice = {key: value for key, value in effective_scope.items() if key not in {"target_date", "date", "as_of", "persona"} and value is not None}
     access = AccessController(ACCESS_CSV).check(persona, {key: dimension_slice.get(key) for key in ("region", "category") if key in dimension_slice})
     cache_scope = {
         **dimension_slice,
@@ -627,13 +627,8 @@ def diagnose_scope(
     return {"results": results}
 
 
-def movement_priority(movement: Dict[str, Any], contract_snapshot: Optional[Dict[str, Any]]) -> float:
-    """Stage 2 (F-D4): priority = |delta| x min(|score| / z_threshold, 3) x kpi_weight.
-
-    Replaces the old material/decline/other 2/1/0 bucket so movements rank by
-    how far outside the governed statistical bar they sit and by how much the
-    contract says this KPI's movements should count, not just by direction.
-    """
+def movement_priority(movement: Dict[str, Any], contract_snapshot: Optional[Dict[str, Any]], baseline: Optional[Dict[str, float]] = None) -> float:
+    """Revenue-equivalent change × capped alert multiple × governed KPI weight."""
     delta = movement.get("delta")
     score = movement.get("robust_score")
     if delta is None or score is None:
@@ -641,7 +636,12 @@ def movement_priority(movement: Dict[str, Any], contract_snapshot: Optional[Dict
     materiality = ((contract_snapshot or {}).get("materiality")) or {}
     z_threshold = (materiality.get("statistical_thresholds") or {}).get("z_threshold") or 1.0
     kpi_weight = materiality.get("kpi_weight") or 1.0
-    return abs(delta) * min(abs(score) / z_threshold, 3.0) * kpi_weight
+    contract = contract_snapshot or {}
+    impact = revenue_equivalent_delta(
+        delta, (contract.get("identity") or {}).get("kpi_id", ""),
+        materiality.get("impact_to_revenue"), baseline or {},
+    )
+    return impact * min(abs(score) / z_threshold, 3.0) * kpi_weight
 
 
 def build_persona_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, Any], persona: str = "marketing_manager") -> Dict[str, Any]:
@@ -657,6 +657,11 @@ def build_persona_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, Any
         ("net_sales_revenue", "Net sales revenue", "Value"),
     ]
     stages = []
+    baseline_values = {
+        kpi_id: movement["expected_value"]
+        for kpi_id, result in results.items()
+        if (movement := result.get("movement_assessment") or {}).get("expected_value") is not None
+    }
     material_declines = []
     declines = []
     positive = []
@@ -687,7 +692,7 @@ def build_persona_brief(results: Dict[str, Dict[str, Any]], scope: Dict[str, Any
         elif direction == "up":
             positive.append(item)
         if available:
-            item["priority"] = movement_priority(movement, result.get("contract_snapshot"))
+            item["priority"] = movement_priority(movement, result.get("contract_snapshot"), baseline_values)
             candidates.append((item["priority"], item))
 
     weakest = next((stage for stage in stages[:2] if stage["material"] and stage["direction"] == "down"), None)

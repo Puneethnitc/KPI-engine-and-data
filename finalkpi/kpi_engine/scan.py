@@ -13,35 +13,56 @@
 """MovementScanner: fast movement-only detection across every authorised slice."""
 
 from dataclasses import asdict, dataclass
+import math
 from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 
 from kpi_engine.access import AccessController
 from kpi_engine.contracts import KPIRegistry
-from kpi_engine.contracts.metrics import prepare_metric_request
+from kpi_engine.contracts.metrics import prepare_metric_request, same_weekday_expected
 from kpi_engine.contracts.models import KPIContract
 from kpi_engine.detection.models import MovementAssessment
 from kpi_engine.detection.robust import RobustBaselineDetector
 from kpi_engine.normalize import DataNormalizer
 
 
-def movement_priority(assessment: MovementAssessment, contract: KPIContract) -> float:
-    """priority = |delta| x min(|score| / z_threshold, 3) x kpi_weight (F-D4).
+def revenue_equivalent_delta(delta: float, kpi_id: str, impact: Optional[Dict[str, str]], baseline: Dict[str, float]) -> float:
+    """Convert a KPI movement with rates from the same slice's weekday baseline."""
+    method = (impact or {}).get("method")
+    revenue = baseline.get("net_sales_revenue")
+    denominator = {
+        "aov": baseline.get("orders"),
+        "revenue_per_unit": baseline.get("units_sold"),
+        "revenue_per_visit": baseline.get("traffic_total"),
+        "traffic_aov": baseline.get("orders"),
+    }.get(method)
+    if method == "identity":
+        factor = 1.0
+    elif method == "traffic_aov":
+        traffic = baseline.get("traffic_total")
+        factor = (traffic * revenue / denominator) if traffic is not None and revenue is not None and denominator and denominator > 0 else 0.0
+    elif revenue is not None and denominator and denominator > 0:
+        factor = revenue / denominator
+    else:
+        factor = 0.0
+    value = abs(delta) * factor
+    return value if math.isfinite(value) and value >= 0 else 0.0
 
-    Kept in sync with backend/service.py's movement_priority, which computes
-    the same formula from a serialized movement/contract_snapshot pair for
-    callers that only have the projected API payload, not live objects.
-    """
+
+def movement_priority(assessment: MovementAssessment, contract: KPIContract, baseline: Dict[str, float]) -> float:
+    """Revenue-equivalent change × capped alert multiple × governed KPI weight."""
     if assessment.delta is None or assessment.robust_score is None:
         return 0.0
     z_threshold = contract.materiality.z_threshold or 1.0
-    return abs(assessment.delta) * min(abs(assessment.robust_score) / z_threshold, 3.0) * contract.kpi_weight
+    impact = revenue_equivalent_delta(assessment.delta, contract.kpi_id, contract.impact_to_revenue, baseline)
+    return impact * min(abs(assessment.robust_score) / z_threshold, 3.0) * contract.kpi_weight
 
 
 @dataclass(frozen=True)
 class Movement:
     kpi_id: str
+    target_date: str
     region: Optional[str]
     category: Optional[str]
     is_material: bool
@@ -116,6 +137,7 @@ class MovementScanner:
             return []
         slices = self._authorized_slices(persona, daily)
         movements: List[Movement] = []
+        baseline_by_slice: Dict[tuple[Optional[str], Optional[str]], Dict[str, float]] = {}
         for kpi_id in kpis:
             try:
                 contract = self.registry.get(kpi_id)
@@ -144,12 +166,26 @@ class MovementScanner:
                 )
                 if assessment.status != "OK":
                     continue
+                slice_key = ((dimension_slice or {}).get("region"), (dimension_slice or {}).get("category"))
+                if slice_key not in baseline_by_slice:
+                    baseline = {}
+                    history = scoped.copy()
+                    history["date"] = pd.to_datetime(history["date"])
+                    for baseline_kpi in ("net_sales_revenue", "orders", "units_sold", "traffic_total"):
+                        if baseline_kpi not in history.columns:
+                            continue
+                        baseline_series = history.groupby("date")[baseline_kpi].sum(min_count=1)
+                        expected, _ = same_weekday_expected(baseline_series, target)
+                        if expected is not None and math.isfinite(expected):
+                            baseline[baseline_kpi] = expected
+                    baseline_by_slice[slice_key] = baseline
                 movements.append(Movement(
                     kpi_id=kpi_id,
+                    target_date=date,
                     region=(dimension_slice or {}).get("region"),
                     category=(dimension_slice or {}).get("category"),
                     is_material=assessment.is_material,
-                    priority=movement_priority(assessment, contract),
+                    priority=movement_priority(assessment, contract, baseline_by_slice[slice_key]),
                     delta=assessment.delta,
                     rel_delta=assessment.rel_delta,
                     actual_value=assessment.actual_value,
