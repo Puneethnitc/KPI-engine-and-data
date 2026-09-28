@@ -41,6 +41,20 @@ def output(sheet, texts, do_first=None):
 GOOD = ["Revenue rose ₹377 (+14.4%) versus expected.", "Traffic accounts for ₹232 (61%) of that change.", "Stock availability is linked to the movement at 72% attribution confidence."]
 
 
+class ConsequenceFactTests(unittest.TestCase):
+    def test_result_of_appears_only_for_material_downstream_nodes(self):
+        story = {**STORY, "nodes": [
+            {"kpi_id": "traffic_total", "percent_change": 1.0, "material": False, "consequence_of": None},
+            {"kpi_id": "orders", "percent_change": -9.0, "material": True, "consequence_of": "conversion"},
+            {"kpi_id": "units_sold", "percent_change": -1.0, "material": False, "consequence_of": None},
+        ]}
+        sheet = build_fact_sheet(story, results(), "cfo")
+        texts = {f["text"].split(" changed")[0]: f["text"] for f in sheet["facts"] if f["kind"] == "kpi"}
+        self.assertIn("downstream result of conversion", texts["Orders"])
+        self.assertNotIn("result of", texts["Traffic"])
+        self.assertNotIn("result of", texts["Units"])
+
+
 class Client:
     def __init__(self, payload=None, error=None):
         self.payload, self.error, self.calls = payload, error, 0

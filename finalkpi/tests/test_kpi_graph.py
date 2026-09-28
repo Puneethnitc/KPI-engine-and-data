@@ -76,7 +76,7 @@ class KpiGraphTests(unittest.TestCase):
         cases = [
             ("North", "Electronics", "2023-07-31", "traffic", "marketing_spend"),
             ("South", "Apparel", "2024-02-13", "conversion", "stock_availability"),
-            (None, None, "2024-05-15", "conversion", None),
+            ("ALL", "ALL", "2024-05-15", "conversion", "checkout_latency"),
         ]
         for region, category, date, root, top_driver in cases:
             with self.subTest(date=date, region=region, category=category):
@@ -84,13 +84,42 @@ class KpiGraphTests(unittest.TestCase):
                 story = build_kpi_story(results)
                 self.assertEqual(story["root_stage"], root)
                 self.assertEqual(round(sum(edge["contribution_inr"] for edge in story["edges"]), 2), story["revenue_delta"])
-                if top_driver:
-                    self.assertEqual(story["cause_chains"][0]["driver_id"], top_driver)
-                else:
-                    # The only checkout-latency candidates in this existing
-                    # aggregate result have AC 0.0522 and negative explained
-                    # shares. The story must preserve the 0.35 evidence gate.
-                    self.assertEqual(story["cause_chains"], [])
+                self.assertEqual(story["cause_chains"][0]["driver_id"], top_driver)
+
+    def test_all_all_traffic_is_not_a_consequence(self):
+        # Traffic is upstream of the root (conversion) and not material, so it must
+        # never be labelled a consequence; only material downstream KPIs may be.
+        results = diagnose_scope(region="ALL", category="ALL", target_date="2024-05-15", persona="CFO")["results"]
+        story = build_kpi_story(results)
+        nodes = {node["kpi_id"]: node for node in story["nodes"]}
+        self.assertFalse(nodes["traffic_total"]["material"])
+        self.assertIsNone(nodes["traffic_total"]["consequence_of"])
+        self.assertIsNone(nodes["conversion_rate"]["consequence_of"])
+        for node in story["nodes"]:
+            if node["consequence_of"]:
+                self.assertTrue(node["material"])
+                self.assertIn(node["kpi_id"], {"orders", "units_sold", "net_sales_revenue"})
+
+    def test_parallel_and_non_material_nodes_are_never_consequences(self):
+        # Conversion is the root; traffic is a parallel input and units is not material.
+        self.results = {
+            "traffic_total": result(100, 100, False),
+            "conversion_rate": result(.08, .1),
+            "orders": result(8, 10),
+            "units_sold": result(16, 20, False),
+            "net_sales_revenue": result(160, 200),
+        }
+        story = build_kpi_story(self.results)
+        self.assertEqual(story["root_stage"], "conversion")
+        nodes = {node["kpi_id"]: node for node in story["nodes"]}
+        self.assertIsNone(nodes["traffic_total"]["consequence_of"])
+        self.assertIsNone(nodes["conversion_rate"]["consequence_of"])
+        self.assertIsNone(nodes["units_sold"]["consequence_of"])
+        self.assertEqual(nodes["orders"]["consequence_of"], "conversion")
+
+    def test_untested_driver_is_not_tested_not_untestable(self):
+        story = build_kpi_story(self.results)
+        self.assertEqual(story["cause_chains"][0]["causal_verdict"], "NOT_TESTED")
 
 
 if __name__ == "__main__":

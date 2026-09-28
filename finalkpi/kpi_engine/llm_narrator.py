@@ -98,7 +98,9 @@ def build_fact_sheet(story: Mapping[str, Any], results: Mapping[str, Mapping[str
         add(f"The largest share of the revenue change came from {STAGE_NAMES.get(story['root_stage'], story['root_stage']).lower()}.", "root")
     for node in story.get("nodes", []):
         if node.get("percent_change") is not None and node["kpi_id"] in KPI_NAMES:
-            add(f"{KPI_NAMES[node['kpi_id']]} changed {_pct(node['percent_change'])} versus expected ({'material' if node.get('material') else 'within the normal range'}).", "kpi")
+            origin = node.get("consequence_of")
+            downstream = f" It is a downstream result of {STAGE_NAMES.get(origin, origin).lower()}, not a separate cause." if origin else ""
+            add(f"{KPI_NAMES[node['kpi_id']]} changed {_pct(node['percent_change'])} versus expected ({'material' if node.get('material') else 'within the normal range'}).{downstream}", "kpi")
     if story.get("missing_stages"):
         add(f"Missing stages: {', '.join(STAGE_NAMES.get(s, s) for s in story['missing_stages'])}.", "missing")
 
@@ -118,7 +120,7 @@ def build_fact_sheet(story: Mapping[str, Any], results: Mapping[str, Mapping[str
     chains = {c["driver_id"]: c for c in story.get("cause_chains", [])}
     for driver_id, chain in chains.items():
         entry = best.setdefault(driver_id, {"id": driver_id, "name": _humanize(driver_id).capitalize(), "ac": float(chain["attribution_confidence"]), "band": chain.get("band"), "verdict": chain.get("causal_verdict"), "kpi": chain.get("via_kpi")})
-        if chain.get("causal_verdict") not in (None, "UNTESTABLE"):
+        if chain.get("causal_verdict") not in (None, "NOT_TESTED"):
             entry["verdict"] = chain["causal_verdict"]
     for entry in sorted(best.values(), key=lambda item: -item["ac"])[:4]:
         chain = chains.get(entry["id"])

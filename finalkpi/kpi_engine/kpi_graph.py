@@ -156,8 +156,20 @@ def build_kpi_story(results_by_kpi: Mapping[str, dict[str, Any]], graph: dict[st
             if any(edge["contribution_inr"] != 0 for edge in edges):
                 root_stage = max(edges, key=lambda edge: (abs(edge["contribution_inr"]), -list(effects).index(edge["stage"])))["stage"]
     root_kpi = next((stage["kpi_id"] for stage in graph["stages"] if stage["id"] == root_stage), None)
+    # A consequence is a material KPI strictly downstream of the root stage in the
+    # declared identities. The root, upstream stages, parallel inputs (traffic vs
+    # conversion) and non-material KPIs are never marked.
+    downstream: set[str] = set()
+    if root_kpi:
+        grew = True
+        while grew:
+            grew = False
+            for target, inputs in graph["relationships"].items():
+                if target not in downstream and (root_kpi in inputs or downstream & set(inputs)):
+                    downstream.add(target)
+                    grew = True
     for node in nodes:
-        if node["kpi_id"] != root_kpi and node["percent_change"] not in (None, 0) and root_stage:
+        if node["kpi_id"] in downstream and node["material"] and node["percent_change"] not in (None, 0):
             node["consequence_of"] = root_stage
 
     # A driver on orders/revenue may corroborate an upstream weak stage. Put
@@ -186,7 +198,7 @@ def build_kpi_story(results_by_kpi: Mapping[str, dict[str, Any]], graph: dict[st
             evidence = driver.get("corroboration") or {}
             documents = [doc.get("doc_id") for doc in evidence.get("documents", []) if doc.get("doc_id")]
             verification = (results_by_kpi.get(evidence_kpi) or {}).get("causal_verification") or {}
-            verdict = verification.get("verdict") if verification.get("driver_id") == driver_id else "UNTESTABLE"
+            verdict = verification.get("verdict") if verification.get("driver_id") == driver_id else "NOT_TESTED"
             chain = chains_by_driver.setdefault(driver_id, {"driver_id": driver_id, "stages": [],
                 "via_kpi": kpi_id, "revenue_impact": 0.0, "attribution_confidence": ac,
                 "band": driver.get("band"), "causal_verdict": verdict,
@@ -203,7 +215,7 @@ def build_kpi_story(results_by_kpi: Mapping[str, dict[str, Any]], graph: dict[st
             chain["attribution_confidence"] = max(chain["attribution_confidence"], ac)
             chain["attribution_source_kpis"] = sorted(set(chain["attribution_source_kpis"] + [evidence_kpi]))
             chain["corroboration_doc_ids"] = sorted(set(chain["corroboration_doc_ids"] + documents))
-            if verdict != "UNTESTABLE":
+            if verdict != "NOT_TESTED":
                 chain["causal_verdict"] = verdict
     chains = list(chains_by_driver.values())
     for chain in chains:
