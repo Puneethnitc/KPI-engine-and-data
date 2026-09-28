@@ -17,6 +17,8 @@ import { contractViewerHref } from '../lib/semantic-contract'
 import { CustomSelect } from '../components/ui/custom-select'
 import { movementScopeOptions, movementSelection } from '../lib/movement-navigation'
 import { KpiTrendChart } from '../components/kpi-trend-chart'
+import { deviationView } from '../lib/deviation-view'
+import { sourceStatus, reconciliationStatus, reconciliationMode } from '../lib/data-foundation'
 import { buildDiagnosisRequest, parseScenarioExecution, mergeScopeOption, isTrendChartAllowed, isAssistantAllowed, validateGovernedAccessDenied, buildScenarioMetadata } from '../lib/demo-scenarios'
 import ConfidenceWorkspace from '../components/confidence-workspace'
 import type { ConfidenceProfile } from '../lib/confidence-profile'
@@ -32,6 +34,8 @@ type Movement = {
   is_business_material: boolean
   detector_agreement?: string
   status: string
+  baseline_scale?: number | null
+  robust_score?: number | null
 }
 
 // A single MovementScanner result (GET /api/movements) -- distinct from
@@ -99,6 +103,7 @@ type Result = {
   grounding_passed: boolean
   narrative_method?: string
   telemetry?: { model_call_count?: number; total_latency_ms?: number; estimated_cost?: number }
+  contract_snapshot?: { materiality?: { statistical_thresholds?: { z_threshold?: number } } }
 }
 
 type MarketingBrief = {
@@ -125,8 +130,8 @@ type RegisteredKpi = { kpi_id: string; version: number; definition: string; disp
 type EvidenceSummary = {
   as_of?: string | null
   source_readiness: { status: string }
-  sources?: { source_id: string; coverage_status: string }[]
-  reconciliation?: { status: string; blocking: boolean; reason?: string | null }
+  sources?: { source_id: string; coverage_status: string; latest_available_time?: string | null; latest_event_time?: string | null }[]
+  reconciliation?: { status: string; blocking: boolean; reason?: string | null; gap_percent?: number | null; comparison_basis?: string | null; details?: { mode?: string | null } }
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api/backend'
@@ -239,6 +244,7 @@ export default function Page() {
   const [movementsLoading, setMovementsLoading] = useState(false)
   const [movementsFetched, setMovementsFetched] = useState(false)
   const [priorityInfoOpen, setPriorityInfoOpen] = useState(false)
+  const [foundationInfoOpen, setFoundationInfoOpen] = useState(false)
   const [movementRunToken, setMovementRunToken] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -266,6 +272,7 @@ export default function Page() {
   const kpi = registeredKpis.find(item => item.kpi_id === selected) ?? registeredKpis[0] ?? { kpi_id: selected, unit: 'count', version: 1, definition: '', dimensions: [] }
   const selectedKpiLabel = kpiLabel(kpi.kpi_id)
   const movement = result?.movement_assessment
+  const deviation = deviationView(movement?.actual_value, movement?.expected_value, movement?.baseline_scale, movement?.robust_score, result?.contract_snapshot?.materiality?.statistical_thresholds?.z_threshold)
   const decomposition = result?.decomposition
   const isAssistantOpen = assistantMode === 'opening' || assistantMode === 'open'
 
@@ -719,9 +726,19 @@ export default function Page() {
             </div>
 
             <div className="comparison-chart" role="img" aria-label={`${selectedKpiLabel} actual compared with expected baseline`}>
-              <div className="chart-head"><span>Target Date Summary</span><small>Actual vs Baseline</small></div>
-              <div className="bar-row"><span>Expected</span><i><b style={{ width: '100%' }} /></i><strong>{formatValue(movement?.expected_value, kpi.unit)}</strong></div>
-              <div className="bar-row actual"><span>Actual</span><i><b style={{ width: `${movement?.expected_value ? Math.min(100, Math.abs((movement.actual_value / movement.expected_value) * 100)) : 0}%` }} /></i><strong>{formatValue(movement?.actual_value, kpi.unit)}</strong></div>
+              <div className="chart-head"><span>Target Date Summary</span><small>Deviation from expected</small></div>
+              <div className="deviation-values"><span>Expected <strong>{formatValue(movement?.expected_value, kpi.unit)}</strong></span><span>Actual <strong>{formatValue(movement?.actual_value, kpi.unit)}</strong></span></div>
+              {deviation.percent == null ? <p className="deviation-unavailable">Percentage difference unavailable for this baseline.</p> : <>
+                <strong className={`deviation-change ${deviation.percent < 0 ? 'down' : 'up'}`}>{deviation.percent >= 0 ? '+' : ''}{deviation.percent.toFixed(1)}% ({formatDelta(deviation.delta, kpi.unit)})</strong>
+                <div className="deviation-track" aria-hidden="true">
+                  {deviation.alertLeft != null && <i className="deviation-band alert" style={{ left: `${deviation.alertLeft}%`, width: `${deviation.alertWidth}%` }} />}
+                  {deviation.normalLeft != null && <i className="deviation-band normal" style={{ left: `${deviation.normalLeft}%`, width: `${deviation.normalWidth}%` }} />}
+                  <i className="deviation-zero" />
+                  <i className={`deviation-fill ${deviation.percent < 0 ? 'down' : 'up'}`} style={{ left: `${deviation.barLeft}%`, width: `${deviation.barWidth}%` }} />
+                </div>
+                <div className="deviation-axis"><span>Below expected</span><strong>0% expected</strong><span>Above expected</span></div>
+                {deviation.normalWidth != null && <small className="deviation-key">Shaded centre: normal range{deviation.alertWidth != null ? ' · outer band: alert threshold' : ''}</small>}
+              </>}
               <div className="chart-caption"><Database size={14} /> Target date {date} · As of {result?.as_of ? new Date(result.as_of).toLocaleString('en-IN') : 'awaiting run'}</div>
             </div>
           </div>
@@ -751,59 +768,37 @@ export default function Page() {
                 <span className="eyebrow">Data foundation</span>
                 <h3>Sources and reconciliation</h3>
               </div>
-              <span className={`evidence-pill ${
+              <div className="source-summary-actions"><button type="button" className="movements-info-button" aria-label="Explain data foundation statuses" aria-expanded={foundationInfoOpen} onClick={() => setFoundationInfoOpen(value => !value)}>ⓘ</button><span className={`evidence-pill ${
                 evidenceData.source_readiness.status === 'READY' ? 'good' :
                 evidenceData.source_readiness.status === 'QUALITY_FAILED' ? 'warning' : 'limited'
               }`}>
                 {titleCase(evidenceData.source_readiness.status)}
-              </span>
+              </span></div>
             </div>
-
-            <div className="source-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '16px' }}>
-              <div>
-                <strong style={{ display: 'block', fontSize: '13px' }}>Daily sales</strong>
-                <small style={{ color: 'var(--muted)' }}>
-                  {evidenceData.sources?.find(source => source.source_id === 'sales_daily')?.coverage_status ?? 'NOT_LOADED'}
-                </small>
-              </div>
-              <div>
-                <strong style={{ display: 'block', fontSize: '13px' }}>Weekly marketing</strong>
-                <small style={{ color: 'var(--muted)' }}>
-                  {evidenceData.sources?.find(source => source.source_id === 'marketing_weekly')?.coverage_status ?? 'NOT_LOADED'}
-                </small>
-              </div>
-              <div>
-                <strong style={{ display: 'block', fontSize: '13px' }}>Monthly finance</strong>
-                <small style={{ color: 'var(--muted)' }}>
-                  {evidenceData.sources?.find(source => source.source_id === 'finance_monthly')?.coverage_status ?? 'NOT_LOADED'}
-                </small>
-              </div>
-              <div>
-                <strong style={{ display: 'block', fontSize: '13px' }}>Requested as-of cutoff</strong>
-                <small style={{ color: 'var(--muted)' }}>
-                  {evidenceData.as_of ?? 'latest available'}
-                </small>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <strong style={{ display: 'block', fontSize: '13px' }}>Independent reconciliation</strong>
-                  <p style={{ fontSize: '13px', margin: '4px 0 0', color: 'var(--muted)' }}>
-                    {evidenceData.reconciliation?.reason}
-                  </p>
+            {foundationInfoOpen && <div className="source-summary-popover" role="note">
+              <p><strong>FULL</strong> covers the selected period. <strong>PARTIAL</strong> is loaded but incomplete: weekly marketing publishes two days after week end; finance closes about five days after month end.</p>
+              <p><strong>EMPTY</strong> has no rows for this scope. <strong>NOT_LOADED</strong> was not needed for this KPI. <strong>RESTRICTED</strong> was used but is hidden for your role.</p>
+              <p><strong>AGREED</strong> means sources agree. <strong>PENDING_CLOSE</strong> means finance is awaiting close. <strong>DRIFT</strong> means a larger than usual gap. <strong>CONTRADICTED</strong> means a material disagreement.</p>
+            </div>}
+            <div className="source-summary-grid">
+              {([['sales_daily', 'Daily sales'], ['marketing_weekly', 'Weekly marketing'], ['finance_monthly', 'Monthly finance']] as const).map(([id, label]) => {
+                const source = evidenceData.sources?.find(item => item.source_id === id)
+                const status = sourceStatus(source?.coverage_status, id)
+                const latest = source?.latest_available_time ?? source?.latest_event_time
+                return <div className="source-tile" key={id}>
+                  <div className="source-tile-head"><strong>{label}</strong><span className={`source-status ${status.tone}`}>{status.label}</span></div>
+                  <small>Latest available: {latest ? latest.slice(0, 10) : status.label === 'RESTRICTED' ? 'Hidden for your role' : 'Unavailable'}</small>
+                  <p>{status.meaning}</p>
                 </div>
-                <span className={`evidence-pill ${
-                  evidenceData.reconciliation?.blocking ? 'warning' :
-                  evidenceData.reconciliation?.status === 'AGREED' ? 'good' :
-                  evidenceData.reconciliation?.status === 'DRIFT' ? 'warning' :
-                  evidenceData.reconciliation?.status === 'NOT_APPLICABLE' ? 'neutral' : 'limited'
-                }`}>
-                  {titleCase(evidenceData.reconciliation?.status)}
-                </span>
-              </div>
+              })}
             </div>
+            <div className="source-reconciliation">
+              <div><strong>Independent reconciliation</strong><p>{evidenceData.reconciliation?.reason ?? reconciliationStatus(evidenceData.reconciliation?.status).meaning}</p>
+                <small>{evidenceData.reconciliation?.gap_percent != null ? `Gap: ${evidenceData.reconciliation.gap_percent.toFixed(1)}%` : 'Gap: hidden or unavailable'}{reconciliationMode(evidenceData.reconciliation?.comparison_basis ?? evidenceData.reconciliation?.details?.mode) ? ` · ${reconciliationMode(evidenceData.reconciliation?.comparison_basis ?? evidenceData.reconciliation?.details?.mode)}` : ''}</small>
+              </div>
+              <span className={`source-status ${reconciliationStatus(evidenceData.reconciliation?.status).tone}`}>{reconciliationStatus(evidenceData.reconciliation?.status).label}</span>
+            </div>
+            <small className="source-as-of">Requested as-of cutoff: {evidenceData.as_of ?? 'latest available'}</small>
           </section>
         )}
 

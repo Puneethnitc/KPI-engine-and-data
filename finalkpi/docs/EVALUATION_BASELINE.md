@@ -1065,3 +1065,18 @@ The 538-case `--split all` ground-truth run is unchanged because this fix update
 | Brier score | 0.0977 | 0.0977 |
 
 For the CFO feed on 2024-05-15, the refreshed top five include revenue, conversion rate, orders, and units sold. Priority now uses same-slice weekday baseline rates to express each delta in revenue terms before applying the capped alert multiple and KPI weight.
+
+## Stage UI charts and data foundation: before → after
+
+The Overview changes adjust chart layout, deviation display, and persona-safe source projection. They do not change detector or attribution calculations. The 538-case `--split all` evaluation remains:
+
+| Measure | Before | After |
+|---|---:|---:|
+| Top-1 driver accuracy | 0.734 | 0.734 |
+| Direction-aware top-1 accuracy | 0.719 | 0.719 |
+| Top-3 driver accuracy | 0.766 | 0.766 |
+| Quiet-negative false-alarm rate | 0.048 | 0.048 |
+| Attribution Confidence gap | 0.5126 | 0.5126 |
+| Brier score | 0.0977 | 0.0977 |
+
+Non-finance personas now receive a `RESTRICTED` source placeholder when finance evidence contributed to a run; its values, dates and file paths remain hidden. CFO source evidence remains fully visible.

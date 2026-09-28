@@ -224,11 +224,21 @@ def project_evidence(evidence: dict[str, Any], persona: str) -> dict[str, Any]:
         readiness["limitations"] = _safe_evidence_limitations(readiness.get("limitations"), persona)
     sources = copied.get("sources")
     if isinstance(sources, list):
-        copied["sources"] = [
-            item for item in sources
-            if not isinstance(item, dict)
-            or _source_visible(item.get("source_id"), persona) and item.get("access_classification") != "restricted"
-        ]
+        projected_sources = []
+        for item in sources:
+            if not isinstance(item, dict):
+                projected_sources.append(item)
+            elif _source_visible(item.get("source_id"), persona) and item.get("access_classification") != "restricted":
+                projected_sources.append(item)
+            elif item.get("coverage_status") != "NOT_LOADED":
+                # Preserve only the fact that a hidden source participated.
+                # Never project its values, dates, file identifiers, or paths.
+                projected_sources.append({
+                    "source_id": item.get("source_id"),
+                    "coverage_status": "RESTRICTED",
+                    "access_classification": "restricted",
+                })
+        copied["sources"] = projected_sources
     alignment = copied.get("alignment")
     if isinstance(alignment, list):
         copied["alignment"] = [

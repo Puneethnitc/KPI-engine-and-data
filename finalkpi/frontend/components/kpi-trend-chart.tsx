@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { Calendar, RefreshCw, ShieldAlert } from 'lucide-react'
 import {
   buildContiguousSegments,
@@ -26,15 +26,8 @@ export type KpiTrendChartProps = {
   userId: string
 }
 
-// ── Zoom/pan tuning constants ─────────────────────────────────────────────
-// Sensitivity for scroll-to-zoom. Smaller = gentler. Tuned against recording.
-const ZOOM_SENSITIVITY = 0.0015
-// Maximum normalised delta applied per animation frame (prevents large jumps).
-const MAX_DELTA_PER_FRAME = 80
 // Minimum visible window (observations).
 const MIN_WINDOW = 7
-// Damping factor applied to wheel-based panning (1 = no damping).
-const PAN_DAMPING = 0.8
 
 export function KpiTrendChart({
   apiBase,
@@ -56,18 +49,13 @@ export function KpiTrendChart({
   const [rangeStart, setRangeStart] = useState<number>(0)
   const [rangeEnd, setRangeEnd] = useState<number>(0)
 
-  // Fractional (floating-point) viewport – the true source of truth during
-  // wheel and drag interactions.  React state is derived from this on each rAF.
+  // Fractional viewport is the source of truth during drag and button actions.
   const vpRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 })
-
-  // Pending accumulated wheel deltas waiting for the next animation frame.
-  const pendingWheelRef = useRef<{ deltaY: number; deltaX: number; anchorRatio: number | null } | null>(null)
-  const rafIdRef = useRef<number | null>(null)
 
   const [hoveredPoint, setHoveredPoint] = useState<TimeseriesPoint | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
 
-  const containerRef = useRef<HTMLDivElement>(null)
+  const plotRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const scrubberRef = useRef<HTMLDivElement>(null)
   const panRef = useRef<{ clientX: number; start: number; end: number } | null>(null)
@@ -106,7 +94,7 @@ export function KpiTrendChart({
         const total = pts.length
         const defaultStart = Math.max(0, total - 90)
         const defaultEnd = Math.max(0, total - 1)
-        // Sync fractional ref so wheel/drag handlers start from a consistent state.
+        // Sync fractional viewport so drag and button actions stay consistent.
         vpRef.current = { start: defaultStart, end: defaultEnd }
         setRangeStart(defaultStart)
         setRangeEnd(defaultEnd)
@@ -124,29 +112,30 @@ export function KpiTrendChart({
     }
   }, [apiBase, kpiId, region, category, targetDate, userId])
 
-  // Cancel any pending rAF on unmount to prevent state updates after unmount.
+  // The plot is absent during loading; attach observers once it is mounted.
   useEffect(() => {
-    return () => {
-      if (rafIdRef.current != null) {
-        cancelAnimationFrame(rafIdRef.current)
-        rafIdRef.current = null
-      }
+    const plot = plotRef.current
+    if (!plot) return
+    const measure = () => {
+      const width = plot.getBoundingClientRect().width
+      if (width > 0) setChartWidth(width)
     }
-  }, [])
-
-  // ResizeObserver for responsive SVG width
-  useEffect(() => {
-    if (!containerRef.current) return
-    const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0) {
-          setChartWidth(entry.contentRect.width)
-        }
-      }
+    measure()
+    const resize = new ResizeObserver(measure)
+    resize.observe(plot)
+    const visibility = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) measure()
     })
-    ro.observe(containerRef.current)
-    return () => ro.disconnect()
-  }, [])
+    visibility.observe(plot)
+    window.addEventListener('resize', measure)
+    document.addEventListener('visibilitychange', measure)
+    return () => {
+      resize.disconnect()
+      visibility.disconnect()
+      window.removeEventListener('resize', measure)
+      document.removeEventListener('visibilitychange', measure)
+    }
+  }, [loading, error, isAccessDenied])
 
   const rawPoints = data?.points || []
   const visiblePoints = useMemo(() => {
@@ -197,7 +186,7 @@ export function KpiTrendChart({
   // Chart Geometry Calculations
   const padding = { top: 24, right: 24, bottom: 44, left: 60 }
   const height = 280
-  const innerWidth = Math.max(200, chartWidth - padding.left - padding.right)
+  const innerWidth = Math.max(1, chartWidth - padding.left - padding.right)
   const innerHeight = height - padding.top - padding.bottom
 
   const lastPointIndex = Math.max(0, rawPoints.length - 1)
@@ -233,83 +222,6 @@ export function KpiTrendChart({
   function panToStart(start: number) {
     const span = vpRef.current.end - vpRef.current.start
     applyFractionalVp(start, start + span)
-  }
-
-  // ── rAF-batched wheel handler ────────────────────────────────────────────
-  // Accumulate wheel deltas and apply at most one viewport update per frame.
-  function scheduleWheelFrame() {
-    if (rafIdRef.current != null) return // already scheduled
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null
-      const pending = pendingWheelRef.current
-      if (!pending || rawPoints.length < 2) return
-      pendingWheelRef.current = null
-
-      const { start, end } = vpRef.current
-      const span = end - start
-
-      if (pending.anchorRatio === null) {
-        // ── Pan branch ───────────────────────────────────────────────────
-        // Normalise deltaX for panning; apply mild damping.
-        const rawDelta = pending.deltaX
-        // Clamp so one burst of momentum doesn't teleport the window.
-        const clampedDelta = Math.max(-MAX_DELTA_PER_FRAME, Math.min(MAX_DELTA_PER_FRAME, rawDelta))
-        const panOffset = (clampedDelta / Math.max(1, innerWidth)) * Math.max(1, span) * PAN_DAMPING
-        applyFractionalVp(start + panOffset, end + panOffset)
-      } else {
-        // ── Zoom branch ──────────────────────────────────────────────────
-        // Normalise deltaY; clamp to prevent jumps from large wheel events.
-        const rawDelta = pending.deltaY
-        const clampedDelta = Math.max(-MAX_DELTA_PER_FRAME, Math.min(MAX_DELTA_PER_FRAME, rawDelta))
-        // Exponential factor: positive deltaY (scroll down) → zoom in (shrink span).
-        // Negate so Math.exp gives a factor < 1 when scrolling down.
-        const factor = Math.exp(-clampedDelta * ZOOM_SENSITIVITY)
-        const nextSpan = Math.max(MIN_WINDOW - 1, Math.min(lastPointIndex, span * factor))
-        const anchorIndex = start + pending.anchorRatio * span
-        const nextStart = anchorIndex - pending.anchorRatio * nextSpan
-        applyFractionalVp(nextStart, nextStart + nextSpan)
-      }
-    })
-  }
-
-  function handleChartWheel(event: WheelEvent<HTMLDivElement>) {
-    if (rawPoints.length < 2) return
-    event.preventDefault()
-
-    // ── Normalize wheel delta by deltaMode ──────────────────────────────
-    // DOM_DELTA_PIXEL = 0 (default, trackpad), DOM_DELTA_LINE = 1, DOM_DELTA_PAGE = 2
-    const linePixels = 16   // approximate pixels per line
-    const pagePixels = 600  // approximate pixels per page
-    const multiplier = event.deltaMode === 1 ? linePixels : event.deltaMode === 2 ? pagePixels : 1
-    const normY = event.deltaY * multiplier
-    const normX = event.deltaX * multiplier
-
-    const isPanGesture = event.shiftKey || (Math.abs(normX) > Math.abs(normY))
-
-    if (isPanGesture) {
-      // Accumulate panning delta; anchorRatio=null signals pan branch.
-      const delta = event.shiftKey ? normY : normX
-      if (pendingWheelRef.current) {
-        pendingWheelRef.current.deltaX += delta
-      } else {
-        pendingWheelRef.current = { deltaY: 0, deltaX: delta, anchorRatio: null }
-      }
-    } else {
-      // Accumulate zooming delta.  Anchor ratio is captured from the first
-      // event in the batch; this keeps zoom stable during rapid gestures.
-      const bounds = event.currentTarget.getBoundingClientRect()
-      // Correctly account for left padding when computing anchor.
-      const plotX = Math.max(0, Math.min(innerWidth, event.clientX - bounds.left - padding.left))
-      const anchorRatio = Math.max(0, Math.min(1, plotX / innerWidth))
-      if (pendingWheelRef.current && pendingWheelRef.current.anchorRatio !== null) {
-        pendingWheelRef.current.deltaY += normY
-        // keep the first anchor; it's stable enough for a single gesture burst
-      } else {
-        pendingWheelRef.current = { deltaY: normY, deltaX: 0, anchorRatio }
-      }
-    }
-
-    scheduleWheelFrame()
   }
 
   function handleChartPointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -514,7 +426,6 @@ export function KpiTrendChart({
 
   return (
     <div
-      ref={containerRef}
       className="card trend-chart-card"
       style={{
         padding: '20px',
@@ -623,9 +534,9 @@ export function KpiTrendChart({
 
       {/* SVG Chart Body */}
       <div
+        ref={plotRef}
         className={`trend-chart-plot${isPanning ? ' is-panning' : ''}`}
         style={{ position: 'relative', width: '100%', height: `${height}px` }}
-        onWheel={handleChartWheel}
         onPointerDown={handleChartPointerDown}
         onPointerMove={handleChartPointerMove}
         onPointerUp={finishChartPan}
@@ -635,6 +546,8 @@ export function KpiTrendChart({
           ref={svgRef}
           width="100%"
           height={height}
+          viewBox={`0 0 ${chartWidth} ${height}`}
+          preserveAspectRatio="none"
           style={{ overflow: 'visible', display: 'block' }}
           onMouseLeave={() => setHoveredPoint(null)}
         >
@@ -941,7 +854,7 @@ export function KpiTrendChart({
         </div>
         <div className="trend-chart-interaction-help">
           <span>{visiblePoints[0]?.observation_date} – {visiblePoints[visiblePoints.length - 1]?.observation_date}</span>
-          <span>Scroll to zoom · Shift-scroll or drag to move · Hover to read</span>
+          <span>Drag to move · Use + / − to zoom</span>
         </div>
       </div>
 

@@ -247,6 +247,44 @@ td strong, td:nth-child(2) { color: var(--text); }
 .bar-row.actual i b { background: var(--blue); }
 .bar-row strong { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .chart-caption { display: flex; align-items: center; gap: 7px; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; }
+.deviation-values { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
+.deviation-values span { display: grid; gap: 4px; }
+.deviation-values strong { color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
+.deviation-values span:last-child { text-align: right; }
+.deviation-change { display: block; margin: 20px 0 9px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.deviation-change.up { color: var(--green); }
+.deviation-change.down { color: var(--red); }
+.deviation-track { position: relative; height: 30px; overflow: hidden; border-radius: 7px; background: var(--panel-3); }
+.deviation-band { position: absolute; top: 0; bottom: 0; }
+.deviation-band.alert { background: color-mix(in srgb, var(--amber) 20%, transparent); }
+.deviation-band.normal { background: color-mix(in srgb, var(--green) 20%, transparent); }
+.deviation-zero { position: absolute; z-index: 2; top: 0; bottom: 0; left: 50%; width: 2px; background: var(--text); }
+.deviation-fill { position: absolute; z-index: 1; top: 9px; height: 12px; border-radius: 3px; min-width: 2px; }
+.deviation-fill.up { background: var(--green); }
+.deviation-fill.down { background: var(--red); }
+.deviation-axis { display: flex; justify-content: space-between; gap: 5px; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.deviation-axis strong { color: var(--text); font-weight: 600; }
+.deviation-key, .deviation-unavailable { color: var(--muted); font-size: 11px; }
+.deviation-key { display: block; margin-top: 9px; }
+.source-summary-card { position: relative; padding: 21px; }
+.source-summary-actions { display: flex; align-items: center; gap: 9px; }
+.source-summary-popover { position: absolute; z-index: 20; top: 64px; right: 20px; width: min(390px, calc(100% - 40px)); padding: 13px 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); box-shadow: var(--shadow); color: var(--text); font-size: 12px; line-height: 1.5; }
+.source-summary-popover p { margin: 0 0 8px; }
+.source-summary-popover p:last-child { margin-bottom: 0; }
+.source-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.source-tile { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+.source-tile-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px; }
+.source-tile-head strong, .source-reconciliation strong { font-size: 13px; }
+.source-tile small, .source-reconciliation small, .source-as-of { display: block; margin-top: 9px; color: var(--muted); font-size: 11px; }
+.source-tile p, .source-reconciliation p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.source-status { display: inline-flex; width: max-content; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 700; }
+.source-status.full { color: #065b48; background: #bdebdc; }
+.source-status.partial { color: #684000; background: #ffe0a1; }
+.source-status.empty { color: var(--text); background: var(--panel-3); }
+.source-status.restricted { color: #512783; background: #e8dafa; }
+.source-status.contradicted { color: #822320; background: #fbd8d6; }
+.source-reconciliation { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+@media (max-width: 600px) { .source-summary-grid { grid-template-columns: 1fr; } }
 
 .section-heading { justify-content: space-between; gap: 18px; margin: 32px 0 13px; }
 .section-heading h2 { margin: 0 0 5px; font-size: 19px; letter-spacing: -.35px; }

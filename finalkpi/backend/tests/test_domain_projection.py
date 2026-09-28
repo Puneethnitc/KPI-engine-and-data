@@ -129,6 +129,7 @@ class DomainProjectionTests(unittest.TestCase):
         self.assertEqual(projected["reconciliation_verdict"]["details"]["finance_total"], 875.0)
         self.assertEqual(projected["source_evidence"]["reconciliation"]["comparison_value"], 875.0)
         self.assertEqual(projected["source_evidence"]["sources"][1]["file_identifier"], "finance_monthly.csv")
+        self.assertEqual(projected["source_evidence"]["sources"][1]["coverage_status"], "FULL")
 
     def test_nonfinance_diagnosis_and_evidence_hide_finance_values_and_refs(self):
         original = self.diagnosis()
@@ -143,7 +144,12 @@ class DomainProjectionTests(unittest.TestCase):
         self.assertNotIn("875.0", encoded)
         self.assertNotIn("finance_monthly.csv", encoded)
         self.assertNotIn("finance_monthly.rows", encoded)
-        self.assertNotIn("finance_monthly", repr(projected["source_evidence"]))
+        # The source participated in reconciliation; expose that fact while
+        # keeping its values, dates, file identifiers, and paths hidden.
+        self.assertEqual(projected["source_evidence"]["sources"][1], {
+            "source_id": "finance_monthly", "coverage_status": "RESTRICTED",
+            "access_classification": "restricted",
+        })
         self.assertIn("Restricted finance evidence exists", repr(projected["source_evidence"]))
         self.assertEqual(original, before)
 
@@ -210,7 +216,12 @@ class DomainProjectionTests(unittest.TestCase):
         self.save_result(result)
         before = storage.get_run(result["run_id"])["result"]
         marketing = api_evidence(result["run_id"], user_id="demo-marketing")
-        self.assertNotIn("finance_monthly", repr(marketing))
+        # The finance source participated; its placeholder reveals only that
+        # fact, while dates, values and file paths remain hidden.
+        self.assertEqual(marketing["sources"][1], {
+            "source_id": "finance_monthly", "coverage_status": "RESTRICTED",
+            "access_classification": "restricted",
+        })
         self.assertNotIn("875.0", repr(marketing))
         self.assertTrue(marketing["restricted_evidence_hidden"])
         self.assertEqual(storage.get_run(result["run_id"])["result"], before)
