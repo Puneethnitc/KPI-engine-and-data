@@ -23,16 +23,49 @@ const money = (amount: number) => `₹${Math.abs(amount).toLocaleString('en-IN',
 const signedMoney = (amount: number) => `${amount < 0 ? '−' : '+'}${money(amount)}`
 const signedPercent = (amount: number) => `${amount < 0 ? '−' : '+'}${Math.abs(amount).toFixed(1)}%`
 
-function headline(story: KpiStory): string {
+const stageKpi: Record<string, string> = { traffic: 'traffic_total', conversion: 'conversion_rate', units: 'units_sold', basket: 'net_sales_revenue' }
+const verdictLabel = (verdict: string) => verdict === 'NOT_TESTED' ? 'not tested' : verdict === 'SUPPORTED_CONDITIONAL' ? 'verified by causal test' : verdict.replaceAll('_', ' ').toLowerCase()
+
+// "a", "a and b", "a, b and c"
+function listPhrase(items: string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+export function headline(story: KpiStory): string {
   const revenue = story.headline_facts.find(fact => fact.kind === 'revenue')
   if (revenue?.delta == null) return 'Revenue comparison is unavailable for this scope.'
   const direction = revenue.delta < 0 ? 'fell' : revenue.delta > 0 ? 'rose' : 'was unchanged'
   const main = `Revenue ${direction} ${money(revenue.delta)}${revenue.percent_change == null ? '' : ` (${signedPercent(revenue.percent_change)})`}.`
-  const rootStage = story.headline_facts.find(fact => fact.kind === 'root_stage')?.stage
-  const root = rootStage ? ` The largest contribution came from ${name(rootStage).toLowerCase()}.` : ''
-  const normal = story.headline_facts.filter(fact => fact.kind === 'normal_stage' && fact.stage && fact.stage !== 'basket').map(fact => fact.stage!)
-  const quiet = normal.length ? ` ${normal.map(stage => name(stage).toLowerCase()).join(' and ')} ${normal.length === 1 ? 'was' : 'were'} not material.` : ''
+  const rootStage = story.headline_facts.find(fact => fact.kind === 'root_stage')?.stage ?? null
+  const rootNode = rootStage ? story.nodes.find(node => node.kpi_id === stageKpi[rootStage]) : undefined
+  const root = rootStage
+    ? ` The largest share came from ${name(rootStage).toLowerCase()}${rootNode && !rootNode.material ? ', although no stage moved enough on its own to be material' : ''}.`
+    : ''
+  // Stages that did not move materially, excluding the root (already described above).
+  const quietStages = story.headline_facts
+    .filter(fact => fact.kind === 'normal_stage' && fact.stage && fact.stage !== 'basket' && fact.stage !== rootStage)
+    .map(fact => name(fact.stage!).toLowerCase())
+  const quiet = quietStages.length && rootNode?.material !== false
+    ? ` ${listPhrase(quietStages).replace(/^\w/, letter => letter.toUpperCase())} ${quietStages.length === 1 ? 'was' : 'were'} within the normal range.`
+    : ''
   return main + root + quiet
+}
+
+// Label under each box. "Consequence" only for KPIs that actually moved materially.
+function nodeLabel(id: string, story: KpiStory, node: KpiStory['nodes'][number] | undefined): string {
+  if (id === 'basket') return 'Revenue per unit'
+  if (!node || node.missing) return 'Missing'
+  const rootKpi = story.root_stage ? stageKpi[story.root_stage] : undefined
+  if (rootKpi === id) return 'Largest share'
+  if (node.consequence_of && node.material) return `Result of ${name(node.consequence_of).toLowerCase()}`
+  return node.material ? 'Material change' : 'Normal range'
+}
+
+function arrowLabel(edge: KpiStory['edges'][number] | undefined): string {
+  if (!edge) return ''
+  if (Math.abs(edge.contribution_inr) < 0.5) return 'no effect'
+  return `${signedMoney(edge.contribution_inr)}${edge.contribution_pct == null ? '' : ` · ${Math.abs(edge.contribution_pct).toFixed(0)}%`}`
 }
 
 export default function KpiFlow({ story, onSelect }: { story: KpiStory | null; onSelect: (kpiId: string) => void }) {
@@ -41,25 +74,28 @@ export default function KpiFlow({ story, onSelect }: { story: KpiStory | null; o
   const maxEffect = Math.max(1, ...story.edges.map(edge => Math.abs(edge.contribution_inr)))
   const drivers = story.cause_chains.slice(0, 3)
   return <section className="kpi-connect card" aria-labelledby="kpi-connect-heading">
-    <div className="kpi-connect-heading"><div><span className="eyebrow">One connected story</span><h2 id="kpi-connect-heading">How the KPIs connect</h2></div><details className="kpi-connect-info"><summary aria-label="How this KPI flow works">ⓘ</summary><p>Traffic and conversion create orders. Orders lead to units and revenue. The lines divide the revenue change across stages once, so a fall in orders caused by lower traffic is a consequence, not a second loss. Driver links are attributed evidence; they do not prove cause.</p></details></div>
+    <div className="kpi-connect-heading"><div><span className="eyebrow">One connected story</span><h2 id="kpi-connect-heading">How the KPIs connect</h2></div></div>
+    {/* The explanation expands inline, so it never covers the content below. */}
+    <details className="kpi-connect-info"><summary>ⓘ How to read this</summary><p>Traffic and conversion create orders; orders become units; units times price become revenue. Each arrow shows how much of the revenue change came from that step, so a drop in orders caused by lower traffic is counted once, not as a second loss. Driver links are statistical evidence; they are not proof of cause unless a causal test verifies them.</p></details>
     <p className="kpi-connect-headline">{headline(story)}</p>
     {story.missing_stages.length > 0 && <p className="kpi-connect-missing">Missing stages: {story.missing_stages.map(name).join(', ')}. The available totals determine the displayed bridge.</p>}
+    <div className="kpi-driver-row"><span className="kpi-driver-label">Likely drivers</span>{drivers.length ? drivers.map(chain => <span className="kpi-driver-chip" key={chain.driver_id}>{name(chain.driver_id)}{chain.shared_cause ? ' · shared cause' : ''}</span>) : <span className="kpi-driver-chip muted">No driver with enough confidence</span>}</div>
     <div className="kpi-connect-flow" aria-label="KPI relationship flow">
-      <div className="kpi-driver-column"><small>Drivers</small>{drivers.length ? drivers.map(chain => <span className="kpi-driver-chip" key={chain.driver_id}>{name(chain.driver_id)}{chain.shared_cause ? ' · shared cause' : ''}</span>) : <span className="kpi-driver-chip muted">No qualified driver</span>}</div>
       {sequence.map((id, index) => {
         const node = nodes.get(id)
         const edge = id === 'basket' ? story.edges.find(item => item.stage === 'basket') : id === 'orders' ? undefined : story.edges.find(item => item.from === id && item.stage !== 'basket')
         const basketChange = story.edges.find(item => item.stage === 'basket')?.factor_percent_change
-        const width = edge ? 2 + Math.round(8 * Math.abs(edge.contribution_inr) / maxEffect) : 2
+        const width = edge ? 2 + Math.round(6 * Math.abs(edge.contribution_inr) / maxEffect) : 2
+        const tone = id === 'basket' ? basketChange == null || Math.abs(basketChange) < 5 ? 'normal' : basketChange < 0 ? 'down' : 'up' : node?.status ?? 'normal'
         return <div className="kpi-flow-step" key={id}>
-          <button type="button" className={`kpi-flow-node ${id === 'basket' ? basketChange == null || Math.abs(basketChange) < 5 ? 'normal' : basketChange < 0 ? 'down' : 'up' : node?.status ?? 'normal'}`} onClick={() => onSelect(id === 'basket' ? 'net_sales_revenue' : id)} disabled={id !== 'basket' && (!node || node.missing)} aria-label={`Select ${name(id)} detail`}>
+          <button type="button" className={`kpi-flow-node ${tone}`} onClick={() => onSelect(id === 'basket' ? 'net_sales_revenue' : id)} disabled={id !== 'basket' && (!node || node.missing)} aria-label={`Select ${name(id)} detail`}>
             <small>{name(id)}</small><strong>{id === 'basket' ? basketChange == null ? '—' : signedPercent(basketChange) : node?.percent_change == null ? '—' : signedPercent(node.percent_change)}</strong>
-            <span>{id === 'basket' ? 'Revenue per unit' : node?.missing ? 'Missing' : node?.consequence_of ? `Consequence of ${name(node.consequence_of)}` : story.root_stage && story.root_stage === (id === 'traffic_total' ? 'traffic' : id === 'conversion_rate' ? 'conversion' : id === 'units_sold' ? 'units' : id === 'net_sales_revenue' ? 'basket' : '') ? 'Largest contribution' : node?.material ? 'Material' : 'Normal'}</span>
+            <span>{nodeLabel(id, story, node)}</span>
           </button>
-          {index < sequence.length - 1 && <div className="kpi-flow-arrow" style={{ '--edge-width': `${width}px` } as CSSProperties}><span>{edge ? `${signedMoney(edge.contribution_inr)} · ${edge.contribution_pct == null ? '—' : `${edge.contribution_pct.toFixed(1)}%`}` : '→'}</span><i /></div>}
+          {index < sequence.length - 1 && <div className="kpi-flow-arrow" style={{ '--edge-width': `${width}px` } as CSSProperties}><span>{arrowLabel(edge)}</span><i /></div>}
         </div>
       })}
     </div>
-    <div className="kpi-connect-actions"><h3>Act first</h3>{story.act_first.length ? <ol>{story.act_first.map(chain => <li key={chain.driver_id}><strong>{name(chain.driver_id)}</strong><span>via {chain.stages.map(name).join(' + ')} · potential {money(chain.recoverable_impact_inr)} · {(chain.attribution_confidence * 100).toFixed(0)}% confidence · {name(chain.causal_verdict).toLowerCase()} · Owner {name(chain.owner)}{chain.stage_impacts.some(item => item.attribution_source_kpi !== chain.via_kpi) ? ' · downstream attribution proxy' : ''}</span></li>)}</ol> : <p>No driver met the 35% attribution confidence threshold for an action priority.</p>}</div>
+    <div className="kpi-connect-actions"><h3>Act first</h3>{story.act_first.length ? <ol>{story.act_first.map(chain => <li key={chain.driver_id}><strong>{name(chain.driver_id)}</strong><span>via {chain.stages.map(name).join(' + ')} · potential {money(chain.recoverable_impact_inr)} · {(chain.attribution_confidence * 100).toFixed(0)}% confidence · {verdictLabel(chain.causal_verdict)} · Owner: {name(chain.owner)}{chain.stage_impacts.some(item => item.attribution_source_kpi !== chain.via_kpi) ? ' · downstream attribution proxy' : ''}</span></li>)}</ol> : <p>No driver reached the 35% confidence needed to recommend an action.</p>}</div>
   </section>
 }

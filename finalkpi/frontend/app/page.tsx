@@ -251,6 +251,10 @@ export default function Page() {
   const [foundationInfoOpen, setFoundationInfoOpen] = useState(false)
   const [movementRunToken, setMovementRunToken] = useState(0)
   const [loading, setLoading] = useState(true)
+  // False on the server and on the first browser render, so both render the same
+  // markup (avoids a hydration mismatch on client-only state such as URL filters).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const [error, setError] = useState('')
   const [accessDeniedMessage, setAccessDeniedMessage] = useState('')
   const [scenarioMeta, setScenarioMeta] = useState<{
@@ -560,7 +564,7 @@ export default function Page() {
               <CustomSelect label="Category" ariaLabel="Category" value={category} onChange={setCategory} options={categoryOptions} disabled={scenarioLocked} />
             </div>
             <DateFilter date={date} dates={options.dates} onChange={setDate} disabled={scenarioLocked} />
-            <button className="run-button" style={{ minHeight: '40px', height: '40px' }} disabled={!ready || loading || !options.dates.includes(date)} onClick={() => void diagnose()}>
+            <button className="run-button" style={{ minHeight: '40px', height: '40px' }} disabled={!mounted || !ready || loading || !options.dates.includes(date)} onClick={() => void diagnose()}>
               <RefreshCw size={15} className={loading ? 'spin' : ''} /> Run
             </button>
           </div>
