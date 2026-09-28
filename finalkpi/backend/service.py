@@ -29,6 +29,7 @@ import pandas as pd
 import numpy as np
 
 from kpi_engine.access import AccessController
+from kpi_engine.llm_narrator import executive_summary
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import daily_values, prepare_metric_request
 from kpi_engine.pipeline import KPIEnginePipeline
@@ -58,7 +59,7 @@ DEMO_IDENTITIES = {
     # has can_view_categories = ALL).
     "demo-category-manager-north-electronics": "category_manager_north_electronics",
 }
-ENGINE_VERSION = "kpi-engine-kpi-connections-v1"
+ENGINE_VERSION = "kpi-engine-llm-narrator-v1"
 from kpi_engine.verification.registry import resolve_governed_design
 
 
@@ -625,6 +626,33 @@ def diagnose_scope(
         )
 
     return {"results": results}
+
+
+def build_executive_summary(story: Dict[str, Any] | None, results: Dict[str, Any], persona: str) -> Dict[str, Any] | None:
+    """LLM-written, guard-checked summary of the KPI story, with its own telemetry."""
+    summary = executive_summary(story, results, persona, api_key=os.getenv("GROQ_API_KEY"))
+    if summary is None:
+        return None
+    runtime = summary.pop("runtime")
+    telemetry = RuntimeTelemetry(limits=get_runtime_limits())
+    if runtime.get("attempted"):
+        economics = get_model_economics()
+        telemetry.add_stage(
+            stage="executive_summary", processing_type="LLM", method="fact_sheet_narration",
+            latency_ms=runtime["latency_ms"], status="COMPLETED" if summary["status"] == "LLM" else "FALLBACK",
+            cache_status=runtime["cache_status"], provider=runtime["provider"], model=runtime["model"],
+            model_calls=runtime["model_calls"], input_tokens=runtime["input_tokens"], output_tokens=runtime["output_tokens"],
+            usage_source=runtime["usage_source"],
+            estimated_cost_usd=estimate_cost_usd(runtime["input_tokens"], runtime["output_tokens"],
+                                                 economics.get("input_usd_per_million_tokens"), economics.get("output_usd_per_million_tokens")),
+            details={"reason_code": summary["status"]},
+        )
+    else:
+        telemetry.add_stage(stage="executive_summary", processing_type="DETERMINISTIC",
+                            method="cached_summary" if runtime["cache_status"] == "HIT" else "deterministic_template",
+                            latency_ms=0, cache_status=runtime["cache_status"])
+    summary["telemetry"] = telemetry.finalize()
+    return summary
 
 
 def movement_priority(movement: Dict[str, Any], contract_snapshot: Optional[Dict[str, Any]], baseline: Optional[Dict[str, float]] = None) -> float:

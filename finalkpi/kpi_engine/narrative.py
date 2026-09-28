@@ -41,6 +41,7 @@ CAUSAL_WORDING_MIN_AC = 0.6
 CAUSAL_SUPPORTED_VERDICTS = frozenset({"SUPPORTED_CONDITIONAL"})
 # The unambiguous phrase a low-confidence attribution may use. It reads as a
 # causal statement, so validate() rejects it unless the rule above is satisfied.
+GROQ_USER_AGENT = "kpi-engine/1.0"
 CAUSAL_PHRASE = "likely caused"
 ASSOCIATED_PHRASE = "is associated with"
 # Unstructured evidence can only add support or a contradiction, never a cause.
@@ -199,7 +200,7 @@ class NarrativeEngine:
             ],
         }).encode("utf-8")
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json",
-                   "User-Agent": "kpi-engine/1.0"}
+                   "User-Agent": GROQ_USER_AGENT}
         request = Request(
             endpoint, data=body,
             headers=headers,
