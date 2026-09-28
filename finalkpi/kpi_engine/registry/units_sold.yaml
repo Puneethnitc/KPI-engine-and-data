@@ -53,9 +53,19 @@ access_tags: [region_scoped]
 kpi_weight: 0.6
 impact_to_revenue: {method: aov, rate_column: aov}
 
-# No second-source comparison or quantity/rate identity currently configured.
+# No quantity/rate identity currently configured.
 decomposition: null
-reconciliation: null
+# Stage 4 (F-C3): finance_monthly also carries units_sold, so this is
+# reconciled as a second KPI (previously only net_sales_revenue was).
+reconciliation:
+  finance_source: finance_monthly
+  finance_column: units_sold
+  mode: auto
+  keys: [region, category]
+  unit: units
+  tolerance_pct: 3.5
+  provisional_tolerance_pct: 5.0
+  contradiction_multiple: 2.5
 driver_method: native-grain first-difference lagged Pearson association; ranking index is exploratory
 driver_limitations: [No multiple-testing correction, no seasonal adjustment, marginal associations do not separate interacting drivers, correlation is not contribution or causation.]
 decomposition_limitations: [No accounting decomposition is currently configured.]

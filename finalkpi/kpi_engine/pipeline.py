@@ -181,7 +181,7 @@ class KPIEnginePipeline:
             sq_status = "QUALITY_FAILED"
         elif recon_status == "NOT_AVAILABLE_FOR_PERIOD":
             sq_status = "LIMITED"
-        elif recon_status in ("AGREED", "NOT_APPLICABLE"):
+        elif recon_status in ("AGREED", "NOT_APPLICABLE", "PENDING_CLOSE"):
             sq_status = "READY"
         else:
             sq_status = "NOT_ASSESSED"
@@ -193,6 +193,8 @@ class KPIEnginePipeline:
             sq_limitations.append("Independent finance comparison unavailable for requested period")
         elif recon_status == "NOT_APPLICABLE":
             sq_limitations.append("No independent second-source comparison configured for this KPI")
+        elif recon_status == "PENDING_CLOSE":
+            sq_limitations.append("Independent finance comparison is not yet due for this period")
 
         candidates = result.get("correlational_candidates") or []
         exclusions = result.get("driver_exclusions") or []
@@ -328,6 +330,15 @@ class KPIEnginePipeline:
         merged = ranked.merge(finance_rows, on=key_columns, how="left", validate="many_to_one")
         return merged.drop(columns=["_driver_month"])
 
+    def _load_unfiltered_finance(self, finance_csv: Optional[str], needed: bool) -> Optional[pd.DataFrame]:
+        """Stage 4 (F-C3): PENDING_CLOSE detection needs to see a finance row
+        that exists but is not yet available as of the cutoff -- information
+        `align_sources`'s own as-of-filtered finance frame has already lost
+        by design. Loaded only when reconciliation is actually configured."""
+        if not needed or not finance_csv:
+            return None
+        return self.normalizer.load_and_normalize_finance(finance_csv, as_of=None)
+
     def _attribute_drivers(
         self,
         frame: pd.DataFrame,
@@ -447,6 +458,8 @@ class KPIEnginePipeline:
                 mode=contract.reconciliation.get("mode", "closed_period"),
                 as_of=cutoff.isoformat() if cutoff else None,
                 require_matching_coverage=contract.reconciliation.get("require_matching_coverage", True),
+                provisional_tolerance_pct=contract.reconciliation.get("provisional_tolerance_pct"),
+                unfiltered_finance_df=self._load_unfiltered_finance(finance_csv, True),
             )
         result["reconciliation_verdict"] = asdict(reconciliation)
 
@@ -508,8 +521,8 @@ class KPIEnginePipeline:
         result["correlational_candidates"] = driver_analysis["ranked_drivers"]
         result["driver_exclusions"] = driver_analysis["excluded_drivers"]
 
-        # Only CONTRADICTED is a hard gate. NOT_APPLICABLE and NOT_AVAILABLE_FOR_PERIOD
-        # are informational; diagnosis continues for those statuses.
+        # Only CONTRADICTED is a hard gate. NOT_APPLICABLE, NOT_AVAILABLE_FOR_PERIOD
+        # and PENDING_CLOSE are informational; diagnosis continues for those statuses.
         if reconciliation.status == "CONTRADICTED":
             result["driver_analysis"] = self.ranker.excluded_analysis(
                 contract,
@@ -677,6 +690,8 @@ class KPIEnginePipeline:
                 mode=contract.reconciliation.get("mode", "closed_period"),
                 as_of=cutoff.isoformat() if cutoff else None,
                 require_matching_coverage=contract.reconciliation.get("require_matching_coverage", True),
+                provisional_tolerance_pct=contract.reconciliation.get("provisional_tolerance_pct"),
+                unfiltered_finance_df=self._load_unfiltered_finance(finance_csv, True),
             )
         result["reconciliation_verdict"] = asdict(reconciliation)
         self._record_runtime(result, "reconciliation", "DETERMINISTIC", "independent_source_comparison", stage_started)
@@ -714,7 +729,7 @@ class KPIEnginePipeline:
         )
 
         # Only CONTRADICTED is a hard gate. Continue for NOT_APPLICABLE,
-        # NOT_AVAILABLE_FOR_PERIOD, AGREED, and DRIFT.
+        # NOT_AVAILABLE_FOR_PERIOD, PENDING_CLOSE, AGREED, and DRIFT.
         if reconciliation.status == "CONTRADICTED":
             result["driver_analysis"] = self.ranker.excluded_analysis(
                 contract,

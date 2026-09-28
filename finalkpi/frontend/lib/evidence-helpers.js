@@ -9,8 +9,29 @@ export function reconciliationTone(status, blocking) {
   if (status === 'AGREED') return 'good'
   if (status === 'DRIFT') return 'warning'
   if (status === 'NOT_APPLICABLE') return 'neutral'
+  // Stage 4 (F-C3): a finance comparator that simply is not due yet is as
+  // neutral as NOT_APPLICABLE -- it is the expected state for most of a
+  // month, not a data problem, unlike NOT_AVAILABLE_FOR_PERIOD.
+  if (status === 'PENDING_CLOSE') return 'neutral'
   if (status === 'NOT_AVAILABLE_FOR_PERIOD') return 'limited'
   return 'neutral'
+}
+
+/**
+ * Describe the MTD comparison window and snapshot revision from a
+ * reconciliation verdict's details, for display alongside its status.
+ * Returns null when there is nothing to show (e.g. NOT_APPLICABLE).
+ */
+export function reconciliationWindowLabel(details) {
+  if (!details) return null
+  const window = details.comparison_window
+  if (!window || !window.start || !window.end) return null
+  const revisionText = details.finance_status === 'closed'
+    ? 'closed'
+    : details.finance_revision != null
+      ? `provisional, revision ${details.finance_revision}`
+      : 'provisional'
+  return `${window.start} to ${window.end} (${revisionText})`
 }
 
 /** Map a coverage_status to a CSS tone class. */

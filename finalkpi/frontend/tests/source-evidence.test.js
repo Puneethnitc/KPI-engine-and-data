@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  reconciliationTone, coverageTone, qualityTone, readinessTone,
+  reconciliationTone, reconciliationWindowLabel, coverageTone, qualityTone, readinessTone,
   renderNullable, isFixtureIdentifier, fileIdentifierLabel,
   evidenceSuppressedForDenied, sourcesForDisplay,
 } from '../lib/evidence-helpers.js'
@@ -30,6 +30,39 @@ test('Evidence presentation helpers', async (t) => {
 
   await t.test('blocking=true always returns warning regardless of status', () => {
     assert.equal(reconciliationTone('AGREED', true), 'warning')
+  })
+
+  await t.test('PENDING_CLOSE is neutral, like NOT_APPLICABLE', () => {
+    assert.equal(reconciliationTone('PENDING_CLOSE', false), 'neutral')
+  })
+
+  // ---- reconciliationWindowLabel ---------------------------------------------
+  await t.test('null details renders no window label', () => {
+    assert.equal(reconciliationWindowLabel(null), null)
+  })
+
+  await t.test('missing comparison_window renders no window label', () => {
+    assert.equal(reconciliationWindowLabel({}), null)
+  })
+
+  await t.test('closed comparison window is labelled closed', () => {
+    assert.equal(
+      reconciliationWindowLabel({
+        comparison_window: { start: '2024-01-01', end: '2024-01-31' },
+        finance_status: 'closed', finance_revision: 2,
+      }),
+      '2024-01-01 to 2024-01-31 (closed)',
+    )
+  })
+
+  await t.test('provisional snapshot window shows its revision', () => {
+    assert.equal(
+      reconciliationWindowLabel({
+        comparison_window: { start: '2024-05-01', end: '2024-05-09' },
+        finance_status: 'provisional_mid_month', finance_revision: 1,
+      }),
+      '2024-05-01 to 2024-05-09 (provisional, revision 1)',
+    )
   })
 
   // ---- coverageTone ---------------------------------------------------------

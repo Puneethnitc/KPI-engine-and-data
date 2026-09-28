@@ -4,6 +4,9 @@
 # A candidate driver's column may not equal the KPI's value/numerator/denominator/
 # decomposition column or appear in mechanical_components (Stage 1, F-R2); a driver's
 # expected_direction_by_scope must reference a real KPI dimension (F-R4).
+# Stage 4 (F-C3): reconciliation.mode may be closed_period, snapshot, or auto
+# (closed-then-snapshot fallback); an optional provisional_tolerance_pct widens
+# the AGREED bar only for a not-yet-closed MTD snapshot comparison.
 # Next: version a structured calculation spec plus comparison, coverage, source,
 # reconciliation and analysis policies. Preserve old contracts through an adapter.
 # Validate positive history, finite thresholds, field types, nested unknown keys,
@@ -363,6 +366,17 @@ class KPIContract:
                 raise ValueError(f"KPI {self.kpi_id}: reconciliation tolerance_pct must be between 0 and 100.")
             if not isinstance(multiple, (int, float)) or multiple <= 1:
                 raise ValueError(f"KPI {self.kpi_id}: contradiction_multiple must exceed 1.")
+            # Stage 4 (F-C3): a wider tolerance for an MTD snapshot compared
+            # against a provisional (not-yet-closed) finance row, since a
+            # provisional posting is expected to be a rougher number than a
+            # closed one. Optional; only meaningful when mode is auto/snapshot.
+            if "provisional_tolerance_pct" in self.reconciliation:
+                provisional_tolerance = self.reconciliation["provisional_tolerance_pct"]
+                if not isinstance(provisional_tolerance, (int, float)) or not 0 < provisional_tolerance < 100:
+                    raise ValueError(f"KPI {self.kpi_id}: reconciliation provisional_tolerance_pct must be between 0 and 100.")
+            mode = self.reconciliation.get("mode", "closed_period")
+            if mode not in {"closed_period", "snapshot", "auto"}:
+                raise ValueError(f"KPI {self.kpi_id}: unsupported reconciliation mode {mode!r}.")
         if not self.dimensions or len(self.dimensions) != len(set(self.dimensions)):
             raise ValueError(f"KPI {self.kpi_id}: dimensions must be nonempty and unique.")
         driver_ids = [driver.get("id") for driver in self.candidate_drivers]

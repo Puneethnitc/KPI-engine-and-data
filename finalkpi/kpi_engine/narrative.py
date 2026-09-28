@@ -58,6 +58,9 @@ class NarrativeEngine:
                 "Independent finance comparison was not available for this period; "
                 "the movement is based on the governed operational source."
                 if recon_status == "NOT_AVAILABLE_FOR_PERIOD" else
+                f"{(reconciliation.get('details') or {}).get('reason', 'Finance close is not yet due for this period')}; "
+                "the movement is based on the governed operational source."
+                if recon_status == "PENDING_CLOSE" else
                 f"The comparable source agrees within tolerance (gap: {reconciliation.get('gap_pct', 'n/a')}%)."
                 if recon_status == "AGREED" else
                 f"The comparable source shows a gap of {reconciliation.get('gap_pct', 'n/a')}% — "
@@ -153,6 +156,9 @@ class NarrativeEngine:
                     "Independent finance comparison was not available for this period; "
                     "the movement is based on the governed operational source."
                 )
+            elif status == "PENDING_CLOSE":
+                reason = (reconciliation.get("details") or {}).get("reason", "Finance close is not yet due for this period")
+                claim_text = f"{reason}; the movement is based on the governed operational source."
             elif status == "AGREED":
                 recon = payload.get('reconciliation_verdict') or {}
                 gap = recon.get('gap_pct', 'n/a')

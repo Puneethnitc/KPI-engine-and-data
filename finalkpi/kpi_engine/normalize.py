@@ -2,6 +2,11 @@
 # Current: reads three CSV roles, renames mapped columns, applies as-of filters,
 # validates fixed keys, and repeats weekly rows across seven dates for lookup.
 # Finance stays separate. The sales/marketing join checks one-to-one cardinality.
+# Stage 4 (F-C3): finance revision selection now filters by as_of BEFORE
+# collapsing to the latest revision, not after -- a month can carry a
+# mid-month MTD snapshot (revision 1) and its eventual closed posting
+# (revision 2) at once, and the wrong order silently discarded the snapshot.
+# coverage_end (an optional column) is parsed through when present.
 # Next: move source metadata, types, keys, calendar and availability rules into a
 # source catalog; let the query service prepare scoped data once per request.
 # Define missing versus zero, partial segment coverage, timestamp/timezone rules,
@@ -163,8 +168,10 @@ class DataNormalizer:
             raise ValueError("finance_monthly: declared row grain must be monthly")
         self._validate_numeric_columns(df, "finance_monthly", tuple(
             col for col in df.columns
-            if col not in {"region", "category", "month_end", "date", "month", "month_start", "period", "available_at", "closes_at", "status", "source_system", "source_grain", "grain"}
+            if col not in {"region", "category", "month_end", "coverage_end", "date", "month", "month_start", "period", "available_at", "closes_at", "status", "source_system", "source_grain", "grain"}
         ))
+        if 'coverage_end' in df.columns:
+            df['coverage_end'] = pd.to_datetime(df['coverage_end'], errors='raise')
 
         if 'source_system' not in df.columns:
             df['source_system'] = 'finance_monthly'
@@ -180,6 +187,16 @@ class DataNormalizer:
                 df.loc[df['status'] != 'closed', 'available_at'] = pd.NaT
         else:
             raise ValueError("finance_monthly: available_at or closes_at is required")
+        # Stage 4 (F-C3): filter by as-of BEFORE collapsing revisions, not
+        # after. A month now legitimately carries more than one revision at
+        # once (a mid-month MTD snapshot, revision 1, and its eventual closed
+        # posting, revision 2, sharing the same month_end) -- collapsing to
+        # "latest revision" first, before checking what was actually
+        # available as of the cutoff, would silently discard the mid-month
+        # snapshot even when the closed row is not yet available, making MTD
+        # reconciliation impossible for every mid-month date.
+        if as_of is not None:
+            df = df[df['available_at'] <= pd.Timestamp(as_of)].copy()
         duplicate_keys = ['region', 'category', 'month_end']
         if df.duplicated(subset=duplicate_keys).any():
             if 'revision' in df.columns:
@@ -188,8 +205,6 @@ class DataNormalizer:
                 df = df.sort_values('available_at').drop_duplicates(subset=duplicate_keys, keep='last')
             else:
                 raise ValueError("finance_monthly: duplicate postings for the same period and slice require a revision or timestamp")
-        if as_of is not None:
-            df = df[df['available_at'] <= pd.Timestamp(as_of)].copy()
         return df
 
     def align_sources(

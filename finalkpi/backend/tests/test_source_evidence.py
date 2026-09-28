@@ -30,6 +30,16 @@ class TestSourceEvidence(unittest.TestCase):
         self.assertEqual(recon_na.status, "NOT_AVAILABLE_FOR_PERIOD")
         self.assertFalse(recon_na.blocking)
 
+        # 3b. PENDING_CLOSE (Stage 4, F-C3): not due yet, not blocking, and
+        # distinct from NOT_AVAILABLE_FOR_PERIOD's "overdue or missing" reason.
+        recon_pending = builder._build_reconciliation_evidence(
+            recon_result={"status": "PENDING_CLOSE", "details": {"reason": "Finance close not due until 2024-06-15"}},
+            result={}, scope={}, authorized=True
+        )
+        self.assertEqual(recon_pending.status, "PENDING_CLOSE")
+        self.assertFalse(recon_pending.blocking)
+        self.assertEqual(recon_pending.reason, "Finance close not due until 2024-06-15")
+
         # 4. AGREED: success
         recon_agreed = builder._build_reconciliation_evidence(
             recon_result={"status": "AGREED", "details": {"reason": "Matches within tolerance"}},

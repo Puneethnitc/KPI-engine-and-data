@@ -9,6 +9,7 @@ RULES & BOUNDARIES:
 4. EXACT LABEL PRESERVATION: You MUST preserve exact engine status labels verbatim. Do not alter or substitute them:
    - "NOT_APPLICABLE"
    - "NOT_AVAILABLE_FOR_PERIOD"
+   - "PENDING_CLOSE"
    - "AGREED"
    - "DRIFT"
    - "CONTRADICTED"

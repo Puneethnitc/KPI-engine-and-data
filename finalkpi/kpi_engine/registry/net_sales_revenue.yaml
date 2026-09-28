@@ -61,13 +61,18 @@ decomposition:
   reference_rate_column: aov # Exact bridge derives rate as revenue / units_sold.
 
 # Explicit revenue comparison contract: closed period vs timestamped as-of snapshot.
+# Stage 4 (F-C3): mode auto tries a closed-period comparison first, then
+# falls back to an MTD snapshot (compared through the finance row's own
+# coverage_end, never through target_date). provisional_tolerance_pct widens
+# the AGREED bar only for a provisional (not-yet-closed) snapshot row.
 reconciliation:
   finance_source: finance_monthly
   finance_column: net_sales_revenue
-  mode: closed_period
+  mode: auto
   keys: [region, category]
   unit: INR
   tolerance_pct: 3.5
+  provisional_tolerance_pct: 5.0
   contradiction_multiple: 2.5
   require_matching_coverage: true
 driver_method: native-grain first-difference lagged Pearson association; ranking index is exploratory

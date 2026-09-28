@@ -205,10 +205,12 @@ class ConfidenceEngine:
         elif readiness in ("PARTIAL", "STALE") or recon_status in ("DRIFT", "NOT_AVAILABLE_FOR_PERIOD"):
             source_status = "LOW"
             source_reasons.append(f"Source readiness/reconciliation needs review ({readiness}; {recon_status}).")
-        elif readiness == "READY" and recon_status in ("AGREED", "NOT_APPLICABLE"):
+        elif readiness == "READY" and recon_status in ("AGREED", "NOT_APPLICABLE", "PENDING_CLOSE"):
             source_status = "HIGH"
             if recon_status == "AGREED":
                 source_reasons.append("Required sources are ready and independent reconciliation agrees.")
+            elif recon_status == "PENDING_CLOSE":
+                source_reasons.append("Required sources are ready; the finance comparator is not yet due and is neutral.")
             else:
                 source_reasons.append("Required sources are ready; reconciliation is not applicable and is neutral.")
         else:

@@ -186,6 +186,13 @@ sources:
         type: float
         required: true
         unit: INR
+      units_sold:
+        type: float
+        required: true
+        unit: units
       revision:
         type: int
         required: true
+      coverage_end:
+        type: date
+        required: false

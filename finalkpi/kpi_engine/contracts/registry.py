@@ -62,7 +62,7 @@ NESTED_FIELDS = {
     "materiality": {"z_threshold", "abs_threshold", "rel_threshold"},
     "calculation": {"operator", "aggregation", "value_column", "numerator_column", "denominator_column", "weight_column", "formula", "description"},
     "comparison_policy": {"period", "comparison", "baseline_periods", "weighting", "completeness", "config"},
-    "reconciliation": {"finance_source", "finance_column", "mode", "keys", "unit", "tolerance_pct", "contradiction_multiple", "require_matching_coverage", "comparison", "coverage_rule", "availability_rule"},
+    "reconciliation": {"finance_source", "finance_column", "mode", "keys", "unit", "tolerance_pct", "provisional_tolerance_pct", "contradiction_multiple", "require_matching_coverage", "comparison", "coverage_rule", "availability_rule"},
     "decomposition": {"quantity_column", "reference_rate_column"},
     "impact_to_revenue": {"method", "rate_column"},
 }

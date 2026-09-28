@@ -1,293 +1,569 @@
-region,category,month_start,net_sales_revenue,units_sold,month_end,closes_at,status,source_system,grain
-East,Apparel,2023-01-01,145273.29,3380.5,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-01-01,129444.87,518.8,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-01-01,99297.29,1248.4,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-01-01,148835.86,3301.8,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-01-01,147718.77,589.1,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-01-01,102400.2,1345.7,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-01-01,129551.2,2905.9,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-01-01,144737.77,624.0,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-01-01,96536.42,1249.7,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-01-01,128777.15,2930.9,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-01-01,139111.38,561.1,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-01-01,93324.12,1232.1,2023-01-31,2023-02-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-02-01,111484.98,2525.1,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-02-01,103826.06999999999,427.1,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-02-01,68609.56,873.5,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-02-01,120987.40000000001,2754.4,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-02-01,112683.09,481.4,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-02-01,75798.59,947.9,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-02-01,101825.6,2277.2,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-02-01,111907.14,447.1,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-02-01,70111.79,926.0,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-02-01,91025.69,2004.8,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-02-01,107555.18,459.5,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-02-01,62430.75,780.2,2023-02-28,2023-03-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-03-01,114400.92,2646.1,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-03-01,127522.08,508.7,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-03-01,73102.35,907.6,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-03-01,130837.13,2945.2,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-03-01,131622.44,537.8,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-03-01,83119.55,1103.8,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-03-01,118907.86,2699.8,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-03-01,130647.65,538.1,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-03-01,70028.61,875.6,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-03-01,98950.39,2192.4,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-03-01,103649.21,414.0,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-03-01,78109.02,1028.9,2023-03-31,2023-04-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-04-01,125673.23,2914.2,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-04-01,122517.36,492.2,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-04-01,75862.53,950.6,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-04-01,133888.49,2979.7,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-04-01,156468.28,705.9,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-04-01,81119.06999999999,1030.6,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-04-01,123507.78,2739.5,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-04-01,123140.09,508.7,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-04-01,76449.91,964.2,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-04-01,109533.92,2456.6,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-04-01,102627.93,411.0,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-04-01,71393.94,975.8,2023-04-30,2023-05-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-05-01,130696.36,2909.9,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-05-01,143247.96,608.0,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-05-01,83123.28,1075.4,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-05-01,131812.26,2916.6,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-05-01,134629.18,576.7,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-05-01,91227.81,1160.9,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-05-01,118082.16,2652.4,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-05-01,126062.53,529.8,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-05-01,80438.93,1032.7,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-05-01,106983.61,2388.3,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-05-01,121793.19,490.8,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-05-01,79629.48,1052.6,2023-05-31,2023-06-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-06-01,136360.37,3321.1,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-06-01,127707.39,525.4,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-06-01,81445.22,1066.7,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-06-01,133195.27,3023.9,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-06-01,128974.42,533.3,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-06-01,87219.64,1122.0,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-06-01,127671.1,2851.1,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-06-01,131278.01,525.2,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-06-01,77870.43,1019.3,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-06-01,114593.2,2623.3,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-06-01,117201.76,515.1,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-06-01,76492.02,946.6,2023-06-30,2023-07-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-07-01,133916.82,3015.2,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-07-01,148279.22,636.6,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-07-01,86937.39,1155.8,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-07-01,131931.46,2950.2,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-07-01,124489.15,497.8,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-07-01,88737.57,1118.5,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-07-01,137659.5,3198.7,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-07-01,151155.6,630.4,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-07-01,75856.45,973.3,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-07-01,128742.73,3008.8,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-07-01,116318.98,483.6,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-07-01,74615.95,961.9,2023-07-31,2023-08-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-08-01,135447.03,3001.3,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-08-01,154263.62,643.4,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-08-01,81416.73999999999,1052.2,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-08-01,141518.52,3292.7,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-08-01,115570.81,486.0,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-08-01,90843.69,1239.4,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-08-01,128125.99,2909.8,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-08-01,127228.69,527.5,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-08-01,79412.91,1016.0,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-08-01,109804.83,2546.1,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-08-01,122841.02,513.8,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-08-01,74035.27,978.9,2023-08-31,2023-09-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-09-01,125424.97,2884.4,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-09-01,113222.08,463.8,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-09-01,73402.46,908.2,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-09-01,131611.98,3001.4,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-09-01,141066.04,578.6,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-09-01,79814.13,995.4,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-09-01,127881.06,2953.7,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-09-01,114892.68,474.9,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-09-01,69093.12,881.4,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-09-01,112051.76,2511.1,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-09-01,105045.01,433.7,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-09-01,63573.71,794.4,2023-09-30,2023-10-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-10-01,103759.78,2288.2,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-10-01,111678.21,476.1,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-10-01,72352.5,1001.0,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-10-01,120844.4,2858.0,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-10-01,120896.24,482.0,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-10-01,83782.96,1114.1,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-10-01,114331.57,2562.6,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-10-01,120451.67,509.3,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-10-01,81370.11,1085.5,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-10-01,103979.21,2361.9,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-10-01,101880.3,409.4,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-10-01,65480.55,890.9,2023-10-31,2023-11-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-11-01,127219.85,3053.8,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-11-01,120899.68,483.2,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-11-01,89572.72,1222.3,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-11-01,129957.20999999999,2898.7,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-11-01,128412.86,511.3,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-11-01,88125.62,1212.5,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-11-01,117781.28,2624.4,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-11-01,126193.98,501.8,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-11-01,91690.59,1319.8,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-11-01,114401.65,2647.8,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-11-01,116321.08,468.7,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-11-01,85810.42,1213.8,2023-11-30,2023-12-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2023-12-01,118438.41,2642.7,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2023-12-01,133647.82,537.4,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2023-12-01,77182.86,971.2,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2023-12-01,134527.81,3022.8,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2023-12-01,151798.56,604.6,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2023-12-01,86917.54,1118.9,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2023-12-01,113589.37,2531.0,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2023-12-01,117055.25,470.5,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2023-12-01,74852.28,929.8,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2023-12-01,119265.74,2717.0,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2023-12-01,110396.12,466.0,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2023-12-01,72189.31,907.8,2023-12-31,2024-01-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-01-01,111387.22,2491.8,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-01-01,131849.82,562.9,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-01-01,67799.33,835.9,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-01-01,113887.83,2532.1,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-01-01,124265.17,494.8,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-01-01,74103.04000000001,921.3,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-01-01,109062.81,2515.6,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-01-01,108803.62,434.1,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-01-01,62222.14,781.1,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-01-01,95572.91,2172.2,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-01-01,98822.75,423.1,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-01-01,59094.11,738.2,2024-01-31,2024-02-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-02-01,98149.6,2179.4,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-02-01,97971.25,391.9,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-02-01,64282.41,817.7,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-02-01,117359.16,2789.1,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-02-01,111441.38,462.1,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-02-01,70001.82,953.7,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-02-01,76151.23,1732.8,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-02-01,97862.91,391.0,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-02-01,73105.88,949.5,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-02-01,94405.78,2106.6,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-02-01,94179.31999999999,377.2,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-02-01,61376.83,794.4,2024-02-29,2024-03-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-03-01,118813.42,2744.4,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-03-01,129657.2,518.0,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-03-01,79712.67,1048.8,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-03-01,123165.01,2773.8,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-03-01,140375.27,578.6,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-03-01,82143.05,1150.2,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-03-01,114205.01,2620.7,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-03-01,108368.47,436.4,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-03-01,76188.49,965.8,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-03-01,112173.44,2628.1,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-03-01,110963.81,487.6,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-03-01,63447.65,793.4,2024-03-31,2024-04-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-04-01,122779.05,2793.0,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-04-01,121174.34,502.3,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-04-01,84024.38,1101.0,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-04-01,130796.78,2917.9,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-04-01,154200.55,620.2,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-04-01,82257.01,1019.3000000000001,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-04-01,122334.05,2831.9,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-04-01,110952.0,454.1,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-04-01,74236.9,971.3,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-04-01,110920.65,2578.8,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-04-01,105327.58,422.6,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-04-01,63791.05,797.0,2024-04-30,2024-05-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-05-01,117831.5,2620.3,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-05-01,115285.15,457.5,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-05-01,77539.18,1014.4,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-05-01,126885.37,2842.7,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-05-01,130325.11,514.3,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-05-01,83431.97,1044.7,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-05-01,130742.12,3104.1,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-05-01,139478.51,555.0,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-05-01,82010.2,1069.9,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-05-01,110971.81,2489.1,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-05-01,113615.45,456.2,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-05-01,72101.92,911.9,2024-05-31,2024-06-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-06-01,141359.52,3260.2,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-06-01,133603.97,559.2,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-06-01,81147.01,1074.4,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-06-01,143871.31,3481.7,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-06-01,150758.43,600.5,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-06-01,95540.27,1204.7,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-06-01,129502.38,2879.8,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-06-01,118110.79,476.9,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-06-01,77790.61,997.1,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-06-01,114412.5,2540.5,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-06-01,125947.17,500.90000000000003,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-06-01,75077.70999999999,944.8,2024-06-30,2024-07-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-07-01,127544.11,2829.4,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-07-01,147383.83000000002,613.8000000000001,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-07-01,82675.23,1107.0,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-07-01,143909.32,3470.3,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-07-01,135607.07,559.3,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-07-01,87318.94,1091.1,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-07-01,122759.93,2780.4,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-07-01,136968.72,613.2,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-07-01,82615.06,1122.7,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-07-01,119139.69,2625.3,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-07-01,119006.78,490.0,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-07-01,79781.62,1068.9,2024-07-31,2024-08-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-08-01,135336.63,2996.6,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-08-01,125091.08,522.8,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-08-01,82476.08,1039.5,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-08-01,138830.21,3192.9,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-08-01,131640.28,537.1,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-08-01,83060.26,1036.0,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-08-01,122892.41,2719.6,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-08-01,152586.45,674.0,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-08-01,72890.93000000001,912.5,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-08-01,120025.61,2743.4,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-08-01,135155.54,563.7,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-08-01,76086.01,976.6,2024-08-31,2024-09-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-09-01,127773.02,3059.8,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-09-01,109456.43,434.9,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-09-01,70866.33,887.3,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-09-01,128615.2,2871.7,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-09-01,120113.52,482.1,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-09-01,77227.48,998.8,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-09-01,109708.0,2492.7999999999997,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-09-01,113216.54,446.5,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-09-01,77000.66,1004.1,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-09-01,105526.68000000001,2340.4,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-09-01,111165.97,451.9,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-09-01,71780.09,928.2,2024-09-30,2024-10-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-10-01,118112.76,2790.3,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-10-01,108016.26,444.3,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-10-01,77127.94,1005.3,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-10-01,126097.43,2875.6,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-10-01,123309.1,496.5,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-10-01,77566.12,985.4,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-10-01,107299.57,2409.6,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-10-01,111029.5,441.7,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-10-01,65546.22,820.3,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-10-01,110249.53,2578.7,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-10-01,112584.3,492.8,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-10-01,68821.55,887.7,2024-10-31,2024-11-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-11-01,135274.23,3015.1,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-East,Electronics,2024-11-01,135532.66,557.3,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-East,Home,2024-11-01,81579.64,1018.8,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-North,Apparel,2024-11-01,140436.49,3144.9,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-North,Electronics,2024-11-01,129495.86,514.7,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-North,Home,2024-11-01,88543.9,1097.4,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-South,Apparel,2024-11-01,143506.32,3385.1,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-South,Electronics,2024-11-01,132368.72,527.1,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-South,Home,2024-11-01,82601.43000000001,1044.0,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-West,Apparel,2024-11-01,115291.23,2629.6,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-West,Electronics,2024-11-01,117302.95,499.5,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-West,Home,2024-11-01,76952.3,975.3,2024-11-30,2024-12-05 18:00:00,closed,finance_ledger,monthly
-East,Apparel,2024-12-01,88891.68,1969.3,2024-12-31,,provisional_open_month,finance_ledger,monthly
-East,Beauty,2024-12-01,44606.37,1158.6,2024-12-31,,provisional_open_month,finance_ledger,monthly
-East,Electronics,2024-12-01,96814.0,403.2,2024-12-31,,provisional_open_month,finance_ledger,monthly
-East,Home,2024-12-01,60979.22,788.6,2024-12-31,,provisional_open_month,finance_ledger,monthly
-North,Apparel,2024-12-01,106845.14,2457.6,2024-12-31,,provisional_open_month,finance_ledger,monthly
-North,Beauty,2024-12-01,46982.37,1217.4,2024-12-31,,provisional_open_month,finance_ledger,monthly
-North,Electronics,2024-12-01,116235.25,477.2,2024-12-31,,provisional_open_month,finance_ledger,monthly
-North,Home,2024-12-01,68492.19,922.4,2024-12-31,,provisional_open_month,finance_ledger,monthly
-South,Apparel,2024-12-01,89454.41,2064.1,2024-12-31,,provisional_open_month,finance_ledger,monthly
-South,Beauty,2024-12-01,43300.86,1147.4,2024-12-31,,provisional_open_month,finance_ledger,monthly
-South,Electronics,2024-12-01,91797.8,382.4,2024-12-31,,provisional_open_month,finance_ledger,monthly
-South,Home,2024-12-01,69849.52,951.3,2024-12-31,,provisional_open_month,finance_ledger,monthly
-West,Apparel,2024-12-01,85103.0,2003.3,2024-12-31,,provisional_open_month,finance_ledger,monthly
-West,Beauty,2024-12-01,37321.55,991.6,2024-12-31,,provisional_open_month,finance_ledger,monthly
-West,Electronics,2024-12-01,87683.07,346.9,2024-12-31,,provisional_open_month,finance_ledger,monthly
-West,Home,2024-12-01,52311.44,716.9,2024-12-31,,provisional_open_month,finance_ledger,monthly
+region,category,month_start,net_sales_revenue,units_sold,month_end,coverage_end,available_at,revision,closes_at,status,source_system,grain
+East,Apparel,2023-01-01,48600.9,1178.5,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-01-01,145273.29,3380.5,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-01-01,41988.87,170.4,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-01-01,129444.87,518.8,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-01-01,29308.6,369.9,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-01-01,99297.29,1248.4,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-01-01,46731.45,1045.3,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-01-01,148835.86,3301.8,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-01-01,46339.64,186.6,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-01-01,147718.77,589.1,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-01-01,34771.4,499.8,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-01-01,102400.2,1345.7,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-01-01,41943.2,944.2,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-01-01,129551.2,2905.9,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-01-01,49887.56,223.1,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-01-01,144737.77,624.0,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-01-01,30318.7,419.0,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-01-01,96536.42,1249.7,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-01-01,42921.35,1024.4,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-01-01,128777.15,2930.9,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-01-01,41792.87,169.7,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-01-01,139111.38,561.1,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-01-01,25712.36,317.9,2023-01-31,2023-01-09,2023-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-01-01,93324.12,1232.1,2023-01-31,2023-01-31,2023-02-05 18:00:00,2,2023-02-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-02-01,37379.97,878.1,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-02-01,111484.98,2525.1,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-02-01,30892.25,125.6,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-02-01,103826.07,427.1,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-02-01,22988.66,285.4,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-02-01,68609.56,873.5,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-02-01,43890.13,970.2,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-02-01,120987.4,2754.4,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-02-01,38221.14,165.3,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-02-01,112683.09,481.4,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-02-01,28671.14,361.5,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-02-01,75798.59,947.9,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-02-01,32952.88,740.1,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-02-01,101825.6,2277.2,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-02-01,37632.47,150.7,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-02-01,111907.14,447.1,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-02-01,24023.37,310.2,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-02-01,70111.79,926.0,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-02-01,31082.91,679.1,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-02-01,91025.69,2004.8,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-02-01,40156.01,181.5,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-02-01,107555.18,459.5,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-02-01,21268.94,261.1,2023-02-28,2023-02-09,2023-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-02-01,62430.75,780.2,2023-02-28,2023-02-28,2023-03-05 18:00:00,2,2023-03-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-03-01,30598.1,687.7,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-03-01,114400.92,2646.1,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-03-01,38572.24,156.5,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-03-01,127522.08,508.7,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-03-01,19784.16,245.2,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-03-01,73102.35,907.6,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-03-01,39167.89,869.9,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-03-01,130837.13,2945.2,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-03-01,32705.66,133.0,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-03-01,131622.44,537.8,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-03-01,20770.11,258.7,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-03-01,83119.55,1103.8,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-03-01,31858.08,712.3,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-03-01,118907.86,2699.8,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-03-01,40314.52,161.1,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-03-01,130647.65,538.1,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-03-01,19049.49,242.4,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-03-01,70028.61,875.6,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-03-01,28347.36,626.9,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-03-01,98950.39,2192.4,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-03-01,27951.92,112.0,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-03-01,103649.21,414.0,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-03-01,22926.94,285.4,2023-03-31,2023-03-09,2023-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-03-01,78109.02,1028.9,2023-03-31,2023-03-31,2023-04-05 18:00:00,2,2023-04-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-04-01,35172.17,779.6,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-04-01,125673.23,2914.2,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-04-01,35399.84,143.4,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-04-01,122517.36,492.2,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-04-01,23249.81,292.8,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-04-01,75862.53,950.6,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-04-01,39843.47,887.4,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-04-01,133888.49,2979.7,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-04-01,48694.81,220.4,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-04-01,156468.28,705.9,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-04-01,22325.84,281.1,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-04-01,81119.06999999999,1030.6,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-04-01,35125.01,782.9,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-04-01,123507.78,2739.5,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-04-01,38956.13,153.4,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-04-01,123140.09,508.7,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-04-01,23679.58,301.4,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-04-01,76449.91,964.2,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-04-01,32694.63,729.1,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-04-01,109533.92,2456.6,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-04-01,31779.71,127.6,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-04-01,102627.93,411.0,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-04-01,21959.94,308.5,2023-04-30,2023-04-09,2023-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-04-01,71393.94,975.8,2023-04-30,2023-04-30,2023-05-05 18:00:00,2,2023-05-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-05-01,34858.9,774.8,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-05-01,130696.36,2909.9,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-05-01,34272.32,137.6,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-05-01,143247.96,608.0,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-05-01,25326.38,355.5,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-05-01,83123.28,1075.4,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-05-01,37115.66,812.0,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-05-01,131812.26,2916.6,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-05-01,35268.36,141.7,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-05-01,134629.18,576.7,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-05-01,29291.85,390.9,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-05-01,91227.81,1160.9,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-05-01,31727.29,726.5,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-05-01,118082.16,2652.4,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-05-01,36575.12,158.4,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-05-01,126062.53,529.8,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-05-01,22290.28,274.3,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-05-01,80438.93,1032.7,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-05-01,29178.51,646.1,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-05-01,106983.61,2388.3,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-05-01,33268.7,132.7,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-05-01,121793.19,490.8,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-05-01,22872.29,281.9,2023-05-31,2023-05-09,2023-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-05-01,79629.48,1052.6,2023-05-31,2023-05-31,2023-06-05 18:00:00,2,2023-06-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-06-01,40861.77,1009.4,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-06-01,136360.37,3321.1,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-06-01,36845.43,147.7,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-06-01,127707.39,525.4,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-06-01,22479.84,283.2,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-06-01,81445.22,1066.7,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-06-01,41216.32,918.6,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-06-01,133195.27,3023.9,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-06-01,37816.32,152.5,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-06-01,128974.42,533.3,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-06-01,24894.11,317.8,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-06-01,87219.64,1122.0,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-06-01,41367.72,912.1,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-06-01,127671.1,2851.1,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-06-01,39013.44,155.4,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-06-01,131278.01,525.2,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-06-01,21943.89,275.6,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-06-01,77870.43,1019.3,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-06-01,31767.37,715.7,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-06-01,114593.2,2623.3,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-06-01,33355.04,144.1,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-06-01,117201.76,515.1,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-06-01,20713.67,255.5,2023-06-30,2023-06-09,2023-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-06-01,76492.02,946.6,2023-06-30,2023-06-30,2023-07-05 18:00:00,2,2023-07-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-07-01,40647.23,899.9,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-07-01,133916.82,3015.2,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-07-01,39912.92,165.8,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-07-01,148279.22,636.6,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-07-01,26123.81,352.5,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-07-01,86937.39,1155.8,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-07-01,39786.45,891.1,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-07-01,131931.46,2950.2,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-07-01,39209.89,157.9,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-07-01,124489.15,497.8,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-07-01,24936.72,317.5,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-07-01,88737.57,1118.5,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-07-01,38122.52,842.3,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-07-01,137659.5,3198.7,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-07-01,49184.3,194.2,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-07-01,151155.6,630.4,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-07-01,20211.41,255.9,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-07-01,75856.45,973.3,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-07-01,45483.36,1066.1,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-07-01,128742.73,3008.8,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-07-01,38479.51,171.9,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-07-01,116318.98,483.6,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-07-01,24391.03,329.8,2023-07-31,2023-07-09,2023-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-07-01,74615.95,961.9,2023-07-31,2023-07-31,2023-08-05 18:00:00,2,2023-08-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-08-01,37919.74,824.4,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-08-01,135447.03,3001.3,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-08-01,47833.97,192.5,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-08-01,154263.62,643.4,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-08-01,24032.64,337.6,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-08-01,81416.73999999999,1052.2,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-08-01,37271.91,841.8,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-08-01,141518.52,3292.7,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-08-01,25839.22,104.4,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-08-01,115570.81,486.0,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-08-01,25986.26,347.1,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-08-01,90843.69,1239.4,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-08-01,38281.7,851.9,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-08-01,128125.99,2909.8,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-08-01,33720.31,135.6,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-08-01,127228.69,527.5,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-08-01,24612.11,305.6,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-08-01,79412.91,1016.0,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-08-01,30414.89,673.2,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-08-01,109804.83,2546.1,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-08-01,38637.38,153.8,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-08-01,122841.02,513.8,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-08-01,20599.33,257.5,2023-08-31,2023-08-09,2023-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-08-01,74035.27,978.9,2023-08-31,2023-08-31,2023-09-05 18:00:00,2,2023-09-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-09-01,45918.85,1099.2,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-09-01,125424.97,2884.4,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-09-01,34911.59,139.8,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-09-01,113222.08,463.8,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-09-01,23195.4,286.3,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-09-01,73402.46,908.2,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-09-01,40765.6,899.0,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-09-01,131611.98,3001.4,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-09-01,45192.3,179.2,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-09-01,141066.04,578.6,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-09-01,25539.81,314.5,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-09-01,79814.13,995.4,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-09-01,39247.68,957.8,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-09-01,127881.06,2953.7,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-09-01,35886.15,144.3,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-09-01,114892.68,474.9,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-09-01,22879.57,304.4,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-09-01,69093.12,881.4,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-09-01,34439.08,780.8,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-09-01,112051.76,2511.1,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-09-01,33196.41,138.5,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-09-01,105045.01,433.7,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-09-01,20310.34,253.1,2023-09-30,2023-09-09,2023-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-09-01,63573.71,794.4,2023-09-30,2023-09-30,2023-10-05 18:00:00,2,2023-10-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-10-01,30854.7,686.4,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-10-01,103759.78,2288.2,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-10-01,30665.93,125.0,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-10-01,111678.21,476.1,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-10-01,20190.32,255.4,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-10-01,72352.5,1001.0,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-10-01,40900.72,1049.5,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-10-01,120844.4,2858.0,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-10-01,34373.6,138.8,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-10-01,120896.24,482.0,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-10-01,25406.58,316.2,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-10-01,83782.96,1114.1,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-10-01,31332.57,723.6,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-10-01,114331.57,2562.6,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-10-01,37947.63,170.9,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-10-01,120451.67,509.3,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-10-01,19256.41,241.5,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-10-01,81370.11,1085.5,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-10-01,30784.2,672.0,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-10-01,103979.21,2361.9,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-10-01,28563.88,114.5,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-10-01,101880.3,409.4,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-10-01,18050.94,223.6,2023-10-31,2023-10-09,2023-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-10-01,65480.55,890.9,2023-10-31,2023-10-31,2023-11-05 18:00:00,2,2023-11-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-11-01,30924.94,699.5,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-11-01,127219.85,3053.8,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-11-01,32650.15,130.9,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-11-01,120899.68,483.2,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-11-01,27266.59,451.2,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-11-01,89572.72,1222.3,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-11-01,34311.24,778.9,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-11-01,129957.21,2898.7,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-11-01,34288.91,135.9,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-11-01,128412.86,511.3,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-11-01,27267.64,453.7,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-11-01,88125.62,1212.5,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-11-01,30098.56,672.2,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-11-01,117781.28,2624.4,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-11-01,33340.27,135.5,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-11-01,126193.98,501.8,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-11-01,29518.27,491.8,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-11-01,91690.59,1319.8,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-11-01,27303.87,606.1,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-11-01,114401.65,2647.8,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-11-01,28456.53,114.1,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-11-01,116321.08,468.7,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-11-01,30018.87,488.7,2023-11-30,2023-11-09,2023-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-11-01,85810.42,1213.8,2023-11-30,2023-11-30,2023-12-05 18:00:00,2,2023-12-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2023-12-01,40148.49,899.2,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2023-12-01,118438.41,2642.7,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2023-12-01,41339.59,165.2,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2023-12-01,133647.82,537.4,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2023-12-01,27812.82,352.8,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2023-12-01,77182.86,971.2,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2023-12-01,45019.49,1034.8,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2023-12-01,134527.81,3022.8,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2023-12-01,51550.82,206.4,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2023-12-01,151798.56,604.6,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2023-12-01,28824.92,395.3,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2023-12-01,86917.54,1118.9,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2023-12-01,39066.61,868.2,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2023-12-01,113589.37,2531.0,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2023-12-01,40036.79,160.8,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2023-12-01,117055.25,470.5,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2023-12-01,27635.72,344.0,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2023-12-01,74852.28,929.8,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2023-12-01,42327.46,936.1,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2023-12-01,119265.74,2717.0,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2023-12-01,41712.48,185.9,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2023-12-01,110396.12,466.0,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2023-12-01,22480.36,283.0,2023-12-31,2023-12-09,2023-12-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2023-12-01,72189.31,907.8,2023-12-31,2023-12-31,2024-01-05 18:00:00,2,2024-01-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-01-01,32346.04,723.1,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-01-01,111387.22,2491.8,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-01-01,34162.42,136.7,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-01-01,131849.82,562.9,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-01-01,18590.57,229.0,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-01-01,67799.33,835.9,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-01-01,35761.18,797.3,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-01-01,113887.83,2532.1,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-01-01,30910.18,122.4,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-01-01,124265.17,494.8,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-01-01,20115.13,250.3,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-01-01,74103.04000000001,921.3,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-01-01,26869.58,599.9,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-01-01,109062.81,2515.6,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-01-01,29506.36,116.5,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-01-01,108803.62,434.1,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-01-01,17382.47,219.3,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-01-01,62222.14,781.1,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-01-01,28164.5,622.3,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-01-01,95572.91,2172.2,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-01-01,27295.87,120.0,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-01-01,98822.75,423.1,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-01-01,18986.15,237.2,2024-01-31,2024-01-09,2024-01-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-01-01,59094.11,738.2,2024-01-31,2024-01-31,2024-02-05 18:00:00,2,2024-02-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-02-01,29818.61,667.3,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-02-01,98149.6,2179.4,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-02-01,30476.96,120.5,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-02-01,97971.25,391.9,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-02-01,20000.9,253.2,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-02-01,64282.41,817.7,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-02-01,32084.17,713.2,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-02-01,117359.16,2789.1,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-02-01,32302.08,129.1,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-02-01,111441.38,462.1,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-02-01,19768.24,249.7,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-02-01,70001.82,953.7,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-02-01,21184.71,488.7,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-02-01,76151.23,1732.8,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-02-01,30245.91,120.6,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-02-01,97862.91,391.0,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-02-01,24406.34,315.0,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-02-01,73105.88,949.5,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-02-01,31134.34,696.9,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-02-01,94405.78,2106.6,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-02-01,25775.51,104.2,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-02-01,94179.32,377.2,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-02-01,17917.36,248.0,2024-02-29,2024-02-09,2024-02-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-02-01,61376.83,794.4,2024-02-29,2024-02-29,2024-03-05 18:00:00,2,2024-03-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-03-01,31613.18,695.4,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-03-01,118813.42,2744.4,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-03-01,32756.64,130.2,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-03-01,129657.2,518.0,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-03-01,21583.5,271.2,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-03-01,79712.67,1048.8,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-03-01,37348.56,856.8,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-03-01,123165.01,2773.8,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-03-01,46350.41,201.4,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-03-01,140375.27,578.6,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-03-01,24243.62,357.2,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-03-01,82143.05,1150.2,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-03-01,31517.38,701.3,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-03-01,114205.01,2620.7,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-03-01,30418.75,124.4,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-03-01,108368.47,436.4,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-03-01,21249.23,265.2,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-03-01,76188.49,965.8,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-03-01,29332.07,657.0,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-03-01,112173.44,2628.1,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-03-01,32512.39,143.6,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-03-01,110963.81,487.6,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-03-01,18082.13,228.4,2024-03-31,2024-03-09,2024-03-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-03-01,63447.65,793.4,2024-03-31,2024-03-31,2024-04-05 18:00:00,2,2024-04-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-04-01,36466.53,815.4,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-04-01,122779.05,2793.0,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-04-01,33621.43,134.6,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-04-01,121174.34,502.3,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-04-01,21647.7,267.3,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-04-01,84024.38,1101.0,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-04-01,41282.34,917.9,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-04-01,130796.78,2917.9,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-04-01,51116.31,206.2,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-04-01,154200.55,620.2,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-04-01,23772.54,295.9,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-04-01,82257.01,1019.3,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-04-01,37330.68,938.6,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-04-01,122334.05,2831.9,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-04-01,31342.66,125.5,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-04-01,110952.0,454.1,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-04-01,21552.43,272.0,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-04-01,74236.9,971.3,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-04-01,32200.97,723.5,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-04-01,110920.65,2578.8,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-04-01,29036.95,115.0,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-04-01,105327.58,422.6,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-04-01,19551.2,243.1,2024-04-30,2024-04-09,2024-04-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-04-01,63791.05,797.0,2024-04-30,2024-04-30,2024-05-05 18:00:00,2,2024-05-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-05-01,35162.91,777.5,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-05-01,117831.5,2620.3,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-05-01,34633.33,138.9,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-05-01,115285.15,457.5,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-05-01,29562.67,420.1,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-05-01,77539.18,1014.4,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-05-01,36771.91,822.7,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-05-01,126885.37,2842.7,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-05-01,37008.29,144.4,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-05-01,130325.11,514.3,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-05-01,22931.75,285.8,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-05-01,83431.97,1044.7,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-05-01,36002.4,796.5,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-05-01,130742.12,3104.1,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-05-01,40112.79,160.8,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-05-01,139478.51,555.0,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-05-01,22259.31,273.0,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-05-01,82010.2,1069.9,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-05-01,33966.99,762.2,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-05-01,110971.81,2489.1,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-05-01,41278.99,161.2,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-05-01,113615.45,456.2,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-05-01,20429.88,254.2,2024-05-31,2024-05-09,2024-05-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-05-01,72101.92,911.9,2024-05-31,2024-05-31,2024-06-05 18:00:00,2,2024-06-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-06-01,43689.5,974.1,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-06-01,141359.52,3260.2,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-06-01,40264.83,162.9,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-06-01,133603.97,559.2,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-06-01,24900.81,327.6,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-06-01,81147.01,1074.4,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-06-01,47624.03,1168.0,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-06-01,143871.31,3481.7,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-06-01,47663.35,189.7,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-06-01,150758.43,600.5,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-06-01,28835.45,362.2,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-06-01,95540.27,1204.7,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-06-01,42411.24,929.1,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-06-01,129502.38,2879.8,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-06-01,35967.99,146.4,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-06-01,118110.79,476.9,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-06-01,25031.53,333.0,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-06-01,77790.61,997.1,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-06-01,36692.27,805.9,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-06-01,114412.5,2540.5,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-06-01,34652.69,136.7,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-06-01,125947.17,500.9,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-06-01,22575.07,284.3,2024-06-30,2024-06-09,2024-06-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-06-01,75077.70999999999,944.8,2024-06-30,2024-06-30,2024-07-05 18:00:00,2,2024-07-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-07-01,35862.13,794.6,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-07-01,127544.11,2829.4,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-07-01,41164.96,183.8,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-07-01,147383.83000000002,613.8000000000001,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-07-01,27591.86,412.9,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-07-01,82675.23,1107.0,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-07-01,38593.49,910.8,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-07-01,143909.32,3470.3,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-07-01,37838.05,150.7,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-07-01,135607.07,559.3,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-07-01,24903.4,313.2,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-07-01,87318.94,1091.1,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-07-01,32743.19,743.1,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-07-01,122759.93,2780.4,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-07-01,37439.66,164.8,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-07-01,136968.72,613.2,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-07-01,23935.06,307.2,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-07-01,82615.06,1122.7,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-07-01,31627.01,696.4,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-07-01,119139.69,2625.3,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-07-01,31533.27,127.6,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-07-01,119006.78,490.0,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-07-01,21972.04,278.3,2024-07-31,2024-07-09,2024-07-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-07-01,79781.62,1068.9,2024-07-31,2024-07-31,2024-08-05 18:00:00,2,2024-08-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-08-01,42630.96,946.8,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-08-01,135336.63,2996.6,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-08-01,35627.57,143.0,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-08-01,125091.08,522.8,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-08-01,22469.21,279.5,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-08-01,82476.08,1039.5,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-08-01,46847.51,1120.3,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-08-01,138830.21,3192.9,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-08-01,39696.84,158.8,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-08-01,131640.28,537.1,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-08-01,28275.96,354.8,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-08-01,83060.26,1036.0,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-08-01,37569.31,842.4,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-08-01,122892.41,2719.6,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-08-01,42220.27,175.2,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-08-01,152586.45,674.0,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-08-01,21442.51,272.0,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-08-01,72890.93000000001,912.5,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-08-01,34739.84,776.7,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-08-01,120025.61,2743.4,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-08-01,46923.68,212.7,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-08-01,135155.54,563.7,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-08-01,25288.59,337.8,2024-08-31,2024-08-09,2024-08-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-08-01,76086.01,976.6,2024-08-31,2024-08-31,2024-09-05 18:00:00,2,2024-09-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-09-01,37227.54,836.5,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-09-01,127773.02,3059.8,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-09-01,34292.14,133.6,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-09-01,109456.43,434.9,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-09-01,22105.92,278.3,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-09-01,70866.33,887.3,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-09-01,43846.31,982.1,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-09-01,128615.2,2871.7,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-09-01,36678.72,149.6,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-09-01,120113.52,482.1,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-09-01,22417.62,283.7,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-09-01,77227.48,998.8,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-09-01,32203.44,726.1,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-09-01,109708.0,2492.8,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-09-01,31907.46,126.7,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-09-01,113216.54,446.5,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-09-01,20598.53,260.6,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-09-01,77000.66,1004.1,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-09-01,36722.46,830.4,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-09-01,105526.68,2340.4,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-09-01,31433.56,134.6,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-09-01,111165.97,451.9,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-09-01,21955.56,304.6,2024-09-30,2024-09-09,2024-09-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-09-01,71780.09,928.2,2024-09-30,2024-09-30,2024-10-05 18:00:00,2,2024-10-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-10-01,31655.18,750.9,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-10-01,118112.76,2790.3,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-10-01,29724.79,121.8,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-10-01,108016.26,444.3,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-10-01,22984.25,304.8,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-10-01,77127.94,1005.3,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-10-01,31889.92,724.0,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-10-01,126097.43,2875.6,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-10-01,35403.02,139.9,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-10-01,123309.1,496.5,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-10-01,21170.35,264.6,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-10-01,77566.12,985.4,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-10-01,32680.11,734.5,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-10-01,107299.57,2409.6,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-10-01,35645.85,141.2,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-10-01,111029.5,441.7,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-10-01,19527.31,242.8,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-10-01,65546.22,820.3,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-10-01,31456.01,712.2,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-10-01,110249.53,2578.7,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-10-01,38803.18,187.5,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-10-01,112584.3,492.8,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-10-01,19659.58,244.8,2024-10-31,2024-10-09,2024-10-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-10-01,68821.55,887.7,2024-10-31,2024-10-31,2024-11-05 18:00:00,2,2024-11-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-11-01,42774.81,957.1,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Apparel,2024-11-01,135274.23,3015.1,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+East,Electronics,2024-11-01,32336.71,133.6,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Electronics,2024-11-01,135532.66,557.3,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+East,Home,2024-11-01,21799.53,272.8,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+East,Home,2024-11-01,81579.64,1018.8,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+North,Apparel,2024-11-01,42131.34,934.5,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Apparel,2024-11-01,140436.49,3144.9,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+North,Electronics,2024-11-01,36025.42,142.3,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Electronics,2024-11-01,129495.86,514.7,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+North,Home,2024-11-01,21780.3,271.8,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+North,Home,2024-11-01,88543.9,1097.4,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+South,Apparel,2024-11-01,43470.56,955.3,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Apparel,2024-11-01,143506.32,3385.1,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+South,Electronics,2024-11-01,33730.56,133.9,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Electronics,2024-11-01,132368.72,527.1,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+South,Home,2024-11-01,22695.1,286.1,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+South,Home,2024-11-01,82601.43000000001,1044.0,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+West,Apparel,2024-11-01,32774.89,759.4,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Apparel,2024-11-01,115291.23,2629.6,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+West,Electronics,2024-11-01,30618.53,123.2,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Electronics,2024-11-01,117302.95,499.5,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+West,Home,2024-11-01,20328.24,269.4,2024-11-30,2024-11-09,2024-11-15 00:00:00,1,,provisional_mid_month,finance_ledger,monthly
+West,Home,2024-11-01,76952.3,975.3,2024-11-30,2024-11-30,2024-12-05 18:00:00,2,2024-12-05 18:00:00,closed,finance_ledger,monthly
+East,Apparel,2024-12-01,88891.68,1969.3,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+East,Beauty,2024-12-01,44606.37,1158.6,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+East,Electronics,2024-12-01,96814.0,403.2,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+East,Home,2024-12-01,60979.22,788.6,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+North,Apparel,2024-12-01,106845.14,2457.6,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+North,Beauty,2024-12-01,46982.37,1217.4,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+North,Electronics,2024-12-01,116235.25,477.2,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+North,Home,2024-12-01,68492.19,922.4,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+South,Apparel,2024-12-01,89454.41,2064.1,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+South,Beauty,2024-12-01,43300.86,1147.4,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+South,Electronics,2024-12-01,91797.8,382.4,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+South,Home,2024-12-01,69849.52,951.3,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+West,Apparel,2024-12-01,85103.0,2003.3,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+West,Beauty,2024-12-01,37321.55,991.6,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+West,Electronics,2024-12-01,87683.07,346.9,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly
+West,Home,2024-12-01,52311.44,716.9,2024-12-31,2024-12-24,2024-12-30 00:00:00,1,,provisional_open_month,finance_ledger,monthly

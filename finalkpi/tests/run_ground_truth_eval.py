@@ -153,6 +153,7 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
 
     causal_by_event: dict[str, Counter] = defaultdict(Counter)
     confidence_overall = Counter()
+    reconciliation_by_kpi: dict[str, Counter] = defaultdict(Counter)
 
     for row in cases:
         result = run_case(pipeline, row)
@@ -220,6 +221,9 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
         confidence_profile = result.get("confidence_profile") or {}
         confidence_overall[(confidence_profile.get("overall") or {}).get("status") or "UNKNOWN"] += 1
 
+        recon_status = (result.get("reconciliation_verdict") or {}).get("status") or "UNKNOWN"
+        reconciliation_by_kpi[row["kpi_id"]][recon_status] += 1
+
     detection = {
         event_id: {
             "recall": round(counts["detected"] / counts["positives"], 3),
@@ -276,6 +280,24 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
         1 for row in driver_per_event.values() if (row["top1_direction_accuracy"] or 0) > 0
     )
 
+    reconciliation = {}
+    for kpi_id, counts in sorted(reconciliation_by_kpi.items()):
+        total = sum(counts.values())
+        # NOT_APPLICABLE means no comparator is declared for this KPI at all
+        # (a different question from "did the comparison resolve"); exclude
+        # it from both sides of the rate so an unreconciled KPI reports None,
+        # not a misleading 0.0.
+        reconciled_total = total - counts.get("NOT_APPLICABLE", 0)
+        resolved = sum(counts[status] for status in ("AGREED", "DRIFT", "CONTRADICTED", "PENDING_CLOSE"))
+        reconciliation[kpi_id] = {
+            "status_counts": dict(counts),
+            "total": total,
+            # Stage 4 (F-C3) harness gate: for a reconciled KPI, at least 70%
+            # of dates should resolve to AGREED/DRIFT/PENDING_CLOSE rather
+            # than NOT_AVAILABLE_FOR_PERIOD (genuinely missing/overdue).
+            "resolved_rate": round(resolved / reconciled_total, 3) if reconciled_total else None,
+        }
+
     return {
         "case_count": len(cases),
         "detection": {
@@ -326,6 +348,12 @@ def evaluate(cases: list[dict[str, Any]], pipeline: KPIEnginePipeline) -> dict[s
             "brier_score": None,
             "reliability_bins": None,
             "note": "Attribution Confidence does not exist until Stage 7; these are placeholders.",
+        },
+        "reconciliation": {
+            "by_kpi": reconciliation,
+            "note": "Stage 4 (F-C3) gate: a reconciled KPI's resolved_rate "
+                    "(AGREED+DRIFT+CONTRADICTED+PENDING_CLOSE, i.e. not "
+                    "NOT_AVAILABLE_FOR_PERIOD) should be >= 0.70 for revenue.",
         },
     }
 
@@ -393,6 +421,12 @@ def to_markdown(metrics: dict[str, Any]) -> str:
     lines.append("## Overall confidence status distribution")
     lines.append(f"{metrics['confidence']['overall_status_counts']}")
     lines.append("")
+    lines.append("## Reconciliation status by KPI (Stage 4, F-C3)")
+    lines.append("| kpi | resolved rate (target >= 0.70) | status counts |")
+    lines.append("|---|---|---|")
+    for kpi_id, row in metrics["reconciliation"]["by_kpi"].items():
+        lines.append(f"| {kpi_id} | {row['resolved_rate']} | {row['status_counts']} |")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -418,6 +452,8 @@ def check_thresholds(metrics: dict[str, Any], thresholds: dict[str, float]) -> l
         "decoy_false_alarm_rate_all_kpis": metrics["decoy"]["false_alarm_rate_all_kpis"],
         "decoy_false_alarm_rate_revenue": metrics["decoy"]["false_alarm_rate_revenue"],
     }
+    for kpi_id, row in metrics["reconciliation"]["by_kpi"].items():
+        flat[f"reconciliation_resolved_rate_{kpi_id}"] = row["resolved_rate"]
     for event_id, row in metrics["detection"]["recall_per_event"].items():
         flat[f"recall_{event_id}"] = row["recall"]
     for event_id, row in metrics["detection"]["revenue_recall_per_event"].items():

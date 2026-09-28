@@ -1,4 +1,4 @@
-# Evaluation baseline: Stage 0 → Stage 1 → Stage 2 → Stage 3
+# Evaluation baseline: Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4
 
 Recorded by `tests/run_ground_truth_eval.py --split all|dev|holdout`, against
 `data/labels/eval_cases.csv` (538 cases: 76 positive across the 6 events in
@@ -15,9 +15,13 @@ dev to holdout); Stage 3 numbers on `fix/stage-03-driver-attribution` after
 (`kpi_engine/attribution.py`'s `AttributionEngine` replaces `CorrelationalRanker`
 as the primary driver method in both `run_diagnosis` and `verify_event`; a new
 funnel/accounting bridge in `kpi_engine/decompose.py` answers WHERE a revenue
-movement happened, ahead of and separate from the statistical WHY). See
-`IMPLEMENTATION_EVALUATION.md` for the narrative analysis these numbers
-confirm, and `IMPLEMENTATION_PLAN.md` for what each stage does.
+movement happened, ahead of and separate from the statistical WHY); Stage 4
+numbers on `fix/stage-04-source-reconciliation` after §"Stage 4: Source
+reconciliation that actually runs" landed (MTD snapshot reconciliation
+compares sales through the finance row's own `coverage_end`, never through
+`target_date`; a new `PENDING_CLOSE` status; `units_sold` is now a second
+reconciled KPI). See `IMPLEMENTATION_EVALUATION.md` for the narrative analysis
+these numbers confirm, and `IMPLEMENTATION_PLAN.md` for what each stage does.
 
 To reproduce either column: check out the relevant branch and run
 `.venv/bin/python tests/run_ground_truth_eval.py --split all`. Full JSON +
@@ -246,6 +250,48 @@ not evidence the fix didn't work.
   encode. Stage 7 (Attribution Confidence, calibrated on labelled outcomes)
   is still the eventual owner of a numeric confidence score here.
 
+## Stage 4 at a glance: source reconciliation (before → after)
+
+The pre-Stage-4 baseline (Stage 0's finding, F-C3): closed-period mode
+required `target_date == month_end` **and** `as_of >= month_end + 5 days`,
+which the default `as_of` (`target_date + 1.5 days`) never satisfies —
+`net_sales_revenue` returned `NOT_AVAILABLE_FOR_PERIOD` on 96 of 96 weekly
+dates checked at Stage 0. Stage 4 replaces this with mode `auto` (closed
+comparison first, MTD-snapshot fallback compared through the finance row's
+own `coverage_end`, never through `target_date`) and patches
+`data/finance_monthly.csv` with a real mid-month snapshot for every
+historical month (`data/patches/add_finance_coverage.py`), so there is
+something to fall back to.
+
+| metric (`--split all`, 538 cases) | Stage 3 (before) | Stage 4 (after) | target (plan) | met? |
+|---|---|---|---|---|
+| `net_sales_revenue` resolved rate (AGREED/DRIFT/CONTRADICTED/PENDING_CLOSE, i.e. not `NOT_AVAILABLE_FOR_PERIOD`) | 0% (0/154, all `NOT_AVAILABLE_FOR_PERIOD`) | **100% (178/178)** | ≥70% | **yes, by a wide margin** |
+| `units_sold` resolved rate | N/A (`NOT_APPLICABLE` — not reconciled at all) | **100% (178/178)** | — | a second KPI is now reconciled, per plan |
+| `net_sales_revenue` status breakdown | `NOT_AVAILABLE_FOR_PERIOD`: 154/154 | `AGREED`: 94, `PENDING_CLOSE`: 84 | — | zero `NOT_AVAILABLE_FOR_PERIOD` left in this dataset |
+| `orders`, `conversion_rate` | `NOT_APPLICABLE` (unreconciled, unchanged) | `NOT_APPLICABLE` (unchanged) | — | correctly still not reconciled — no finance comparator exists for either |
+| Detection recall, false-alarm rate, driver attribution | unchanged | unchanged | — | Stage 4 does not touch detection or attribution |
+
+By split: `net_sales_revenue`/`units_sold` resolved rate is **100%** on dev
+(89/89), **100%** on holdout (89/89), and **100%** on all (178/178) — every
+single date in the label set now resolves to a real comparison verdict
+(mostly split ~53%/47% between `AGREED` and `PENDING_CLOSE`, depending on
+whether the queried date falls before or after that month's day-15 snapshot
+publication), with zero `NOT_AVAILABLE_FOR_PERIOD` remaining. `CONTRADICTED`
+and `DRIFT` do not appear in this label set because the dataset's finance and
+sales figures were generated to agree (by construction, per
+`data/README_fixed_dataset.md`) except in the dedicated `contradicted_july_2023`
+demo fixture, which is untouched by this patch and still reconciles as
+`CONTRADICTED` (see `test_contradicted_blocks_attribution`).
+
+Overall confidence status distribution shifted slightly as a direct
+consequence: `{"LOW": 492, "MODERATE": 46}` (Stage 3: `{"LOW": 498,
+"MODERATE": 40}`) — a small number of revenue/units_sold cases that used to
+have a `LOW` source-quality dimension (`NOT_AVAILABLE_FOR_PERIOD` maps to
+`LOW`) now have a neutral/`HIGH` one (`AGREED`/`PENDING_CLOSE` both map to
+`HIGH`, like `NOT_APPLICABLE` always did), which is enough to lift a few
+cases' overall status from `LOW` to `MODERATE` once the source dimension
+stops being the bottleneck.
+
 ## Causal verification (`--split all`) — unchanged, Stage 5's job
 
 Every event's causal verdict is still `NOT_ASSESSED` or `UNTESTABLE`;
@@ -267,15 +313,17 @@ no driver moved enough to explain the movement at 2023-07-25 specifically —
 as the Stage 1/2 notes above; it is available a few days later (2023-07-31,
 where it ranks #1 explaining 111% of the drop — see the demo scenario below).
 
-## Confidence (`--split all`) — unchanged in aggregate, Stage 7's job
+## Confidence (`--split all`) — small Stage 4 shift, Stage 7's job overall
 
-Overall confidence status distribution: `{"LOW": 498, "MODERATE": 40}` —
-**exactly the same as Stage 2**, coincidentally: `ConfidenceEngine`'s
-`MODERATE`/`LOW` split still keys entirely off the top driver's
-`stability_status == STABLE` (unaffected by whether the underlying method is
-`CorrelationalRanker` or `AttributionEngine`), and the same 40 cases happen
-to have a stable top driver either way. `HIGH` is never reached (F-C2) and
-the distribution still barely discriminates on evidence quality, because
+Overall confidence status distribution: `{"LOW": 492, "MODERATE": 46}` (Stage
+3: `{"LOW": 498, "MODERATE": 40}`; see the Stage 4 section above — the source
+dimension no longer bottlenecks a handful of revenue/units_sold cases at
+`LOW` once `NOT_AVAILABLE_FOR_PERIOD` is replaced by `AGREED`/`PENDING_CLOSE`).
+`ConfidenceEngine`'s `MODERATE`/`LOW` split still keys entirely off the top
+driver's `stability_status == STABLE`, unrelated to reconciliation; the
+overall status only moves for cases where the source dimension had been the
+binding constraint. `HIGH` is never reached (F-C2) and the distribution still
+barely discriminates on evidence quality, because
 `ConfidenceEngine.build_profile` still does not consult the driver or causal
 dimensions in a discriminating way (F-C1) — Stage 3 updated the driver
 dimension's reasoning text (contribution/explained_share instead of a
@@ -283,6 +331,90 @@ correlation score) but not its `MODERATE`/`LOW` threshold logic. No numeric
 score or Brier/reliability metric exists yet (F-C5) — Stage 7 introduces
 per-driver Attribution Confidence and the calibration harness (`--calibrate`)
 that will fill in `confidence.brier_score` here.
+
+## What Stage 4 actually changed (mechanism, not just numbers)
+
+- **F-C3 (status semantics)**: `kpi_engine/reconcile.py` adds `PENDING_CLOSE`
+  (the comparator exists for this period but is not yet due as of the
+  cutoff — neutral, like `NOT_APPLICABLE`) alongside the existing five
+  statuses. Detecting it requires seeing a finance row `normalize.py`'s own
+  as-of filter has already excluded upstream, so `reconcile_mtd` takes a new
+  `unfiltered_finance_df` parameter (the full, not-as-of-filtered finance
+  history) used only to answer "does a row exist for this period, just not
+  yet available" — `kpi_engine/pipeline.py::_load_unfiltered_finance` loads
+  it once per call, in both `run_diagnosis` and `verify_event`.
+- **F-C3 (MTD comparison window, the actual bug)**: mode `snapshot` now
+  compares sales summed from the month start through the finance row's own
+  `coverage_end` column (new), never through `target_date` — the original
+  bug compared a partial finance figure against a full-or-wrong-window sales
+  total, guaranteeing a false mismatch on every mid-month date. Mode `auto`
+  (now `net_sales_revenue` and `units_sold`'s declared mode) tries a closed
+  comparison first (a `status: closed` finance row whose `month_end` is the
+  real calendar month end) and falls back to the MTD snapshot only when no
+  closed row is available yet at the cutoff — matching the plan's "closed
+  when the month is closed at the cutoff" requirement, independent of
+  whether `target_date` itself happens to be the month's last day.
+  `provisional_tolerance_pct` (5.0% on both reconciled KPIs, vs. 3.5% for a
+  closed comparison) widens the AGREED bar only for a not-yet-closed
+  snapshot, since a partial-month posting is expected to be rougher.
+- **Revision selection ordering bug, `kpi_engine/normalize.py`**: finance
+  revision collapsing (`_select_latest_revision`-equivalent dedup) used to
+  run *before* the as-of filter, so a month carrying two revisions at once
+  (a mid-month snapshot, revision 1, and its eventual closed posting,
+  revision 2, sharing the same `month_end`) always collapsed to the highest
+  revision globally — silently discarding the mid-month snapshot even when
+  the closed row was not yet available, making MTD reconciliation
+  impossible for every mid-month date regardless of the rest of this fix.
+  Filtering by as-of first, then collapsing revisions among what survives,
+  fixes this.
+- **Data patch, `data/patches/add_finance_coverage.py`**: adds `coverage_end`,
+  `available_at`, and `revision` to every existing `data/finance_monthly.csv`
+  row (closed rows: `coverage_end = month_end`, `available_at = closes_at`,
+  `revision = 2`), and adds a *new* mid-month snapshot row for every one of
+  the 23 historically-closed months (`revision = 1`, `status:
+  provisional_mid_month`, a snapshot published on day 15 covering sales
+  through day 9 — the same 6-day publish lag `fix_dataset.py` already used
+  for the dataset's one previously-existing provisional month). Each new
+  row's value is the *exact* `sales_daily` sum through its own coverage
+  window (292 → 568 rows, 276 added), so a correct MTD comparison
+  (sales-through-coverage_end vs. this row) agrees by construction — the
+  same rows would show a ~70% gap if compared against the *full* month's
+  sales instead, which is exactly the bug being fixed, kept as a printed
+  sanity check in the patch script's own output, never used as the actual
+  comparison.
+- **Contract changes**: `net_sales_revenue.yaml`'s `reconciliation.mode`
+  changes from `closed_period` to `auto`, plus `provisional_tolerance_pct:
+  5.0`. `units_sold.yaml` gains a `reconciliation` block for the first time
+  (`finance_monthly` also carries `units_sold`) — a second reconciled KPI,
+  as the plan asks. `kpi_engine/query/source_catalog.yaml`'s `finance_monthly`
+  entry gains `units_sold` and `coverage_end` field declarations (required
+  for the new reconciliation link and contract validation to resolve).
+  `kpi_engine/contracts/models.py` validates `reconciliation.mode` is one of
+  the three supported values and `provisional_tolerance_pct` is in (0, 100).
+- **Downstream wiring**: `kpi_engine/confidence.py` and `kpi_engine/pipeline.py`
+  (`_build_evidence_profile`'s `sq_status`) both treat `PENDING_CLOSE` as
+  neutral, the same bucket as `NOT_APPLICABLE`/`AGREED` (`HIGH`/`READY`).
+  `kpi_engine/narrative.py` adds a `PENDING_CLOSE` wording branch ("Finance
+  close not due until `<date>`; the movement is based on the governed
+  operational source."). `frontend/lib/evidence-helpers.js` maps
+  `PENDING_CLOSE` to the same neutral tone as `NOT_APPLICABLE`, and a new
+  `reconciliationWindowLabel` helper renders the MTD comparison window and
+  snapshot revision from `reconciliation_verdict.details`.
+- **What did not change**: the `contradictory-sources` demo scenario (its own
+  isolated `data/demo_fixtures/contradicted_july_2023/finance_monthly.csv`,
+  untouched by the patch) still reconciles as `CONTRADICTED` via the
+  unmodified closed-period path — Stage 4 did not touch that mechanism, only
+  added a fallback for when it is not yet applicable. Detection, driver
+  attribution, and causal verification are all unchanged (verified directly
+  above); this stage is scoped to reconciliation status semantics only.
+- **Test fixture updates**: several `tests/test_pipeline_regressions.py` and
+  `tests/test_reconciliation_semantics.py` cases that used a single
+  arbitrary day as a stand-in "month" (with `month_end` set to that same day,
+  not the real calendar month end) needed a full real month in their fixture
+  once `closed_period`/`auto` started checking against the *actual* calendar
+  month end rather than accepting whatever `target_date` was passed — this
+  is a direct, intended consequence of no longer treating an arbitrary
+  `target_date` as if it defined the reconciled period's own boundary.
 
 ## What Stage 3 actually changed (mechanism, not just numbers)
 

@@ -93,7 +93,10 @@ class PipelineRegressions(unittest.TestCase):
         self.assertEqual(result["causal_verdict"], "UNTESTABLE")
         self.assertEqual(result["confidence"]["status"], "NOT_ASSESSED")
         self.assertIsNone(result["confidence"]["calibrated_probability"])
-        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_AVAILABLE_FOR_PERIOD")
+        # Stage 4 (F-C3): 2023-07-31 now reconciles via the July MTD snapshot
+        # (available from day 15, compared through its own day-9 coverage_end)
+        # instead of the old "always NOT_AVAILABLE_FOR_PERIOD mid-month" bug.
+        self.assertEqual(result["reconciliation_verdict"]["status"], "AGREED")
         self.assertEqual(result["source_coverage"]["target_marketing_status"], "UNAVAILABLE_OR_MISSING")
         # Stage 3: the attribution engine explains this drop with
         # marketing_spend (its own lag selection finds an available lag,
@@ -438,12 +441,16 @@ class PipelineRegressions(unittest.TestCase):
         self.assertIsNone(result["movement_assessment"]["actual_value"])
 
     def test_provisional_month_is_not_a_contradiction_without_snapshot_time(self):
+        # Stage 4 (F-C3): Beauty's only-ever finance row (the still-open
+        # December snapshot, available_at=2024-12-30) is known to exist but
+        # is not yet available as of this target_date's cutoff (~Dec 16) --
+        # PENDING_CLOSE (not due yet), not NOT_AVAILABLE_FOR_PERIOD (missing).
         result = self.run_case(
             target_date="2024-12-15",
             persona="CFO",
             dimension_slice={"region": "North", "category": "Beauty"},
         )
-        self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_AVAILABLE_FOR_PERIOD")
+        self.assertEqual(result["reconciliation_verdict"]["status"], "PENDING_CLOSE")
         self.assertEqual(result["verdict"], "INSUFFICIENT_HISTORY")
 
     def test_orders_are_not_reconciled_against_revenue(self):
@@ -642,16 +649,21 @@ class PipelineRegressions(unittest.TestCase):
                 KPIRegistry(directory)
 
     def test_reconciliation_tolerance_is_configurable(self):
-        daily = pd.DataFrame({"date": pd.to_datetime(["2024-01-01"]),
-                              "region": ["North"], "category": ["Electronics"],
-                              "net_sales_revenue": [100.0]})
+        # Stage 4 (F-C3): closed_period now requires finance's month_end to be
+        # the real calendar month end (the reconciled grain is the month, not
+        # an arbitrary target_date), so the fixture is a full January, not a
+        # single contrived day -- otherwise "closed" is never reachable at all.
+        daily = pd.DataFrame({
+            "date": pd.date_range("2024-01-01", "2024-01-31"),
+            "region": "North", "category": "Electronics", "net_sales_revenue": 100.0,
+        })
         finance = pd.DataFrame({"date": pd.to_datetime(["2024-01-01"]),
-                                "month_end": pd.to_datetime(["2024-01-01"]),
+                                "month_end": pd.to_datetime(["2024-01-31"]),
                                 "region": ["North"], "category": ["Electronics"],
-                                "net_sales_revenue": [108.0]})
+                                "net_sales_revenue": [3348.0]})  # 3100 sales total, 8% gap
         reconciler = SourceReconciler()
-        normal = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-01")
-        wider = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-01",
+        normal = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-31")
+        wider = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-31",
                                          historical_tolerance_pct=10.0)
         self.assertEqual(normal.status, "DRIFT")
         self.assertEqual(wider.status, "AGREED")
@@ -808,41 +820,47 @@ class PipelineRegressions(unittest.TestCase):
                         (finance["available_at"] <= pd.Timestamp("2023-07-25 12:00:00")).all())
 
     def test_null_values_cannot_be_reconciled_as_two_zeroes(self):
+        # Stage 4 (F-C3): closed_period requires finance's month_end to be the
+        # real calendar month end, so this is a full January, not a single day.
         daily = pd.DataFrame({
-            "date": pd.to_datetime(["2024-01-01"]), "region": ["North"],
-            "category": ["Electronics"], "net_sales_revenue": [float("nan")],
+            "date": pd.date_range("2024-01-01", "2024-01-31"),
+            "region": "North", "category": "Electronics", "net_sales_revenue": 100.0,
         })
+        daily.loc[daily["date"] == "2024-01-15", "net_sales_revenue"] = float("nan")
         finance = pd.DataFrame({
             "date": pd.to_datetime(["2024-01-01"]),
-            "month_end": pd.to_datetime(["2024-01-01"]),
+            "month_end": pd.to_datetime(["2024-01-31"]),
             "region": ["North"], "category": ["Electronics"],
             "net_sales_revenue": [float("nan")],
         })
         result = SourceReconciler().reconcile_mtd(
-            daily, finance, "2024-01", target_date="2024-01-01",
+            daily, finance, "2024-01", target_date="2024-01-31",
         )
         self.assertEqual(result.status, "DRIFT")
         self.assertIn("Missing", result.details["reason"])
 
     def test_incomplete_sales_period_or_finance_slice_cannot_reconcile(self):
+        # Stage 4 (F-C3): a full January with one day missing (incomplete
+        # coverage), then an extra row for a slice finance does not cover
+        # (mismatched keys) -- both against a real closed month_end, since
+        # closed_period no longer accepts an arbitrary target_date as if it
+        # were the reconciled period's own end.
         daily = pd.DataFrame({
-            "date": pd.to_datetime(["2024-01-01", "2024-01-03"]),
-            "region": ["North", "North"],
-            "category": ["Electronics", "Electronics"],
-            "net_sales_revenue": [100.0, 100.0],
+            "date": pd.date_range("2024-01-01", "2024-01-31").drop(pd.Timestamp("2024-01-15")),
+            "region": "North", "category": "Electronics", "net_sales_revenue": 100.0,
         })
         finance = pd.DataFrame({
             "date": pd.to_datetime(["2024-01-01"]),
-            "month_end": pd.to_datetime(["2024-01-03"]),
+            "month_end": pd.to_datetime(["2024-01-31"]),
             "region": ["North"], "category": ["Electronics"],
-            "net_sales_revenue": [200.0],
+            "net_sales_revenue": [3000.0],
         })
         reconciler = SourceReconciler()
-        result = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-03")
+        result = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-31")
         self.assertEqual(result.status, "NOT_AVAILABLE_FOR_PERIOD")
         self.assertIn("coverage", result.details["reason"])
-        daily.loc[len(daily)] = [pd.Timestamp("2024-01-02"), "North", "Apparel", 0.0]
-        result = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-03")
+        daily.loc[len(daily)] = [pd.Timestamp("2024-01-15"), "North", "Apparel", 0.0]
+        result = reconciler.reconcile_mtd(daily, finance, "2024-01", target_date="2024-01-31")
         self.assertEqual(result.status, "NOT_AVAILABLE_FOR_PERIOD")
         self.assertIn("different", result.details["reason"])
 
@@ -933,25 +951,32 @@ class PipelineRegressions(unittest.TestCase):
                 KPIRegistry(directory)
 
     def test_reconciliation_uses_same_segment_and_date(self):
-        daily = pd.DataFrame({
-            "date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
-            "region": ["North", "North", "South"],
-            "category": ["Electronics"] * 3,
-            "net_sales_revenue": [100.0, 200.0, 900.0],
-        })
+        # Stage 4 (F-C3): a full January against a real closed month_end;
+        # North and South both reconcile individually, proving the North
+        # slice's own total (not a blend with South's) is what gets compared.
+        daily = pd.concat([
+            pd.DataFrame({
+                "date": pd.date_range("2024-01-01", "2024-01-31"),
+                "region": "North", "category": "Electronics", "net_sales_revenue": 100.0,
+            }),
+            pd.DataFrame({
+                "date": pd.date_range("2024-01-01", "2024-01-31"),
+                "region": "South", "category": "Electronics", "net_sales_revenue": 900.0,
+            }),
+        ], ignore_index=True)
         finance = pd.DataFrame({
             "date": pd.to_datetime(["2024-01-01", "2024-01-01"]),
-            "month_end": pd.to_datetime(["2024-01-01", "2024-01-01"]),
+            "month_end": pd.to_datetime(["2024-01-31", "2024-01-31"]),
             "region": ["North", "South"],
             "category": ["Electronics", "Electronics"],
-            "net_sales_revenue": [100.0, 900.0],
+            "net_sales_revenue": [3100.0, 27900.0],
         })
         result = SourceReconciler().reconcile_mtd(
-            daily, finance, "2024-01", target_date="2024-01-01",
+            daily, finance, "2024-01", target_date="2024-01-31",
             dimension_slice={"region": "North", "category": "Electronics"},
         )
         self.assertEqual(result.status, "AGREED")
-        self.assertEqual(result.details["sales_mtd_total"], 100.0)
+        self.assertEqual(result.details["sales_mtd_total"], 3100.0)
 
 
 if __name__ == "__main__":
