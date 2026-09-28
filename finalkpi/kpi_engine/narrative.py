@@ -77,6 +77,13 @@ class NarrativeEngine:
             "CORRELATIONAL": lambda: (
                 f"Treat {claim.text.split(' is a correlational candidate')[0]} as a correlational hypothesis only."
             ),
+            "ATTRIBUTED_DRIVER": lambda: (
+                f"{claim.text.split(' contributed')[0]}'s contribution is a statistical estimate, not a proven cause."
+            ),
+            "FUNNEL_BRIDGE": lambda: (
+                f"The funnel bridge totals {payload.get('funnel_bridge', {}).get('total_delta')} "
+                "in the KPI unit; it explains where the movement happened, not why."
+            ),
             "OBSERVATIONAL": lambda: (
                 f"The observational check is {payload['causal_verification']['verdict']}; "
                 "causation remains unproven."
@@ -209,11 +216,20 @@ class NarrativeEngine:
                 ("decomposition_status", "decomposition.total_delta",
                  "decomposition.is_identity_held"), "ACCOUNTING_NOT_CAUSAL",
             ))
+        if payload.get("funnel_bridge_status") == "IDENTITY_HELD":
+            funnel = payload["funnel_bridge"]
+            claims.append(GroundedClaim(
+                f"The funnel bridge reconciles to a change of {funnel['total_delta']} in the KPI unit "
+                "across traffic, conversion and basket size.",
+                ("funnel_bridge_status", "funnel_bridge.total_delta",
+                 "funnel_bridge.identity_held"), "FUNNEL_BRIDGE",
+            ))
         driver_analysis = payload.get("driver_analysis") or {}
         ranked_drivers = driver_analysis.get("ranked_drivers") or payload.get("correlational_candidates", [])
-        if driver_analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE"}:
+        if driver_analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE", "EXPLORATORY_NON_MATERIAL"}:
             ranked_drivers = []
         for index, candidate in enumerate(ranked_drivers):
+            attributed = candidate.get("relationship_type") == "ATTRIBUTION"
             if driver_analysis:
                 evidence_paths = (
                     f"driver_analysis.ranked_drivers.{index}.driver_id",
@@ -224,12 +240,22 @@ class NarrativeEngine:
                     f"correlational_candidates.{index}.driver_id",
                     f"correlational_candidates.{index}.claim_type",
                 )
-            claim_text = (
-                f"{candidate.get('display_name', candidate['driver_id'])} is a ranked association only, not an accounting contribution or causal estimate."
-                if driver_analysis else
-                f"{candidate['driver_id']} is a correlational candidate, not an established cause."
-            )
-            claims.append(GroundedClaim(claim_text, evidence_paths, "CORRELATIONAL"))
+            if attributed:
+                share = candidate.get("explained_share")
+                share_text = "an unmeasured share" if share is None else f"{share * 100:.0f}%"
+                claim_text = (
+                    f"{candidate.get('display_name', candidate['driver_id'])} contributed "
+                    f"{candidate.get('contribution')} in the KPI unit, explaining {share_text} of the movement; "
+                    "not a proven cause."
+                )
+                claim_type = "ATTRIBUTED_DRIVER"
+            elif driver_analysis:
+                claim_text = f"{candidate.get('display_name', candidate['driver_id'])} is a ranked association only, not an accounting contribution or causal estimate."
+                claim_type = "CORRELATIONAL"
+            else:
+                claim_text = f"{candidate['driver_id']} is a correlational candidate, not an established cause."
+                claim_type = "CORRELATIONAL"
+            claims.append(GroundedClaim(claim_text, evidence_paths, claim_type))
         verification = payload.get("causal_verification")
         if verification is not None:
             status = verification["verdict"]
@@ -265,12 +291,19 @@ class NarrativeEngine:
             payload.get("decomposition") or {}
         ).get("is_identity_held"):
             errors.append("Accounting identity is not supported")
+        if payload.get("funnel_bridge_status") == "IDENTITY_HELD" and not (
+            payload.get("funnel_bridge") or {}
+        ).get("identity_held"):
+            errors.append("Funnel bridge identity is not supported")
         driver_analysis = payload.get("driver_analysis") or {}
         ranked_drivers = driver_analysis.get("ranked_drivers") or payload.get("correlational_candidates", [])
-        if driver_analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE"}:
+        if driver_analysis.get("status") in {"BLOCKED", "INSUFFICIENT_EVIDENCE", "NOT_APPLICABLE", "EXPLORATORY_NON_MATERIAL"}:
             ranked_drivers = []
         for candidate in ranked_drivers:
-            if candidate.get("claim_type") != "CORRELATIONAL":
+            if candidate.get("relationship_type") == "ATTRIBUTION":
+                if candidate.get("claim_type") != "ATTRIBUTED_DRIVER":
+                    errors.append("Attributed driver is not labeled as an attribution")
+            elif candidate.get("claim_type") != "CORRELATIONAL":
                 if candidate.get("relationship_type") != "ASSOCIATION":
                     errors.append("Driver ranking is not labeled association-only")
         if driver_analysis.get("status") == "BLOCKED" and driver_analysis.get("ranked_drivers"):

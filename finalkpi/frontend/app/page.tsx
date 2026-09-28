@@ -8,8 +8,8 @@ import {
   ShieldAlert, Sparkles, TrendingDown, X,
 } from 'lucide-react'
 import { AppHeader, identityForPersona, useDemoContext } from '../components/app-shell'
-import DriverAnalysisWorkspace from '../components/driver-analysis-workspace'
 import ActionWorkspace from '../components/action-workspace'
+import FunnelBridgeCard, { type FunnelBridge } from '../components/funnel-bridge'
 import type { DriverAnalysis } from '../lib/driver-analysis'
 import type { ActionContract } from '../lib/action-workspace'
 import { statusLabel } from '../lib/presentation'
@@ -62,10 +62,11 @@ type Decomposition = {
 
 type Candidate = {
   driver_id: string
-  max_correlation: number
-  optimal_lag_days: number
+  contribution: number
+  explained_share: number | null
+  lag_days: number
   sample_size: number
-  driver_change_pct: number
+  offsetting: boolean
   claim_type: string
 }
 
@@ -81,6 +82,8 @@ type Result = {
   reconciliation_verdict?: { status: string; details?: { reason?: string }; gap_pct?: number | null } | null
   decomposition_status: string
   decomposition?: Decomposition | null
+  funnel_bridge_status?: string | null
+  funnel_bridge?: FunnelBridge | null
   correlational_candidates: Candidate[]
   driver_analysis?: DriverAnalysis | null
   driver_exclusions?: { driver_id: string; reason: string }[]
@@ -786,7 +789,8 @@ export default function Page() {
         <section className="explanation-grid">
           <article className="card contribution-card"><div className="card-heading"><div><span className="eyebrow">Quantified contribution</span><h3>Accounting bridge</h3></div><span className={`evidence-pill ${decomposition?.is_identity_held ? 'good' : 'limited'}`}>{decomposition?.is_identity_held ? 'Identity reconciled' : titleCase(result?.decomposition_status)}</span></div>{contributionRows.length ? <><div className="donut-wrap"><div className="donut" style={{ '--slice': `${Math.round((Math.abs(contributionRows[0]?.value ?? 0) / contributionTotal) * 100)}%` } as React.CSSProperties}><span><strong>{formatDelta(decomposition?.total_delta, kpi.unit)}</strong><small>total change</small></span></div><div className="contribution-list">{contributionRows.map((item, index) => <div key={item.label}><i className={`swatch swatch-${index}`} /><span>{item.label}<small>{Math.round((Math.abs(item.value) / contributionTotal) * 100)}% of quantified movement</small></span><strong>{formatDelta(item.value, kpi.unit)}</strong></div>)}</div></div><p className="method-note">These values add to the observed movement. They are an accounting explanation, not proof of operational cause.</p></> : <div className="empty-state">No exact contribution bridge is available for this KPI.</div>}</article>
 
-          <article className="card driver-card"><div className="card-heading"><div><span className="eyebrow">Diagnostic drivers</span><h3>Ranked indicators</h3></div><span className="evidence-pill limited">Not attribution</span></div>{result?.correlational_candidates?.length ? <div className="driver-list">{result.correlational_candidates.slice(0, 4).map(candidate => <div key={candidate.driver_id} className="driver-row"><div><strong>{driverLabel(candidate.driver_id)}</strong><span>Correlation {candidate.max_correlation.toFixed(2)} · lag {candidate.optimal_lag_days}d · n={candidate.sample_size}</span></div><div className="association"><i style={{ width: `${Math.min(100, Math.abs(candidate.max_correlation) * 100)}%` }} /></div><small>{titleCase(candidate.claim_type)}</small></div>)}</div> : <div className="empty-state">No diagnostic driver passed the ranking checks for this run.</div>}<p className="method-note">Indicators help decide what to investigate. Their association is not a monetary contribution or a causal claim.</p></article>
+          <article className="card driver-card"><div className="card-heading"><div><span className="eyebrow">Diagnostic drivers</span><h3>What explains the change</h3></div><span className="evidence-pill limited">Statistical, not causal</span></div>{result?.correlational_candidates?.length ? <div className="driver-list">{result.correlational_candidates.slice(0, 4).map(candidate => <div key={candidate.driver_id} className="driver-row"><div><strong>{driverLabel(candidate.driver_id)}</strong><span>{formatDelta(candidate.contribution, '')} contribution · {candidate.explained_share == null ? 'share n/a' : `${Math.round(candidate.explained_share * 100)}% share`} · lag {candidate.lag_days}d · n={candidate.sample_size}</span></div><div className="association"><i style={{ width: `${Math.min(100, Math.abs(candidate.explained_share ?? 0) * 100)}%` }} /></div><small>{candidate.offsetting ? 'Offsetting' : titleCase(candidate.claim_type)}</small></div>)}</div> : <div className="empty-state">No driver explained this run's movement.</div>}<p className="method-note">Contribution is a statistical estimate of what moved, in the KPI's unit. It is not a monetary or causal claim.</p></article>
+          <FunnelBridgeCard bridge={result?.funnel_bridge} status={result?.funnel_bridge_status} unit={kpi.unit} />
         </section>
 
         <section className="insight-grid"><article className="card narrative-card"><span className="eyebrow">Executive conclusion</span><h3>{result?.verdict ? statusLabel(result.verdict) : 'Awaiting analysis'}</h3><p>{marketingBrief?.summary ?? 'Run the engine to generate a traceable explanation.'}</p><details className="technical-details"><summary>Technical narrative and evidence</summary><p>{result?.narrative ?? 'Narrative unavailable.'}</p><div className="meta-line"><CheckCircle2 size={15} /> Grounding {result?.grounding_passed ? 'passed' : 'not established'} · {titleCase(result?.narrative_method)}</div></details></article>

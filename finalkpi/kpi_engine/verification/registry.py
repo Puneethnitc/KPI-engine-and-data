@@ -23,8 +23,11 @@ GOVERNED_DESIGNS: Dict[Tuple[str, str, str, str], VerificationDesign] = {
     # when assessment.is_material). Re-keyed again for the Stage 2 review's
     # log-residual scoring fix: 2023-08-06 stopped being material once
     # scoring moved from a pooled absolute-residual MAD to a log-ratio one
-    # (F-D3); 2023-07-25 (also this dataset's "material-multi-driver" demo
-    # date) is material under the corrected scoring.
+    # (F-D3); 2023-07-25 is material under the corrected scoring. (Stage 3's
+    # AttributionEngine finds no driver moved enough here to explain the
+    # movement -- marketing_spend is SOURCE_UNAVAILABLE at this exact lag --
+    # but that does not block this predeclared design: verify_event's causal
+    # step runs independently of driver_analysis.)
     ("net_sales_revenue", "2023-07-25", "North", "Electronics"): VerificationDesign(
         driver_id="marketing_spend",
         treated_slice={"region": "North", "category": "Electronics"},

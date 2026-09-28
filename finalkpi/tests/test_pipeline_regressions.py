@@ -95,15 +95,18 @@ class PipelineRegressions(unittest.TestCase):
         self.assertIsNone(result["confidence"]["calibrated_probability"])
         self.assertEqual(result["reconciliation_verdict"]["status"], "NOT_AVAILABLE_FOR_PERIOD")
         self.assertEqual(result["source_coverage"]["target_marketing_status"], "UNAVAILABLE_OR_MISSING")
-        # marketing_spend itself is SOURCE_UNAVAILABLE at this specific date
-        # (the weekly driver's as-of publication gap, F-V3 -- unrelated to
-        # this test); price_discount is ranked here instead.
-        price_discount = next(
+        # Stage 3: the attribution engine explains this drop with
+        # marketing_spend (its own lag selection finds an available lag,
+        # unlike CorrelationalRanker's fixed [0, 7] check which used to hit
+        # marketing_spend's weekly as-of publication gap, F-V3, at this exact
+        # date -- that was a limitation of the old method, not of the data).
+        marketing_spend = next(
             candidate for candidate in result["correlational_candidates"]
-            if candidate["driver_id"] == "price_discount"
+            if candidate["driver_id"] == "marketing_spend"
         )
-        self.assertTrue(price_discount["target_period_available"])
-        self.assertEqual(price_discount["claim_type"], "CORRELATIONAL")
+        self.assertTrue(marketing_spend["target_period_available"])
+        self.assertEqual(marketing_spend["claim_type"], "ATTRIBUTED_DRIVER")
+        self.assertEqual(marketing_spend["rank"], 1)
         # The rescaled-segment bridge (pipeline.py) matches the detector's
         # delta within the same 0.02 tolerance run_diagnosis itself enforces
         # (its "decomposition does not match" guard), not a tighter one.
@@ -287,6 +290,24 @@ class PipelineRegressions(unittest.TestCase):
         self.assertFalse(result["movement_assessment"]["is_material"])
         self.assertEqual(result["verdict"], "SEASONAL_REVIEW")
         self.assertIsNone(result["decomposition"])
+
+    def test_decoy_period_never_gets_a_confident_same_direction_driver(self):
+        # Stage 3 harness gate: EVT05 (East/Electronics, 2024-07-14 to
+        # 2024-07-29) has no true driver. No ranked driver may explain >= 50%
+        # of the movement in the same direction as the KPI on any day in
+        # this window (verified across the whole window in a one-off probe
+        # during Stage 3; this test locks in one representative day where a
+        # driver IS ranked at all, the strongest case to check).
+        result = self.run_case(
+            target_date="2024-07-15", persona="CFO",
+            dimension_slice={"region": "East", "category": "Electronics"},
+        )
+        ranked = result["driver_analysis"]["ranked_drivers"]
+        delta = result["movement_assessment"]["delta"]
+        for driver in ranked:
+            same_direction = (driver["contribution"] >= 0) == (delta >= 0)
+            if same_direction:
+                self.assertLess(abs(driver["explained_share"] or 0), 0.5)
 
     def test_cross_region_control_is_not_read_by_regional_manager(self):
         # Stage 2 (log-residual review fix): moved to 2023-07-31, a date in

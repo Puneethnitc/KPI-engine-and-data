@@ -7,30 +7,39 @@ export type RankedDriver = {
   aggregation: string
   driver_unit: string | null
   controllability: string
-  relationship_type: 'ASSOCIATION'
+  relationship_type: 'ATTRIBUTION'
   direction: 'POSITIVE' | 'NEGATIVE'
-  score: number | null
-  score_name: string
-  score_scale: string
-  score_components: Record<string, unknown>
-  raw_correlation: number | null
-  adjusted_significance: number | null
+  claim_type: string
+  method: string
+  beta: number
+  beta_ci: [number | null, number | null]
+  lag_days: number
+  driver_change: number | null
+  driver_change_z: number
+  contribution: number
+  contribution_interval: [number | null, number | null]
+  explained_share: number | null
+  p_value: number | null
+  p_value_adj: number | null
   sample_size: number
-  missing_observations: number | null
   coverage_ratio: number | null
   selected_lag_days: number | null
   lag_candidates_tested: number
-  tested_lags: { lag_days: number; sample_size: number; correlation: number | null; eligible: boolean }[]
+  tested_lags: { lag_days: number; sample_size: number; out_of_sample_r2: number | null; in_sample_r2: number | null; eligible: boolean }[]
   temporal_order: string
   temporal_order_supported: boolean | null
+  direction_consistent: boolean | null
+  expected_direction: string | null
   stability_status: string
   stability_details: Record<string, unknown>
-  seasonality_control: string
-  trend_control: string
-  eligibility_checks: Record<string, unknown>
-  evidence_references: Record<string, unknown>[]
+  moved: boolean
+  offsetting: boolean
+  grain_adjusted: boolean
+  collinearity_warning: boolean
+  target_period_available: boolean
   limitations: string[]
   claim_boundary: string
+  evidence_references: Record<string, unknown>[]
 }
 
 export type ExcludedDriver = {
@@ -49,20 +58,27 @@ export type DriverAnalysis = {
   target_kpi: string
   target_period: Record<string, unknown>
   scope: Record<string, string>
+  delta_kpi: number
+  residual: number
+  residual_share: number | null
   candidate_count: number
-  eligible_count: number
   ranked_count: number
+  moved_count: number
+  offsetting_count: number
   excluded_count: number
   hypotheses_tested: number
-  windows_tested: number
   correction_method: string | null
+  collinearity_warning: boolean
   limitations: string[]
   ranked_drivers: RankedDriver[]
   excluded_drivers: ExcludedDriver[]
+  association_diagnostics?: Record<string, unknown>
+  shapley_equivalence_check?: { drivers_checked: string[]; max_abs_diff: number; passed: boolean } | null
 }
 
 const statusText: Record<string, string> = {
   ASSESSED: 'Analysis assessed',
+  EXPLORATORY_NON_MATERIAL: 'Exploratory (movement not material)',
   INSUFFICIENT_EVIDENCE: 'Insufficient evidence',
   NOT_APPLICABLE: 'No governed drivers declared',
   BLOCKED: 'Blocked by source contradiction',
@@ -79,6 +95,8 @@ const exclusionText: Record<string, string> = {
   BLOCKED_BY_RECONCILIATION: 'Blocked by contradictory source reconciliation',
   INCOMPLETE_WEEKLY_COVERAGE: 'Weekly source coverage is incomplete',
   TARGET_LEAKAGE: 'Driver duplicates the target KPI',
+  DID_NOT_MOVE: 'Driver did not move enough to explain any part of the change',
+  MONTHLY_CONTEXTUAL_ONLY: 'Monthly drivers are contextual only, not attributed a contribution',
 }
 
 export function driverAnalysisStatusLabel(status: string): string {
@@ -89,17 +107,18 @@ export function driverExclusionLabel(reasonCode: string): string {
   return exclusionText[reasonCode] ?? reasonCode.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, letter => letter.toUpperCase())
 }
 
-export function driverScoreLabel(score: number | null): string {
-  return score == null ? 'Not scored' : `${score.toFixed(3)} / 1 ranking index`
+export function driverContributionLabel(contribution: number | null, unit?: string | null): string {
+  if (contribution == null) return 'Not estimated'
+  return `${contribution.toFixed(2)}${unit ? ` ${unit}` : ''}`
 }
 
-export function driverCorrelationLabel(correlation: number | null): string {
-  return correlation == null ? 'Not estimated' : correlation.toFixed(3)
+export function driverExplainedShareLabel(share: number | null): string {
+  return share == null ? 'Not estimated' : `${(share * 100).toFixed(0)}%`
 }
 
-export function driverCoverageLabel(coverage: number | null, missing: number | null): string {
+export function driverCoverageLabel(coverage: number | null, sampleSize: number | null): string {
   if (coverage == null) return 'Coverage not established'
-  return `${(coverage * 100).toFixed(1)}% paired coverage · ${missing ?? 'unknown'} missing observations`
+  return `${(coverage * 100).toFixed(1)}% joint-model coverage · n=${sampleSize ?? 'unknown'}`
 }
 
 export function driverTemporalLabel(order: string, supported: boolean | null): string {
@@ -116,22 +135,34 @@ export function driverAnalysisViewModel(
 ) {
   if (!analysis || verdict === 'ACCESS_DENIED') return null
   const ranked = [...analysis.ranked_drivers].sort((left, right) => left.rank - right.rank || left.driver_id.localeCompare(right.driver_id))
+  const explaining = ranked.filter(driver => !driver.offsetting)
+  const offsetting = ranked.filter(driver => driver.offsetting)
+  const excluded = [...analysis.excluded_drivers].sort((left, right) => left.driver_id.localeCompare(right.driver_id))
+  const didNotMove = excluded.filter(item => item.reason_code === 'DID_NOT_MOVE')
+  const otherExcluded = excluded.filter(item => item.reason_code !== 'DID_NOT_MOVE')
   const personaFrame = persona === 'CFO'
-    ? 'Financial review: use these as non-monetary diagnostic signals; check reconciliation and decision risk before acting.'
+    ? 'Financial review: these are statistical estimates of what moved, not monetary or causal proof; check reconciliation and decision risk before acting.'
     : 'Marketing review: distinguish controllable levers from contextual signals and verify the next operational fact.'
+  const notPresented = analysis.status === 'EXPLORATORY_NON_MATERIAL'
   return {
     statusLabel: driverAnalysisStatusLabel(analysis.status),
-    ranked,
-    excluded: [...analysis.excluded_drivers].sort((left, right) => left.driver_id.localeCompare(right.driver_id)),
+    ranked: notPresented ? [] : explaining,
+    offsetting: notPresented ? [] : offsetting,
+    didNotMove,
+    excluded: otherExcluded,
+    residual: analysis.residual,
+    residualShare: analysis.residual_share,
     personaFrame,
     abstention: analysis.status === 'BLOCKED'
       ? 'Source contradiction blocks driver interpretation; no ranked driver can support downstream claims.'
-      : analysis.status === 'INSUFFICIENT_EVIDENCE'
-        ? 'No driver met the governed history, coverage, and association checks.'
-        : analysis.status === 'NOT_APPLICABLE'
-          ? 'The KPI contract declares no candidate drivers for this analysis.'
-          : ranked.length === 0
-            ? 'No eligible driver was ranked; see excluded candidates for the deterministic reasons.'
-            : null,
+      : analysis.status === 'EXPLORATORY_NON_MATERIAL'
+        ? 'The movement did not pass both materiality checks; drivers are not presented as explanations.'
+        : analysis.status === 'INSUFFICIENT_EVIDENCE'
+          ? 'No driver met the governed history, coverage, and movement checks.'
+          : analysis.status === 'NOT_APPLICABLE'
+            ? 'The KPI contract declares no candidate drivers for this analysis.'
+            : explaining.length === 0
+              ? 'No driver explained this movement; see excluded and did-not-move candidates for the deterministic reasons.'
+              : null,
   }
 }

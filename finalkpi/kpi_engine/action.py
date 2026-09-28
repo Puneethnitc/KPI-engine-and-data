@@ -1,3 +1,10 @@
+# Stage 3 (F-R2/F-R3): driver_analysis.ranked_drivers now carries a statistical
+# contribution/explained_share per driver (kpi_engine/attribution.py). This
+# module deliberately still does not read them into expected_impact: a
+# regression contribution is not a validated causal or monetary estimate, and
+# turning it into one here would be exactly the kind of overclaim this module
+# exists to prevent. expected_impact stays NOT_ESTIMATED until a validated
+# deterministic method is configured.
 """Deterministic, evidence-limited action recommendations."""
 
 from dataclasses import asdict, dataclass

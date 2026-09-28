@@ -1,6 +1,12 @@
 # IMPLEMENTATION HANDOFF — orchestration
 # Current: access gate -> CSV normalization -> reconciliation -> movement gate
-# -> accounting bridge -> associations -> optional event verification -> narrative.
+# -> accounting bridge (+ funnel bridge for revenue) -> explained-movement
+# attribution (Stage 3, F-R2/F-R3) -> optional event verification -> narrative.
+# _attribute_drivers() is now the single driver call site shared by
+# run_diagnosis and verify_event: AttributionEngine is primary, and
+# CorrelationalRanker's own evaluate_candidates output is kept alongside as
+# driver_analysis.association_diagnostics (a diagnostic cross-check), not
+# deleted (plan Stage 3, step B.11).
 # Next: inject a shared metric-series/query service described in duckdb/README.md.
 # Resolve source, dimensions, periods, baseline and analysis policies from validated
 # contracts. Preserve early exits and evidence labels while migrating one stage
@@ -23,11 +29,13 @@ import time
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
+import numpy as np
 import pandas as pd
 import yaml
 
 from kpi_engine.access import AccessController
 from kpi_engine.action import ActionRecommendationEngine
+from kpi_engine.attribution import AttributionEngine
 from kpi_engine.contracts import KPIRegistry
 from kpi_engine.contracts.metrics import prepare_metric_request, same_weekday_expected
 from kpi_engine.contracts.registry import resolve_driver_id
@@ -73,6 +81,7 @@ class KPIEnginePipeline:
         self.detector = AnomalyDetector()
         self.decomposer = DeterministicDecomposer()
         self.ranker = CorrelationalRanker()
+        self.attribution_engine = AttributionEngine()
         self.verifier = CausalVerifier()
         self.contributor = ShapleyContributor()
         self.confidence_engine = ConfidenceEngine()
@@ -319,6 +328,37 @@ class KPIEnginePipeline:
         merged = ranked.merge(finance_rows, on=key_columns, how="left", validate="many_to_one")
         return merged.drop(columns=["_driver_month"])
 
+    def _attribute_drivers(
+        self,
+        frame: pd.DataFrame,
+        kpi_id: str,
+        driver_specs: Dict[str, Dict[str, Any]],
+        contract: Any,
+        target_date: str,
+        driver_columns: Dict[str, str],
+        scope: Optional[Dict[str, str]],
+        as_of: str,
+        assessment: Any,
+    ) -> Dict[str, Any]:
+        """Stage 3 (F-R3, F-R6): explained-movement attribution is now the
+        primary driver method in both run_diagnosis and verify_event.
+        CorrelationalRanker is kept as a secondary diagnostic view
+        (driver_analysis.association_diagnostics), not deleted (plan §Stage 3,
+        step B.11), since it is still a cheap, well-tested cross-check on
+        marginal association independent of the joint model's assumptions.
+        """
+        attribution = self.attribution_engine.attribute(
+            frame, kpi_id, list(driver_specs), assessment, target_date,
+            driver_columns=driver_columns, contract=contract, scope=scope, as_of=as_of,
+        )
+        association = self.ranker.evaluate_candidates(
+            frame, kpi_id, list(driver_specs), target_date=target_date,
+            driver_columns=driver_columns, contract=contract, scope=scope, as_of=as_of,
+        )
+        driver_analysis = dict(attribution.driver_analysis)
+        driver_analysis["association_diagnostics"] = association.driver_analysis
+        return driver_analysis
+
     def verify_event(
         self,
         kpi_id: str,
@@ -451,19 +491,22 @@ class KPIEnginePipeline:
             if spec.get("source") == "finance_monthly" else spec["column"]
             for driver_id, spec in driver_specs.items()
         }
-        event_driver_evaluation = self.ranker.evaluate_candidates(
-            event_rank_frame,
-            kpi_id,
-            list(driver_specs),
-            target_date=end.date().isoformat(),
-            driver_columns=driver_columns,
-            contract=contract,
-            scope=verification_design.treated_slice,
-            as_of=cutoff.isoformat(),
+        # event_rank_frame is not sliced to verification_design.treated_slice
+        # (a pre-existing limitation of this path, unchanged by Stage 3: the
+        # causal verifier below does its own treated/control slicing; only
+        # this driver-evaluation frame is company-wide). Movement and
+        # attribution below share that same limitation, as the correlational
+        # ranker they replace always did.
+        event_assessment = self.detector.evaluate_movement(
+            event_rank_frame, contract, end.date().isoformat(), metric_col=kpi_id,
         )
-        result["driver_analysis"] = event_driver_evaluation.driver_analysis
-        result["correlational_candidates"] = [asdict(item) for item in event_driver_evaluation.candidates]
-        result["driver_exclusions"] = [asdict(item) for item in event_driver_evaluation.exclusions]
+        driver_analysis = self._attribute_drivers(
+            event_rank_frame, kpi_id, driver_specs, contract, end.date().isoformat(),
+            driver_columns, verification_design.treated_slice, cutoff.isoformat(), event_assessment,
+        )
+        result["driver_analysis"] = driver_analysis
+        result["correlational_candidates"] = driver_analysis["ranked_drivers"]
+        result["driver_exclusions"] = driver_analysis["excluded_drivers"]
 
         # Only CONTRADICTED is a hard gate. NOT_APPLICABLE and NOT_AVAILABLE_FOR_PERIOD
         # are informational; diagnosis continues for those statuses.
@@ -538,6 +581,8 @@ class KPIEnginePipeline:
             "movement_assessment": None,
             "decomposition": None,
             "decomposition_status": "NOT_EVALUATED",
+            "funnel_bridge": None,
+            "funnel_bridge_status": "NOT_EVALUATED",
             "correlational_candidates": [],
             "driver_exclusions": [],
             "driver_analysis": None,
@@ -719,24 +764,20 @@ class KPIEnginePipeline:
         if candidate_drivers is not None and set(candidate_drivers) != set(governed_driver_ids):
             raise ValueError("Candidate driver selection must match the complete governed KPI driver set")
         stage_started = time.monotonic_ns()
-        evaluation = self.ranker.evaluate_candidates(
+        driver_analysis = self._attribute_drivers(
             self._attach_monthly_driver_values(scoped, finance, driver_specs, dimension_slice),
-            kpi_id,
-            governed_driver_ids,
-            target_date=target.date().isoformat(),
-            driver_columns={
+            kpi_id, driver_specs, contract, target.date().isoformat(),
+            {
                 driver_id: f"finance_monthly_{spec['column']}"
                 if spec.get("source") == "finance_monthly" else spec["column"]
                 for driver_id, spec in driver_specs.items()
             },
-            contract=contract,
-            scope=dimension_slice,
-            as_of=cutoff.isoformat(),
+            dimension_slice, cutoff.isoformat(), assessment,
         )
-        result["driver_analysis"] = evaluation.driver_analysis
-        result["correlational_candidates"] = [asdict(candidate) for candidate in evaluation.candidates]
-        result["driver_exclusions"] = [asdict(exclusion) for exclusion in evaluation.exclusions]
-        self._record_runtime(result, "driver_analysis", "STATISTICAL", "governed_lagged_association_ranking", stage_started)
+        result["driver_analysis"] = driver_analysis
+        result["correlational_candidates"] = driver_analysis["ranked_drivers"]
+        result["driver_exclusions"] = driver_analysis["excluded_drivers"]
+        self._record_runtime(result, "driver_analysis", "STATISTICAL", "joint_robust_regression_explained_movement", stage_started)
         if not assessment.is_material:
             if assessment.detector_agreement == "SEASONAL_ONLY":
                 result.update(
@@ -848,6 +889,44 @@ class KPIEnginePipeline:
                         },
                     }
                     result["decomposition_status"] = "IDENTITY_HELD"
+
+        # Stage 3 (F-R2, step A): the funnel/accounting bridge answers WHERE
+        # a revenue movement happened (traffic vs. conversion vs. basket
+        # size), ahead of and independent from the statistical attribution
+        # engine's WHY. Only net_sales_revenue has the full traffic-orders-
+        # revenue chain declared on sales_daily; other KPIs get None, not a
+        # forced or approximated bridge.
+        result["funnel_bridge"] = None
+        result["funnel_bridge_status"] = "NOT_APPLICABLE"
+        if kpi_id == "net_sales_revenue" and not current.empty and not baseline.empty:
+            required_columns = {"traffic_total", "orders", kpi_id}
+            if not required_columns.issubset(scoped.columns):
+                result["funnel_bridge_status"] = "INSUFFICIENT_COMPONENTS"
+            else:
+                baseline_traffic = baseline.groupby("date")["traffic_total"].sum(min_count=1).sort_index()
+                baseline_orders = baseline.groupby("date")["orders"].sum(min_count=1).sort_index()
+                traffic0, _ = same_weekday_expected(baseline_traffic, target)
+                orders0, _ = same_weekday_expected(baseline_orders, target)
+                revenue0 = assessment.expected_value
+                traffic1 = float(current["traffic_total"].sum(min_count=1))
+                orders1 = float(current["orders"].sum(min_count=1))
+                revenue1 = assessment.actual_value
+                values = (traffic0, orders0, revenue0, traffic1, orders1, revenue1)
+                if any(value is None or not np.isfinite(value) for value in values) or traffic0 <= 0 or orders0 <= 0 or traffic1 <= 0 or orders1 <= 0:
+                    result["funnel_bridge_status"] = "INSUFFICIENT_COMPONENTS"
+                else:
+                    conversion0, conversion1 = orders0 / traffic0, orders1 / traffic1
+                    aov0, aov1 = revenue0 / orders0, revenue1 / orders1
+                    try:
+                        funnel = self.decomposer.decompose_funnel(
+                            traffic0, traffic1, conversion0, conversion1, aov0, aov1,
+                        )
+                    except ValueError as error:
+                        result["funnel_bridge_status"] = "INSUFFICIENT_COMPONENTS"
+                        result["funnel_bridge_reason"] = str(error)
+                    else:
+                        result["funnel_bridge"] = funnel
+                        result["funnel_bridge_status"] = "IDENTITY_HELD"
         self._record_runtime(result, "contribution_analysis", "DETERMINISTIC", "deterministic_accounting_bridge", stage_started)
 
         stage_started = time.monotonic_ns()

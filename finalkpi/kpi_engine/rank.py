@@ -1,12 +1,16 @@
-# IMPLEMENTATION HANDOFF — driver analysis evidence
+# IMPLEMENTATION HANDOFF — driver analysis evidence (secondary diagnostic)
 # Current: native-grain first differences, governed lags, available-pair and
 # coverage checks, nested-window stability, explicit composite ranking score.
 # Lag search remains exploratory; no multiple-testing correction is applied.
 # Expected direction (Stage 1, F-R5) resolves a per-scope override
 # (expected_direction_by_scope) before falling back to the flat declaration.
+# Stage 3 (F-R3): retired as the PRIMARY driver method -- kpi_engine/pipeline.py
+# now calls kpi_engine/attribution.py's AttributionEngine first and keeps this
+# module's own evaluate_candidates() output alongside it, unweighted, as
+# driver_analysis.association_diagnostics (marginal correlation is still a
+# useful cross-check; it is never promoted to a contribution or a cause).
 # Next: validate dependence-aware p-value correction on reviewed labelled runs,
 # and add conditional/multivariate interaction analysis only with diagnostics.
-# Rank by explained movement (Stage 3), not marginal correlation (F-R3).
 # Check: candidate completeness, future-row invariance, weekly deduplication,
 # missingness denominators, lag order and window-sensitive rank behavior.
 

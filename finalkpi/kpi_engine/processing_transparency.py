@@ -104,7 +104,7 @@ def build_processing_transparency(
         analysis_status = driver_analysis.get("status")
         if analysis_status == "BLOCKED":
             driver_status = "BLOCKED"
-        elif analysis_status in {"ASSESSED", "COMPLETED"}:
+        elif analysis_status in {"ASSESSED", "COMPLETED", "EXPLORATORY_NON_MATERIAL"}:
             driver_status = "USED"
         else:
             driver_status = "SKIPPED"
@@ -155,9 +155,11 @@ def build_processing_transparency(
             movement_refs,
         ),
         _stage(
-            "driver_ranking", "Driver association ranking", "STATISTICAL", driver_status, True,
-            "Ranks declared driver associations using governed lags, coverage and stability checks.", "lagged_first_difference_association_v1",
-            driver_refs, "Associations do not establish contribution or causation.",
+            "driver_ranking", "Driver explained-movement attribution", "STATISTICAL", driver_status, True,
+            "Explains the detected movement with a joint robust regression over governed lags, "
+            "reporting each driver's contribution, explained share and stability.",
+            "joint_robust_regression_explained_movement_v1",
+            driver_refs, "Statistical attribution of observed movement; causal status is shown separately.",
         ),
         _stage(
             "accounting_decomposition", "Accounting decomposition", "DETERMINISTIC", decomposition_execution, True,

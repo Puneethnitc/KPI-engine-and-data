@@ -1,4 +1,4 @@
-# Evaluation baseline: Stage 0 → Stage 1 → Stage 2
+# Evaluation baseline: Stage 0 → Stage 1 → Stage 2 → Stage 3
 
 Recorded by `tests/run_ground_truth_eval.py --split all|dev|holdout`, against
 `data/labels/eval_cases.csv` (538 cases: 76 positive across the 6 events in
@@ -10,9 +10,14 @@ landed; Stage 2 numbers on `fix/stage-02-detection` after §"Stage 2: Movement
 detection and prioritisation" landed (including its review round: log-ratio
 residual scoring in place of a pooled absolute-residual MAD, and
 `z_threshold` reverted to 2.5 after a 2.05 retune failed to generalise from
-dev to holdout). See `IMPLEMENTATION_EVALUATION.md` for the narrative
-analysis these numbers confirm, and `IMPLEMENTATION_PLAN.md` for what each
-stage does.
+dev to holdout); Stage 3 numbers on `fix/stage-03-driver-attribution` after
+§"Stage 3: Driver attribution engine (explained movement)" landed
+(`kpi_engine/attribution.py`'s `AttributionEngine` replaces `CorrelationalRanker`
+as the primary driver method in both `run_diagnosis` and `verify_event`; a new
+funnel/accounting bridge in `kpi_engine/decompose.py` answers WHERE a revenue
+movement happened, ahead of and separate from the statistical WHY). See
+`IMPLEMENTATION_EVALUATION.md` for the narrative analysis these numbers
+confirm, and `IMPLEMENTATION_PLAN.md` for what each stage does.
 
 To reproduce either column: check out the relevant branch and run
 `.venv/bin/python tests/run_ground_truth_eval.py --split all`. Full JSON +
@@ -54,7 +59,11 @@ and the harness run below):
 - `price_discount` is eligible during EVT02 (ALL/Home, 2023-10-30: `ranked_drivers = ['price_discount', 'promo_flag']`).
 - `traffic_drop` appears in zero rankings (`grep -c traffic_drop` on the full harness JSON output is 0; it no longer exists in any registry YAML).
 
-## Driver attribution, per event (`--split all`, excludes the EVT05 decoy)
+## Driver attribution, per event — Stage 0 → Stage 1 (`CorrelationalRanker`, `--split all`, excludes the EVT05 decoy)
+
+Historical snapshot: `CorrelationalRanker` ranking by marginal correlation
+magnitude, before Stage 3 replaced it. See the next section for what actually
+changed the driver-attribution numbers.
 
 | event | true driver (Stage 1 id) | top1 any-sign: before → after | top1 direction-aware: before → after | top3: before → after | top1-hit KPIs (Stage 1) |
 |---|---|---|---|---|---|
@@ -92,6 +101,80 @@ Notes on what moved and what didn't:
   doesn't make it *win* the ranking — cold-snap Apparel sales still get
   outranked by another candidate's marginal correlation. Same root cause as
   EVT01: Stage 3 is required.
+
+## Stage 3 at a glance: driver attribution (`CorrelationalRanker` → `AttributionEngine`, `--split all`)
+
+`kpi_engine/attribution.py`'s `AttributionEngine` replaces `CorrelationalRanker`
+as the primary driver method: rank by `contribution = β × Δdriver` (a driver
+must have actually moved, `|z_Δd| ≥ 1.5`, to appear at all — a driver that
+never moved can no longer win by marginal correlation alone).
+`CorrelationalRanker`'s own output is kept alongside as
+`driver_analysis.association_diagnostics`, unweighted, not deleted.
+
+| metric | Stage 1 (`CorrelationalRanker`) | Stage 3 (`AttributionEngine`) | target (plan) | met? |
+|---|---|---|---|---|
+| Top-1 accuracy, any sign (case-level, `--split all`) | 45.3% (29/64) | **70.3% (45/64)** | — | — |
+| Top-1 accuracy, direction-aware | 42.2% (27/64) | **68.8% (44/64)** | — | — |
+| Top-3 accuracy | 54.7% | **76.6%** | — | — |
+| Events with true driver #1 on any day (any sign) | 4/5 | **5/5** | ≥4/5 (plan Stage 3 harness gate) | **yes** |
+| Events with a direction-consistent #1 hit | 3/5 | **4/5** | — | — |
+| EVT05 decoy confident-driver rate | 100% (12/12) | **25% (3/12)** | no driver ≥50% same-direction explained share on revenue | **yes** (verified directly across the whole decoy window, and locked in as `tests/test_pipeline_regressions.py::test_decoy_period_never_gets_a_confident_same_direction_driver`) |
+
+Per-event top-1/top-3 accuracy (`--split all`, `AttributionEngine`):
+
+| event | true driver | top1 (any sign) | top1 (direction-aware) | top3 | scored | top1-hit KPIs |
+|---|---|---|---|---|---|---|
+| EVT01 (marketing cut) | `marketing_spend` | 0.75 | 0.75 | 0.75 | 12 | net_sales_revenue, orders, units_sold |
+| EVT02 (flash discount) | `price_discount` | 0.833 | 0.833 | 1.0 | 12 | net_sales_revenue, orders, units_sold |
+| EVT03 (stockout) | `stock_availability` | 0.75 | 0.75 | 0.75 | 12 | net_sales_revenue, orders, units_sold |
+| EVT04 (checkout latency) | `checkout_latency` | 1.0 | 1.0 | 1.0 | 16 | conversion_rate, net_sales_revenue, orders, units_sold |
+| EVT06 (cold snap) | `weather_temp` | 0.083 | 0.0 | 0.25 | 12 | net_sales_revenue |
+
+By split (thresholds/weights were never tuned on holdout; these numbers are
+reported as-is, per the plan's ground rules):
+
+| split | top1 (any sign) | top1 (direction-aware) | top3 | events with any top1 hit |
+|---|---|---|---|---|
+| dev (EVT01, EVT03, EVT04) | 85.0% (34/40) | 85.0% | 85.0% | 3/3 |
+| holdout (EVT02, EVT06) | 45.8% (11/24) | 41.7% | 62.5% | 2/2 |
+| all | 70.3% (45/64) | 68.8% | 76.6% | 5/5 |
+
+Notes on what moved and what didn't:
+
+- **All 5 events now win #1 on at least one day, meeting the plan's harness
+  gate with the full 5/5, not just the required ≥4/5.** EVT06 (`weather_temp`)
+  is the new one: it never won under `CorrelationalRanker` (0.0 → 0.0 through
+  Stage 1); under `AttributionEngine` it wins on 1/12 days (8.3%), and only on
+  `net_sales_revenue`. This is honest, not padded — a broad, gradual,
+  small-effect cold-snap signal is genuinely the hardest of the 5 events to
+  separate from noise with a joint regression, and the gate only requires "on
+  at least one in-window day," which this meets exactly, not comfortably.
+- **EVT01 recovers from "got slightly worse under more candidates" (Stage 1's
+  0.5 → 0.167) to 0.75.** The mechanism is exactly what the Stage 1 notes
+  above predicted was missing: requiring the driver to have actually moved
+  (`|z_Δd| ≥ 1.5`) removes wrong-but-larger-correlation competitors from
+  contention, and `marketing_spend`'s own per-driver lag search (not a single
+  fixed [0, 7] check) recovers days where the old ranker's weekly as-of gap
+  made it `SOURCE_UNAVAILABLE`.
+- **EVT03 (stockout) is 0.75, not 1.0, for a specific, checked reason**: the
+  fit-window exclusion is deliberately narrow (excludes only the target
+  date's own row, not a blanket `max_lag`-days buffer) precisely so a driver
+  that is constant except for one sustained event (`stock_availability`'s
+  12-day dip) still has early days of that same event as real historical
+  variance to fit against; on the 3/12 days this still misses, an
+  out-of-sample lag search wasn't available at all and it fell back to
+  in-sample fit (flagged `IN_SAMPLE_FALLBACK` in `tested_lags`), which is
+  occasionally outranked by an offsetting driver's larger same-day magnitude.
+- **EVT05 decoy confident-driver rate (100% → 25%) is the headline abstention
+  fix**: the old ranker always surfaced a "top driver" for any KPI/date,
+  material or not. The new engine only ranks a driver that (a) the KPI
+  movement doesn't have to be material for attribution to run at all
+  (`EXPLORATORY_NON_MATERIAL` still runs the fit, for transparency), but (b)
+  the driver itself must have moved (`|z_Δd| ≥ 1.5`) — on the decoy window,
+  most days now correctly rank nothing at all.
+- **Detection recall and the false-alarm rate are unchanged (4.8% overall)** —
+  Stage 3 did not touch `kpi_engine/detection/`; the numbers below are
+  reprinted from Stage 2 for completeness, not re-measured.
 
 ## Stage 2 at a glance: before (Stage 1) → after (`--split all`)
 
@@ -143,18 +226,25 @@ worst-offending weekday in the original evaluation, 11/42 on quiet days);
 Sunday is now the highest, a genuine shift in *which* weekday is noisiest,
 not evidence the fix didn't work.
 
-## Decoy (EVT05) — unchanged, still needs Stage 3/7
+## Decoy (EVT05) — Stage 3 brings the confident-driver rate down; Stage 7 still owns calibration
 
 - 12 cases (4 on revenue). `event_present: false`: nothing about this period
   should look like a confidently-explained real movement.
 - False-alarm rate: **0.0** on all 3 KPIs, including revenue-only — unchanged
-  through Stage 2 as well (the corrected detector still correctly does not
-  flag this period as materially moving on these KPIs).
-- **Confident-driver rate: 100%** (12/12), unchanged — the ranker still
-  surfaces a top-ranked "driver" every time regardless of whether the KPI
-  moved. Stage 3 (explained-movement ranking, which requires the KPI to have
-  actually moved) and Stage 7 (Attribution Confidence, gated on movement
-  materiality) are what bring this down.
+  through Stage 2 and Stage 3 (the corrected detector still correctly does
+  not flag this period as materially moving on these KPIs).
+- **Confident-driver rate: 100% → 25%** (12/12 → 3/12). `AttributionEngine`
+  requiring a driver to have actually moved (`|z_Δd| ≥ 1.5`) is most of this
+  drop; the remaining 3/12 days do rank a driver (attribution still runs on
+  a non-material movement, labelled `EXPLORATORY_NON_MATERIAL`, so the
+  narrative never presents it as an explanation), but none of them explains
+  ≥50% of the movement in the same direction as the KPI (verified directly
+  across the whole window and locked in as
+  `tests/test_pipeline_regressions.py::test_decoy_period_never_gets_a_confident_same_direction_driver`)
+  — the plan's actual EVT05 gate, which this harness script's older
+  `confident_driver_rate` metric (any driver ranked at all) does not itself
+  encode. Stage 7 (Attribution Confidence, calibrated on labelled outcomes)
+  is still the eventual owner of a numeric confidence score here.
 
 ## Causal verification (`--split all`) — unchanged, Stage 5's job
 
@@ -166,24 +256,134 @@ still only 1 hard-coded) design with automatic, per-driver design generation.
 Stage 1 fixed the registry's one remaining design (§1.8) to use
 `marketing_spend` with a real Monday treatment start (2023-07-17); Stage 2's
 log-residual scoring fix then moved its `target_date`/`post_end` key again,
-from 2023-08-06 to **2023-07-25** (also this dataset's "material-multi-driver"
-demo date), because 2023-08-06 stopped being material under the corrected
-scoring and `run_diagnosis` never reaches the causal step on a non-material
-day. Verified directly: `backend/tests/test_backend_diagnosis.py::test_governed_marketing_design_is_reached_and_assessed`.
+from 2023-08-06 to **2023-07-25**, because 2023-08-06 stopped being material
+under the corrected scoring and `run_diagnosis` never reaches the causal step
+on a non-material day. Verified directly:
+`backend/tests/test_backend_diagnosis.py::test_governed_marketing_design_is_reached_and_assessed`.
+Stage 3 did not need to move this key again (verify_event's causal step runs
+independently of `driver_analysis`), though `AttributionEngine` itself finds
+no driver moved enough to explain the movement at 2023-07-25 specifically —
+`marketing_spend` is `SOURCE_UNAVAILABLE` at that exact lag, same root cause
+as the Stage 1/2 notes above; it is available a few days later (2023-07-31,
+where it ranks #1 explaining 111% of the drop — see the demo scenario below).
 
-## Confidence (`--split all`) — unchanged, Stage 7's job
+## Confidence (`--split all`) — unchanged in aggregate, Stage 7's job
 
-Overall confidence status distribution: `{"LOW": 498, "MODERATE": 40}`
-(Stage 1: `{"LOW": 513, "MODERATE": 25}`; the shift is just a byproduct of
-more cases now being materially assessed, e.g. EVT03/EVT04 fully recalled
-instead of mostly abstained). `HIGH` is never reached (F-C2) and the
-distribution still barely discriminates on evidence quality, because
+Overall confidence status distribution: `{"LOW": 498, "MODERATE": 40}` —
+**exactly the same as Stage 2**, coincidentally: `ConfidenceEngine`'s
+`MODERATE`/`LOW` split still keys entirely off the top driver's
+`stability_status == STABLE` (unaffected by whether the underlying method is
+`CorrelationalRanker` or `AttributionEngine`), and the same 40 cases happen
+to have a stable top driver either way. `HIGH` is never reached (F-C2) and
+the distribution still barely discriminates on evidence quality, because
 `ConfidenceEngine.build_profile` still does not consult the driver or causal
-dimensions in a discriminating way (F-C1) — Stage 2 did not touch
-`kpi_engine/confidence.py`. No numeric score or Brier/reliability metric
-exists yet (F-C5) — Stage 7 introduces per-driver Attribution Confidence and
-the calibration harness (`--calibrate`) that will fill in
-`confidence.brier_score` here.
+dimensions in a discriminating way (F-C1) — Stage 3 updated the driver
+dimension's reasoning text (contribution/explained_share instead of a
+correlation score) but not its `MODERATE`/`LOW` threshold logic. No numeric
+score or Brier/reliability metric exists yet (F-C5) — Stage 7 introduces
+per-driver Attribution Confidence and the calibration harness (`--calibrate`)
+that will fill in `confidence.brier_score` here.
+
+## What Stage 3 actually changed (mechanism, not just numbers)
+
+- **F-R2 (Step A, funnel bridge)**: `kpi_engine/decompose.py::decompose_funnel`
+  adds an exact 3-factor multiplicative Shapley bridge, `revenue = traffic x
+  conversion x AOV`, between a same-weekday-expected baseline and the target
+  day (reusing the same permutation technique as the existing segment
+  quantity/mix/rate bridge, just on different factors). `kpi_engine/pipeline.py`
+  computes it for `net_sales_revenue` only (the only KPI with the full
+  `traffic_total -> orders -> net_sales_revenue` chain on `sales_daily`),
+  exposed as `funnel_bridge`/`funnel_bridge_status`, independent of and
+  alongside the existing segment-mix `decomposition`. Labelled
+  `ACCOUNTING_NOT_CAUSAL`'s sibling, a new `FUNNEL_BRIDGE` narrative claim
+  type — it answers WHERE the movement happened, never WHY.
+- **F-R3/F-R6/F-R7 (Step B, explained-movement attribution)**: new
+  `kpi_engine/attribution.py::AttributionEngine`, wired into both
+  `run_diagnosis` and `verify_event` via a shared `_attribute_drivers()` call
+  site, replacing `CorrelationalRanker` as the primary driver method (kept
+  alongside as `driver_analysis.association_diagnostics`, per the plan's
+  "keep as a diagnostic" option, not deleted):
+  - Deseasonalises the KPI and each driver the same way as detection
+    (log-ratio residual to that weekday's median when the series stays
+    positive, additive fallback otherwise).
+  - Fits one joint model per grain (a daily-drivers model; a separate
+    weekly-aggregated model for `marketing_spend`, pro-rated to the target
+    day and flagged `grain_adjusted: true`), each driver's lag chosen once on
+    a forward time-series split (train on the earlier portion of the fit
+    window, pick the lag with the best held-out fit on the later portion) —
+    with a documented, flagged (`IN_SAMPLE_FALLBACK`) exception: a driver
+    that is constant except for the one sustained event under diagnosis
+    (e.g. EVT03's 12-day `stock_availability` dip) has no historical fold
+    that could ever contain that variance under a strict forward split, so
+    lag selection falls back to the best full-window in-sample fit for that
+    driver only.
+  - The fit excludes only the target date's own row (not a blanket
+    preceding-`max_lag`-days window) — sufficient to stop the event fitting
+    itself (no training row ever predicts the target day), while still
+    letting the earlier days of a multi-day sustained event serve as real
+    history, which a blanket exclusion would have thrown away.
+  - OLS with HAC standard errors (`statsmodels`) by default; a small-penalty
+    ridge fit (manual closed form, standardised drivers) when more than 4
+    drivers are active or any VIF > 5, reported as `collinearity_warning`,
+    with `p_value`/`p_value_adj`/`contribution_interval` left `null` for that
+    driver rather than fabricated.
+  - Benjamini-Hochberg correction (`statsmodels.stats.multitest`) across
+    every driver x lag trial's p-value.
+  - A driver's `contribution` is its destandardised beta times its own
+    residual movement at the chosen lag, rescaled from log-residual space
+    back to the KPI's unit by the KPI's expected value (a first-order
+    log-linear approximation) when the KPI was deseasonalised in log space.
+  - Ranking: `driver_analysis.ranked_drivers` holds every driver that moved
+    (`|z_Δd| ≥ 1.5`), sorted same-direction-first then by `|contribution|`
+    descending, each flagged `offsetting: bool`; a driver that did not move
+    is excluded with `reason_code: "DID_NOT_MOVE"`, in the same
+    `excluded_drivers` list as hard exclusions (`SOURCE_UNAVAILABLE`,
+    `CONSTANT_SERIES`, etc.) — never silently dropped.
+  - `driver_analysis.shapley_equivalence_check`: for 2-4 moved drivers, builds
+    a `ContributionScenario` whose coalition values are additive by
+    construction (`value(subset) = sum(c_d over subset)`) and asserts
+    `ShapleyContributor`'s allocation equals each driver's linear
+    `contribution` exactly (F-R8) — verified in
+    `tests/test_attribution.py::test_linear_model_shapley_equals_contribution`
+    and re-checked live on every real diagnosis that has 2-4 movers.
+  - Edge cases, all explicit: `EXPLORATORY_NON_MATERIAL` when the KPI's own
+    movement isn't material (attribution still runs, but the narrative never
+    presents a driver as an explanation); `INSUFFICIENT_HISTORY` when no
+    driver clears governed history/pairs; `BLOCKED` unchanged from a
+    contradictory reconciliation.
+- **Backward-compatible payload keys, extended**: `driver_analysis.ranked_drivers[*]`
+  keeps `rank`, `driver_id`, `display_name`, `source_id`, `source_grain`,
+  `alignment_method`, `controllability`, `direction`, `sample_size`,
+  `coverage_ratio`, `temporal_order(_supported)`, `stability_status(_details)`,
+  `limitations`, `claim_boundary`, `evidence_references`, and adds
+  `contribution`, `contribution_interval`, `explained_share`, `driver_change(_z)`,
+  `beta(_ci)`, `p_value(_adj)`, `offsetting`, `moved`, `grain_adjusted`,
+  `collinearity_warning`, `method: "JOINT_ROBUST_REGRESSION_EXPLAINED_MOVEMENT"`.
+  The top-level `correlational_candidates`/`driver_exclusions` keys are kept,
+  now mirroring `driver_analysis.ranked_drivers`/`excluded_drivers` from the
+  new engine instead of `CorrelationalRanker`'s output directly.
+- **`kpi_engine/narrative.py`**: new claim types `ATTRIBUTED_DRIVER` (a ranked
+  driver's contribution/explained share) and `FUNNEL_BRIDGE`; `validate()`
+  accepts `relationship_type: "ATTRIBUTION"` alongside the existing
+  `"ASSOCIATION"`, and treats `EXPLORATORY_NON_MATERIAL` the same as
+  `INSUFFICIENT_EVIDENCE`/`NOT_APPLICABLE`/`BLOCKED` (no driver claims
+  rendered).
+- **`kpi_engine/confidence.py`**: the driver dimension's reasoning text now
+  cites the strongest driver's `contribution`/`explained_share`, not a
+  correlation score; `MODERATE`/`LOW` classification is unchanged (still
+  `stability_status == STABLE`).
+- **`kpi_engine/action.py`**: deliberately still does not read `contribution`/
+  `explained_share` into `expected_impact` — a regression contribution is a
+  statistical estimate, not a validated causal or monetary one, and
+  `expected_impact` stays `NOT_ESTIMATED` until a validated method exists.
+- **Demo/test dates re-verified**: `backend/demo_scenarios.py`'s
+  "material-multi-driver" scenario moved from North/Electronics 2023-07-25
+  (which, under the corrected attribution, has zero real movers — its only
+  genuine driver, `marketing_spend`, is `SOURCE_UNAVAILABLE` at that lag) to
+  **West/Home, 2023-11-01** (EVT02's promo window), where `price_discount`
+  ranks #1 (`STABLE`, 67% explained share) alongside two smaller offsetting
+  drivers — a real, checked multi-mover date under the stricter "did this
+  driver actually move" gate.
 
 ## What Stage 2 actually changed (mechanism, not just numbers)
 

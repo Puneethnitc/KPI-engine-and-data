@@ -3,6 +3,9 @@
 # The latter averages marginal changes over six orders and derives rate=value/q.
 # Missing segments inherit the other period's rate; effects explain accounting
 # movement, not event causation. Two-decimal output balances rounding in rate.
+# Stage 3 (F-R2) adds decompose_funnel: the same exact multiplicative Shapley
+# technique applied to revenue = traffic x conversion x AOV (the WHERE answer,
+# ahead of the separate, non-deterministic attribution engine's WHY answer).
 # Next: declare method, baseline, segment keys, precision and launch/exit policy;
 # consume the same comparison plan as detection. Check data completeness before
 # missing segments become zeros. Return raw effects separately from display data.
@@ -14,6 +17,7 @@ import pandas as pd
 import numpy as np
 from itertools import permutations
 from dataclasses import dataclass
+from math import factorial
 from typing import Dict, Any, List, Optional
 
 @dataclass
@@ -156,6 +160,59 @@ class DeterministicDecomposer:
             price_effect=shown_rate, residual=round(abs(raw_residual), 6),
             is_identity_held=True,
         )
+
+    @staticmethod
+    def decompose_funnel(
+        traffic0: float, traffic1: float,
+        conversion0: float, conversion1: float,
+        aov0: float, aov1: float,
+    ) -> Dict[str, Any]:
+        """Stage 3 (F-R2, step A): exact 3-factor multiplicative Shapley bridge
+        revenue = traffic x conversion x AOV, between a same-weekday-expected
+        baseline (period 0) and the target (period 1). This is the answer to
+        WHERE the movement happened (traffic vs. conversion vs. basket size);
+        it never claims WHY (that is the statistical attribution engine, a
+        separate, non-deterministic step). Labelled ACCOUNTING_NOT_CAUSAL by
+        the narrative layer, exactly like the existing segment-mix bridge.
+        """
+        factors0 = {"traffic": traffic0, "conversion": conversion0, "aov": aov0}
+        factors1 = {"traffic": traffic1, "conversion": conversion1, "aov": aov1}
+        for name, value in {**factors0, **factors1}.items():
+            if not np.isfinite(value):
+                raise ValueError(f"Funnel bridge factor {name} must be finite")
+
+        def value(active: frozenset) -> float:
+            result = 1.0
+            for name in factors0:
+                result *= factors1[name] if name in active else factors0[name]
+            return result
+
+        names = list(factors0)
+        n = len(names)
+        effects = {name: 0.0 for name in names}
+        for order in permutations(names):
+            active: frozenset = frozenset()
+            for name in order:
+                next_active = active | {name}
+                effects[name] += (value(next_active) - value(active)) / factorial(n)
+                active = next_active
+
+        total_delta = value(frozenset(names)) - value(frozenset())
+        raw_residual = total_delta - sum(effects.values())
+        if abs(raw_residual) > 1e-6 * max(1.0, abs(total_delta)):
+            raise ValueError("Funnel bridge does not reconcile")
+        components = [{
+            "name": name,
+            "baseline": round(factors0[name], 6),
+            "actual": round(factors1[name], 6),
+            "effect": round(effects[name], 2),
+            "share": None if abs(total_delta) < 1e-9 else round(effects[name] / total_delta, 4),
+        } for name in names]
+        return {
+            "components": components,
+            "total_delta": round(total_delta, 2),
+            "identity_held": True,
+        }
 
     def decompose_pvm_multi_segment(
         self,

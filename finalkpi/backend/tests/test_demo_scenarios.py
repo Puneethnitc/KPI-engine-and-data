@@ -73,7 +73,7 @@ class DemoScenarioTests(unittest.TestCase):
         supported_ids = {item["driver_id"] for item in driver_analysis["ranked_drivers"]}
         narrative_driver_claims = [
             claim for claim in result["narrative_claims"]
-            if claim["claim_type"] == "CORRELATIONAL"
+            if claim["claim_type"] == "ATTRIBUTED_DRIVER"
         ]
         recommended_ids = {item["driver_id"] for item in result["decision_cards"] if item.get("driver_id")}
         self.assertEqual(len(narrative_driver_claims), len(supported_ids))
@@ -138,7 +138,13 @@ class DemoScenarioTests(unittest.TestCase):
         self.assertFalse(any(card.get("kind") == "ACTION_PROPOSAL" for card in result.get("decision_cards") or []))
         self.assertFalse(any(card.get("expected_impact") not in (None,) for card in result.get("decision_cards") or []))
         self.assertEqual(result["confidence_profile"]["causal"]["status"], "NOT_ASSESSED")
-        self.assertIn(result["driver_analysis"]["status"], {"ASSESSED", "INSUFFICIENT_EVIDENCE"})
+        # Stage 3: a non-material movement still runs attribution but is
+        # labelled EXPLORATORY_NON_MATERIAL (plan Stage 3, step C) rather than
+        # ASSESSED, so the narrative never presents drivers as explanations.
+        self.assertIn(
+            result["driver_analysis"]["status"],
+            {"ASSESSED", "INSUFFICIENT_EVIDENCE", "EXPLORATORY_NON_MATERIAL"},
+        )
 
     def test_contradictory_scenario_blocks_attribution(self):
         payload = execute_demo_scenario("contradictory-sources", "demo-cfo")
@@ -245,7 +251,11 @@ class DemoScenarioTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "NO_MATERIAL_MOVEMENT")
         self.assertFalse((result.get("movement_assessment") or {}).get("is_material"))
         self.assertEqual(result["confidence_profile"]["movement"]["status"], "LOW")
-        self.assertEqual(result["driver_analysis"]["status"], "ASSESSED")
+        # Stage 3: attribution still runs on a non-material movement, but is
+        # labelled EXPLORATORY_NON_MATERIAL, not ASSESSED (plan Stage 3, step C)
+        # -- "not escalated" means no driver is presented as an explanation,
+        # which the narrative/claim_type layer enforces separately.
+        self.assertEqual(result["driver_analysis"]["status"], "EXPLORATORY_NON_MATERIAL")
         self.assertEqual(result["driver_analysis"]["candidate_count"], result["driver_analysis"]["ranked_count"] + result["driver_analysis"]["excluded_count"])
 
     def test_diagnoses_endpoint_accepts_scenario_id(self):

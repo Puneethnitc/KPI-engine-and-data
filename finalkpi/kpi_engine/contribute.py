@@ -9,6 +9,10 @@
 # offsetting effects or residuals. Preserve the MODEL_BASED_SCENARIO claim label.
 # Check: complete coalition coverage, symmetry, null driver, efficiency, zero
 # observed movement and mismatched scope/unit/model lineage.
+# Stage 3 (F-R8): now also called by kpi_engine/attribution.py to verify that
+# a linear model's Shapley allocation equals its linear contribution c_d
+# exactly (coalition_values are additive by construction there), reported as
+# driver_analysis.shapley_equivalence_check. Still never fits a model itself.
 
 """Exact scenario Shapley; never infer causal values from correlations."""
 

@@ -1,6 +1,9 @@
 # IMPLEMENTATION HANDOFF — calibrated confidence and uncertainty
 # Current: run-bound movement/source/driver/causal dimensions use deterministic
 # engine outputs; numeric scores remain null because outcome calibration is absent.
+# Stage 3 (F-R3): the driver dimension's reasoning text now cites the
+# strongest driver's contribution/explained_share (AttributionEngine), not a
+# correlation score; MODERATE/LOW is still keyed off stability_status alone.
 # Next: validate probability calibration on reviewed labelled outcomes before
 # exposing any numeric score; keep analysis thresholds in their owning policies.
 # Check: sparse/conflicting evidence abstains, NOT_APPLICABLE stays neutral, and
@@ -255,8 +258,9 @@ class ConfidenceEngine:
             driver_status = "MODERATE" if strongest.get("stability_status") == "STABLE" else "LOW"
             driver_reasons.append(
                 f"{strongest.get('display_name', strongest.get('driver_id', 'A ranked driver'))} ranked first by "
-                f"{strongest.get('score_name', 'the governed association score')} "
-                f"(score={strongest.get('score')}, r={strongest.get('raw_correlation')}, n={strongest.get('sample_size')})."
+                f"{strongest.get('method', 'the governed attribution method')} "
+                f"(contribution={strongest.get('contribution')}, explained_share={strongest.get('explained_share')}, "
+                f"n={strongest.get('sample_size')})."
             )
             driver_limits.extend(driver_analysis.get("limitations") or [])
             if strongest.get("stability_status") == "SENSITIVE":
@@ -269,7 +273,7 @@ class ConfidenceEngine:
             driver_status = "NOT_ASSESSED" if not movement else "INSUFFICIENT_EVIDENCE"
             driver_reasons.append("No ranked driver evidence was produced for this run.")
         driver_dimension = dimension(
-            driver_status, "LAGGED_FIRST_DIFFERENCE_CORRELATION_SEARCH",
+            driver_status, "JOINT_ROBUST_REGRESSION_EXPLAINED_MOVEMENT",
             {
                 "candidates": candidates,
                 "exclusions": exclusions,
