@@ -106,11 +106,15 @@ const statusLabels: Record<string, string> = {
   NOT_ASSESSED: 'Not assessed',
 }
 
-export function confidenceStatusLabel(status: string): string {
+// Runs saved before a field existed (e.g. movement_conclusion) have no status;
+// treat a missing status as "Not assessed" instead of crashing.
+export function confidenceStatusLabel(status: string | null | undefined): string {
+  if (!status) return statusLabels.NOT_ASSESSED
   return statusLabels[status] ?? status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, letter => letter.toUpperCase())
 }
 
-export function confidenceStatusTone(status: string): ConfidenceDimensionView['tone'] {
+export function confidenceStatusTone(status: string | null | undefined): ConfidenceDimensionView['tone'] {
+  if (!status) return 'neutral'
   if (status === 'HIGH') return 'good'
   if (status === 'CONFLICTING_EVIDENCE') return 'warning'
   if (status === 'NOT_ASSESSED') return 'neutral'
@@ -208,12 +212,12 @@ export function confidenceWorkspaceModel(
       reasons: profile.overall.reasons ?? [],
       blockingDimensions: profile.overall.blocking_dimensions ?? [],
       movementConclusion: {
-        status: profile.overall.movement_conclusion,
+        status: profile.overall.movement_conclusion ?? 'NOT_ASSESSED',
         statusLabel: confidenceStatusLabel(profile.overall.movement_conclusion),
         tone: confidenceStatusTone(profile.overall.movement_conclusion),
       },
       explanationConclusion: {
-        status: profile.overall.explanation_conclusion,
+        status: profile.overall.explanation_conclusion ?? 'NOT_ASSESSED',
         statusLabel: confidenceStatusLabel(profile.overall.explanation_conclusion),
         tone: confidenceStatusTone(profile.overall.explanation_conclusion),
       },

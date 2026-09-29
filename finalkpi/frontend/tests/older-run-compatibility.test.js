@@ -47,3 +47,15 @@ test('old diagnosis fields build every available view without an exception', () 
   assert.match(renderToStaticMarkup(React.createElement(ActionWorkspace, { actions: old.actions, persona: 'CFO' })), /older run/)
   assert.match(renderToStaticMarkup(React.createElement(FunnelBridgeCard, { unit: 'USD' })), /older run/)
 })
+
+test('a confidence profile saved before the two-question headline builds without crashing', () => {
+  // Runs saved before Stage 7 have no overall.movement_conclusion / explanation_conclusion.
+  const profile = {
+    version: '1.0', evaluated_at: '2023-07-25T00:00:00Z',
+    overall: { status: 'MODERATE', method: 'BLOCKING_GATES_V1', reasons: [], blocking_dimensions: [] },
+  }
+  const model = confidenceWorkspaceModel(profile, 'CFO', 'MATERIAL_CAUSE_UNVERIFIED')
+  assert.equal(model.overall.movementConclusion.status, 'NOT_ASSESSED')
+  assert.equal(model.overall.movementConclusion.statusLabel, 'Not assessed')
+  assert.equal(model.overall.explanationConclusion.tone, 'neutral')
+})
