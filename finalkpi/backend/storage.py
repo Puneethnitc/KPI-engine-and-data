@@ -741,7 +741,8 @@ def list_diagnosis_runs(*, limit: int = 100, offset: int = 0, persona: str | Non
     try:
         where = "WHERE persona = ?" if persona else ""
         args: list[Any] = [persona] if persona else []
-        rows = conn.execute(f"SELECT * FROM diagnosis_runs {where} ORDER BY created_at DESC", args).fetchall()
+        # Newest analysis date first; for the same date, the most recently executed run first.
+        rows = conn.execute(f"SELECT * FROM diagnosis_runs {where} ORDER BY created_at DESC, executed_at DESC, rowid DESC", args).fetchall()
         run_ids = [row["run_id"] for row in rows]
         feedback_states: dict[str, str] = {}
         if run_ids:

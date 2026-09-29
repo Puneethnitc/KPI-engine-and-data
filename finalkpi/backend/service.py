@@ -879,15 +879,35 @@ def _authorized_saved_run_items(user_id: str) -> list[Dict[str, Any]]:
     return authorized
 
 
+def _latest_runs(items: list[Dict[str, Any]], engine_version: str = ENGINE_VERSION) -> list[Dict[str, Any]]:
+    """Keep one saved run per KPI, scope, date, as-of and persona.
+
+    Every ENGINE_VERSION bump saves a fresh run for the same question, so the raw
+    history contains several copies of one investigation. Prefer the run from the
+    current engine version, otherwise the first (most recently executed) one;
+    older copies stay in storage and are only hidden from the queue.
+    """
+    groups: Dict[str, list[Dict[str, Any]]] = {}
+    for item in items:
+        scope = {key: value for key, value in (item.get("scope") or {}).items() if key not in {"persona", "target_date", "date"}}
+        key = repr((item.get("kpi_id"), item.get("target_date"), item.get("persona"), sorted(scope.items())))
+        groups.setdefault(key, []).append(item)
+    latest = []
+    for runs in groups.values():
+        chosen = next((run for run in runs if run.get("engine_version") == engine_version), runs[0])
+        latest.append({**chosen, "superseded_runs": len(runs) - 1})
+    return latest
+
+
 def get_investigations(*, user_id: str, limit: int = 100, offset: int = 0) -> Dict[str, Any]:
-    items = _authorized_saved_run_items(user_id)
+    items = _latest_runs(_authorized_saved_run_items(user_id))
     priority = {"CONTRADICTED": 0, "MATERIAL_CAUSE_UNVERIFIED": 1, "CONDITIONAL_SUPPORT": 2, "SEASONAL_REVIEW": 3, "INSUFFICIENT_HISTORY": 4, "NO_MATERIAL_MOVEMENT": 5}
     items.sort(key=lambda item: (priority.get(item.get("verdict"), 6), not item.get("is_material", False)))
     return {"items": items[offset:offset + limit], "total": len(items), "limit": limit, "offset": offset}
 
 
 def get_insights(*, user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-    items = _authorized_saved_run_items(user_id)
+    items = _latest_runs(_authorized_saved_run_items(user_id))
     return {"items": items[offset:offset + limit], "total": len(items), "limit": limit, "offset": offset}
 
 
